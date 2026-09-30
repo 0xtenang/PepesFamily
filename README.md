@@ -2,6 +2,15 @@
 
 A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663), built on **Uniswap v4**. Every launch is paired with either **ETH** or **IMD** (`0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127`), and every trade pays a 4% fee that goes partly to holders.
 
+## Live on Robinhood Chain (4663)
+
+| Contract | Address |
+| --- | --- |
+| PepesFamily (launchpad + v4 hook) | [`0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC`](https://robinhoodchain.blockscout.com/address/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC) |
+| PepesFamilyRouter | [`0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC`](https://robinhoodchain.blockscout.com/address/0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC) |
+
+Deployed at block 76719371. Source verified on [Sourcify](https://repo.sourcify.dev/4663/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC). Owner and fee recipient: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
+
 ## How it works
 
 - **Launch:** each launch deploys a `PadToken` with a fixed 1,000,000,000 supply. All of it goes into a new Uniswap v4 pool as single-sided liquidity, running from the launch price to the end of the price curve. The pool is paired with ETH or IMD, the creator's choice. It behaves like `x*y=k` with virtual quote liquidity, so the starting market cap is about 1.5 ETH or about 635 IMD (both roughly $4k on 2026-09-30).
@@ -58,7 +67,7 @@ The owner defaults to `0x3c8A…691C`, and any wallet can pay for the deployment
 
 ```bash
 cd contracts
-forge script script/Deploy.s.sol --rpc-url robinhood --broadcast --interactive 1
+forge script script/Deploy.s.sol --rpc-url robinhood --broadcast --interactive
 ```
 
 Optional environment variables:

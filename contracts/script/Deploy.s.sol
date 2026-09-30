@@ -7,7 +7,7 @@ import {PepesFamily} from "../src/PepesFamily.sol";
 import {DeployLib} from "./DeployLib.sol";
 
 /// @notice Deploys PepesFamily (and its PepesFamilyRouter) to Robinhood Chain at a mined hook address.
-///   forge script script/Deploy.s.sol --rpc-url robinhood --broadcast --interactive 1
+///   forge script script/Deploy.s.sol --rpc-url robinhood --broadcast --interactive
 contract Deploy is Script {
     IPoolManager constant POOL_MANAGER = IPoolManager(0x8366a39CC670B4001A1121B8F6A443A643e40951);
     address constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
