@@ -1,0 +1,28 @@
+name: Verify launched tokens
+
+# Every token launched on PepesFamily is a new contract. This publishes each one's source code
+# (Sourcify + Blockscout) so explorers and scanners like DexScreener/GMGN mark it open source.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-tokens
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: foundry-rs/foundry-toolchain@v1
+      - name: Verify unverified tokens
+        working-directory: contracts
+        run: ./script/verify-tokens.sh

@@ -86,6 +86,10 @@ forge verify-contract <PAD> src/PepesFamily.sol:PepesFamily --chain-id 4663 --ve
   --verifier-url https://robinhoodchain.blockscout.com/api --guess-constructor-args
 ```
 
+## Token source verification
+
+Every launch deploys a new `PadToken` contract, and scanners such as DexScreener and GMGN flag unverified contracts as "not open source". The GitHub Action `.github/workflows/verify-tokens.yml` runs every 15 minutes (or on demand from the Actions tab). It calls `contracts/script/verify-tokens.sh`, which publishes the source of each new token to Sourcify and Blockscout. It needs no keys or secrets. Scanners usually refresh their security checks within a few hours.
+
 ## Website
 
 Copy `pad`, `router` and `block` from `contracts/deployments/robinhood.json` into `CONFIG` at the top of `web/index.html`, then host the file on any static host. For production, point `CONFIG.rpc` at a paid RPC; the public endpoint is rate-limited.
