@@ -28,6 +28,11 @@ contract MockIMD {
         balanceOf[to] += amt;
     }
 
+    /// @dev Simulates a balance dropping outside a transfer (e.g. a rebasing or seized balance).
+    function slash(address who, uint256 amt) external {
+        balanceOf[who] -= amt;
+    }
+
     function approve(address s, uint256 amt) external returns (bool) {
         allowance[msg.sender][s] = amt;
         return true;
@@ -436,5 +441,97 @@ contract PepesFamilyTest is Test {
         assertApproxEqAbs(
             FEE_RECIPIENT.balance, (buyA + buyB + ((got * 10_000) / 9_600)) / 100, 1e6, "protocol got 1% of volume"
         );
+    }
+
+    // ------------------------------------------------------ attack surface
+
+    function test_attack_cannotCallHookOrCallbacksDirectly() public {
+        PadToken t = _launch(address(0));
+        PoolKey memory key = pad.poolKey(address(t));
+        SwapParams memory sp = SwapParams(true, -1 ether, TickMath.MIN_SQRT_PRICE + 1);
+        vm.startPrank(bob);
+        vm.expectRevert(PepesFamily.NotPoolManager.selector);
+        pad.beforeSwap(bob, key, sp, "");
+        vm.expectRevert(PepesFamily.NotPoolManager.selector);
+        pad.unlockCallback(abi.encode(uint8(1), abi.encode(address(t))));
+        vm.expectRevert(PepesFamilyRouter.NotPoolManager.selector);
+        router.unlockCallback("");
+        vm.expectRevert(PepesFamily.NotRouter.selector);
+        pad.launchFor(alice, "X", "X", "", address(0));
+        vm.stopPrank();
+    }
+
+    function test_attack_cannotSellSomeoneElsesTokens() public {
+        PadToken t = _launch(address(0));
+        _buy(bob, t, 1 ether);
+        uint256 bobBal = t.balanceOf(bob);
+        // carol holds nothing; the router only ever pulls from msg.sender
+        vm.prank(carol);
+        vm.expectRevert();
+        router.sell(address(t), bobBal, 0, block.timestamp);
+        assertEq(t.balanceOf(bob), bobBal);
+        // and nobody but the router can skip the allowance
+        vm.prank(carol);
+        vm.expectRevert(PadToken.InsufficientAllowance.selector);
+        t.transferFrom(bob, carol, 1);
+    }
+
+    function test_attack_liquidityCannotBeRemoved() public {
+        PadToken t = _launch(address(0));
+        PoolKey memory key = pad.poolKey(address(t));
+        PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(pm);
+        vm.expectRevert(); // the position belongs to PepesFamily, which has no remove function
+        lp.modifyLiquidity(key, ModifyLiquidityParams(TickMath.minUsableTick(200), 0, -1e18, 0), "");
+    }
+
+    function test_attack_hugeExactOutSellReverts() public {
+        PadToken t = _launch(address(0));
+        _buy(bob, t, 1 ether);
+        PoolKey memory key = pad.poolKey(address(t));
+        vm.prank(bob);
+        t.approve(address(extRouter), type(uint256).max);
+        vm.prank(bob);
+        vm.expectRevert(); // fee can't be cast to int128: reverts instead of truncating
+        extRouter.swap(key, SwapParams(false, int256(1 << 200), TickMath.MAX_SQRT_PRICE - 1), settings, "");
+    }
+
+    function test_attack_distributeNeverBlocksTradesOrClaims() public {
+        vm.prank(alice);
+        (address token,) = router.launch("I", "I", "", address(imd), 10e18, 1);
+        PadToken t = PadToken(payable(token));
+        _buy(bob, t, 10e18);
+        // quote balance of the token contract drops below what it owes holders
+        imd.slash(address(t), imd.balanceOf(address(t)) / 2);
+        assertEq(t.distribute(), 0);
+        _buy(carol, t, 10e18); // trading still works
+        _sell(bob, t, t.balanceOf(bob));
+    }
+
+    function test_attack_feesCannotBeStolen() public {
+        PadToken t = _launch(address(0));
+        _buy(bob, t, 10 ether);
+        // anyone can trigger collection, but funds only ever go to feeRecipient
+        uint256 before = FEE_RECIPIENT.balance;
+        vm.prank(carol);
+        pad.collectProtocolFees(address(0));
+        assertEq(FEE_RECIPIENT.balance - before, 0.1 ether);
+        assertEq(carol.balance, 1000 ether);
+        // the pad's ERC-6909 fee claims can't be burned or moved by others
+        uint256 id = uint256(uint160(address(0)));
+        vm.prank(carol);
+        vm.expectRevert();
+        pm.transferFrom(address(pad), carol, id, 1);
+    }
+
+    function test_ownershipIsTwoStep() public {
+        vm.prank(owner);
+        pad.transferOwnership(bob);
+        assertEq(pad.owner(), owner);
+        vm.prank(carol);
+        vm.expectRevert(PepesFamily.NotOwner.selector);
+        pad.acceptOwnership();
+        vm.prank(bob);
+        pad.acceptOwnership();
+        assertEq(pad.owner(), bob);
     }
 }

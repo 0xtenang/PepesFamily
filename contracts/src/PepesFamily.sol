@@ -7,6 +7,7 @@ import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.s
 import {Hooks} from "v4-core/src/libraries/Hooks.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+import {SafeCast} from "v4-core/src/libraries/SafeCast.sol";
 import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
@@ -35,6 +36,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
     using SafeTransfer for address;
+    using SafeCast for uint256;
 
     error NotPoolManager();
     error NotOwner();
@@ -70,6 +72,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     event ProtocolFeesCollected(address indexed quote, address indexed to, uint256 amount);
     event FeeRecipientUpdated(address feeRecipient);
     event StartTickUpdated(address indexed quote, int24 tick);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     uint256 public constant BPS = 10_000;
@@ -99,6 +102,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     address public immutable router;
 
     address public owner;
+    address public pendingOwner;
     address public feeRecipient;
     /// @notice Launch tick per quote asset, expressed as the tick of (tokens per quote). Sets the starting market cap.
     mapping(address quote => int24) public startTick;
@@ -292,7 +296,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
         assembly ("memory-safe") {
             tstore(FEE_SLOT, fee)
         }
-        return (IHooks.beforeSwap.selector, toBeforeSwapDelta(int128(int256(fee)), 0), 0);
+        return (IHooks.beforeSwap.selector, toBeforeSwapDelta(fee.toInt128(), 0), 0);
     }
 
     function afterSwap(
@@ -321,7 +325,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
             // exact-out buy: 4% of what the buyer pays in total.
             fee = exactIn ? (poolQuote * FEE_BPS) / BPS : (poolQuote * FEE_BPS) / (BPS - FEE_BPS);
             _chargeFee(token, fee);
-            hookDelta = int128(int256(fee));
+            hookDelta = fee.toInt128();
         }
 
         bool isBuy = params.zeroForOne == quoteIs0;
@@ -412,9 +416,17 @@ contract PepesFamily is IHooks, IUnlockCallback {
         _setStartTick(quote, tick);
     }
 
+    /// @notice Two-step transfer: `newOwner` must call `acceptOwnership`, so a typo can't lose the admin role.
     function transferOwnership(address newOwner) external onlyOwner {
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        if (msg.sender != pendingOwner) revert NotOwner();
+        emit OwnershipTransferred(owner, msg.sender);
+        owner = msg.sender;
+        pendingOwner = address(0);
     }
 
     function _setStartTick(address quote, int24 tick) internal {

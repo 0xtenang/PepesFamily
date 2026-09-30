@@ -81,10 +81,31 @@ Copy `pad`, `router` and `block` from `contracts/deployments/robinhood.json` int
 
 - `setFeeRecipient`: changes where the 1% protocol fee goes.
 - `setStartTick`: sets the starting market cap for future launches.
-- `transferOwnership`
+- `transferOwnership` + `acceptOwnership`: a two-step handover, so a typo can't lose the admin role.
 
-The owner **can't** change the fee percentages, touch pool liquidity or holder rewards, or add quote assets other than ETH and IMD.
+The owner **can't** change the fee percentages, touch pool liquidity or holder rewards, pause trading, upgrade the contracts, or add quote assets other than ETH and IMD. No contract is upgradeable.
 
-## Before real money
+## Security
 
-This code has not been audited. Get it reviewed before promoting it.
+**What the contracts guarantee (each one covered by tests):**
+- **Liquidity is locked.** The position belongs to `PepesFamily`, which has no remove function. The hook reverts on any outside pool creation or liquidity add.
+- **Hook entry points only accept the PoolManager**, and `launchFor` only accepts the router. The unlock callbacks can only be reached through the contracts' own `unlock` calls.
+- **The router only moves `msg.sender`'s funds.** The allowance-free token pull is limited to that one router and to the caller's own tokens.
+- **Fees can't be redirected.** Anyone can trigger `collectProtocolFees`/`flush`, but the funds only go to `feeRecipient` or the token's holders. The fee claims (ERC-6909) can only be spent by `PepesFamily`.
+- **Casts are checked.** Fee math uses checked casts (`SafeCast`), so extreme swap sizes revert instead of truncating.
+- **Payouts can't get stuck.** `distribute()` never reverts, so an unusual quote balance can't block trades or claims. `claim()` is reentrancy-guarded and updates state before paying.
+- **The website is hardened:**
+  - all token names and metadata are HTML-escaped
+  - only `https://`/`ipfs://` images and links are shown
+  - ethers.js is pinned with Subresource Integrity (SRI)
+  - a Content-Security-Policy restricts where code can load from
+  - IMD approvals are for the exact amount, never unlimited
+
+**Known risks, by design:**
+- **Dividend sniping.** Someone can buy just before a big trade to catch part of its 3% holder fee, then sell. They pay 4% on each side, so it only pays off against trades much larger than their own position. Every reflection-style token has this trade-off.
+- **Late flushes for other routers.** Fees from swaps through other routers (the Uniswap app, aggregators) reach holders at the next flush, so that trader can share in their own fee.
+- **Launch sniping.** Bots can buy in the launch block. Creators can buy first, atomically, with `PepesFamilyRouter.launch(..., initialBuy, ...)`.
+- **IMD risk.** IMD is a LayerZero OFT whose owner controls its bridge configuration. That is an IMD-level risk, outside these contracts.
+- **Hosting headers.** Serve the site over HTTPS, and set `X-Frame-Options: DENY` / `frame-ancestors 'none'` on your host. These headers can't be set from the HTML file.
+
+**Not audited.** Get an independent audit before significant value flows through it.

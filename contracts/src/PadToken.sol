@@ -147,9 +147,10 @@ contract PadToken {
     ///      If nobody holds tokens yet, the funds wait here for the next distribution.
     function distribute() public returns (uint256 amount) {
         uint256 bal = quote.balanceOf(address(this));
-        amount = bal - accountedBalance;
         uint256 eligible = eligibleSupply;
-        if (amount == 0 || eligible < MIN_ELIGIBLE_SUPPLY) return 0;
+        // Never revert: trades and claims call this, so an odd quote balance must not block them.
+        if (bal <= accountedBalance || eligible < MIN_ELIGIBLE_SUPPLY) return 0;
+        amount = bal - accountedBalance;
         magnifiedDividendPerShare += (amount * MAGNITUDE) / eligible;
         accountedBalance = bal;
         totalDividendsDistributed += amount;
