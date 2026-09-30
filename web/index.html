@@ -103,6 +103,7 @@ th { color: var(--muted); font-weight: 500; }
   <div class="wrap">
     <a class="logo" href="#/"><i></i>PepesFamily</a>
     <span class="spacer"></span>
+    <a class="btn" href="#/admin" id="adminlink" style="display:none">Admin</a>
     <a class="btn primary" href="#/create">Launch</a>
     <button id="connect">Connect</button>
   </div>
@@ -138,6 +139,11 @@ const INFO_T = "tuple(address token, string name, string symbol, string metadata
 const PAD_ABI = [
   "function tokenCount() view returns (uint256)",
   "function startTick(address) view returns (int24)",
+  "function owner() view returns (address)",
+  "function feeRecipient() view returns (address)",
+  "function pendingProtocolFees(address quote) view returns (uint256)",
+  "function collectProtocolFees(address quote)",
+  "event ProtocolFeesCollected(address indexed quote, address indexed to, uint256 amount)",
   `function poolKey(address token) view returns (${KEY_T})`,
   `function getTokens(uint256 offset, uint256 limit) view returns (${INFO_T}[])`,
   `function getTokenInfo(address token) view returns (${INFO_T})`,
@@ -305,6 +311,7 @@ async function connect() {
   signer = await provider.getSigner();
   account = await signer.getAddress();
   $("#connect").textContent = short(account);
+  showAdminLink().catch(() => {});
   route();
 }
 async function requireWallet() {
@@ -335,6 +342,7 @@ function route() {
   if (CONFIG.pad === ZERO) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
+  if (h === "/admin") return renderAdmin();
   return renderHome();
 }
 
@@ -380,6 +388,61 @@ async function renderHome() {
   } catch (e) {
     $("#list").innerHTML = `<div class="card">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
   }
+}
+
+// ---------------------------------------------------------------- Admin
+async function showAdminLink() {
+  const [owner, feeTo] = await Promise.all([padR.owner(), padR.feeRecipient()]);
+  const me = account?.toLowerCase();
+  $("#adminlink").style.display = me && (me === owner.toLowerCase() || me === feeTo.toLowerCase()) ? "" : "none";
+}
+
+/// Protocol fees accrue in the contract (as Uniswap v4 claims) until collected. Anyone may trigger a
+/// collection, but the contract always sends the funds to `feeRecipient`, so this page is safe to expose.
+async function renderAdmin() {
+  const app = $("#app");
+  app.innerHTML = `<div class="muted">Loading…</div>`;
+  let owner, feeTo, pending;
+  try {
+    [owner, feeTo, ...pending] = await Promise.all([
+      padR.owner(), padR.feeRecipient(), padR.pendingProtocolFees(ZERO), padR.pendingProtocolFees(CONFIG.imd),
+    ]);
+  } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
+  const assets = [ZERO, CONFIG.imd];
+  const totalUsd = assets.reduce((s, q, i) => s + Number(ethers.formatUnits(pending[i], 18)) * quoteUsd(q), 0);
+  app.innerHTML = `
+    <div class="hero"><div><h1>Admin</h1><p>Protocol fees: 1% of every trade, waiting to be collected.</p></div></div>
+    <div class="stats" style="margin-top:0">
+      ${assets.map((q, i) => `
+        <div class="card">
+          <div class="k">Pending ${qsym(q)}</div>
+          <div class="v">${fmt(pending[i], 6)} ${qsym(q)}</div>
+          <div class="stat">${quoteUsd(q) ? "≈ " + usd(pending[i], q) : ""}</div>
+          <button class="primary full" data-q="${q}" ${pending[i] === 0n ? "disabled" : ""}>Collect ${qsym(q)}</button>
+        </div>`).join("")}
+      <div class="card"><div class="k">Total pending</div><div class="v">${fmtUsd(totalUsd)}</div></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <table>
+        <tr><td class="muted">Fees are sent to</td><td class="mono"><a href="${CONFIG.explorer}/address/${feeTo}" target="_blank" rel="noopener">${feeTo}</a></td></tr>
+        <tr><td class="muted">Owner</td><td class="mono"><a href="${CONFIG.explorer}/address/${owner}" target="_blank" rel="noopener">${owner}</a></td></tr>
+        <tr><td class="muted">Launchpad contract</td><td class="mono"><a href="${CONFIG.explorer}/address/${CONFIG.pad}" target="_blank" rel="noopener">${CONFIG.pad}</a></td></tr>
+      </table>
+      <p class="stat" style="margin-bottom:0">Collecting always pays the fee address above, whichever wallet signs. The signer only pays gas.</p>
+    </div>`;
+  app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try {
+      await requireWallet();
+      const pad = new ethers.Contract(CONFIG.pad, PAD_ABI, signer);
+      toast("Confirm in your wallet…", 8000);
+      const tx = await pad.collectProtocolFees(b.dataset.q);
+      toast("Collecting…", 15000);
+      await tx.wait();
+      toast(`${qsym(b.dataset.q)} fees sent to ${short(feeTo)}`);
+      renderAdmin();
+    } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
+  });
 }
 
 // ---------------------------------------------------------------- Create
