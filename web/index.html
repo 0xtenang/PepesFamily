@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; connect-src https: wss: http://127.0.0.1:8545; base-uri 'none'; form-action 'none'; object-src 'none'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; base-uri 'none'; form-action 'none'; object-src 'none'" />
 <meta name="referrer" content="no-referrer" />
 <title>PepesFamily</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -116,8 +116,10 @@ th { color: var(--muted); font-weight: 500; }
 const CONFIG = {
   chainId: 4663,
   chainName: "Robinhood Chain",
-  rpc: "https://rpc.mainnet.chain.robinhood.com", // use a paid RPC in production
+  rpc: "https://robinhood-rpc.publicnode.com",       // reads; swap in a paid RPC for heavy traffic
+  walletRpc: "https://rpc.mainnet.chain.robinhood.com", // added to wallets that don't know the chain yet
   explorer: "https://robinhoodchain.blockscout.com",
+  blockscoutApi: "https://robinhoodchain.blockscout.com/api/v2", // trade history
   pad: "0x0000000000000000000000000000000000000000",    // PepesFamily (launchpad + v4 hook)
   router: "0x0000000000000000000000000000000000000000", // PepesFamilyRouter
   deployBlock: 0,                                      // L2 block of the deployment
@@ -242,7 +244,7 @@ async function connect() {
   } catch (e) {
     if (e.code === 4902) {
       await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
-        chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.rpc],
+        chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.walletRpc],
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [CONFIG.explorer],
       }] });
     } else throw e;
@@ -561,17 +563,42 @@ async function renderToken(addr) {
   loadTrades(addr, info).catch((e) => ($("#trades").innerHTML = `<tr><td colspan="5" class="muted">${esc(errMsg(e))}</td></tr>`));
 }
 
-async function loadTrades(addr, info) {
-  const p = info, Q = qsym(info.quote);
-  const latest = await reader.getBlockNumber();
-  const filter = padR.filters.Trade(addr);
-  const CHUNK = 50000, MAX_CHUNKS = 40;
-  let from = Math.max(Number(p.createdBlock), latest - CHUNK * MAX_CHUNKS);
-  const logs = [];
-  for (let start = from; start <= latest; start += CHUNK) {
-    logs.push(...(await padR.queryFilter(filter, start, Math.min(start + CHUNK - 1, latest))));
+/// Trade logs for `addr`, oldest first. Blockscout's API has full history and CORS; the RPC is a fallback
+/// because free RPCs cap eth_getLogs ranges (a few minutes of blocks on this fast chain).
+async function fetchTradeLogs(addr, createdBlock) {
+  const tradeTopic = padR.interface.getEvent("Trade").topicHash;
+  try {
+    const url = `${CONFIG.blockscoutApi}/addresses/${CONFIG.pad}/logs?topic=${ethers.zeroPadValue(addr, 32)}`;
+    const items = [];
+    let next = null;
+    for (let page = 0; page < 6; page++) {
+      const q = next ? "&" + new URLSearchParams(next).toString() : "";
+      const r = await fetch(url + q, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error("blockscout " + r.status);
+      const j = await r.json();
+      items.push(...j.items);
+      if (!j.next_page_params) break;
+      next = j.next_page_params;
+    }
+    return items
+      .filter((i) => i.topics[0] === tradeTopic && i.topics[1]?.toLowerCase() === ethers.zeroPadValue(addr, 32).toLowerCase())
+      .map((i) => ({ ...padR.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args.toObject(), hash: i.transaction_hash }))
+      .reverse();
+  } catch (e) {
+    console.warn("Blockscout unavailable, using RPC for recent trades", e);
+    const latest = await reader.getBlockNumber();
+    const CHUNK = 900, MAX_CHUNKS = 8;
+    const from = Math.max(Number(createdBlock), latest - CHUNK * MAX_CHUNKS);
+    const logs = [];
+    for (let start = from; start <= latest; start += CHUNK) {
+      logs.push(...(await padR.queryFilter(padR.filters.Trade(addr), start, Math.min(start + CHUNK - 1, latest))));
+    }
+    return logs.map((l) => ({ ...l.args.toObject(), hash: l.transactionHash }));
   }
-  const trades = logs.map((l) => ({ ...l.args.toObject(), hash: l.transactionHash }));
+}
+
+async function loadTrades(addr, info) {
+  const trades = await fetchTradeLogs(addr, info.createdBlock);
   $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
     <tr><td class="${t.isBuy ? "b" : "s"}">${t.isBuy ? "Buy" : "Sell"}</td>
     <td class="mono"><a href="${CONFIG.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
