@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PepesFamily</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --panel-2: #f0f2ee; --line: #e2e5df;
+  --text: #121512; --muted: #636b62; --accent: #1d9e3a; --accent-ink: #ffffff;
+  --down: #d23c3c; --imd: #6b4fd8; --radius: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0d0b; --panel: #141714; --panel-2: #1b1f1b; --line: #262b26;
+    --text: #eef2ec; --muted: #8d968b; --accent: #33d25a; --accent-ink: #06210d;
+    --down: #ff6464; --imd: #a590ff;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0d0b; --panel: #141714; --panel-2: #1b1f1b; --line: #262b26;
+  --text: #eef2ec; --muted: #8d968b; --accent: #33d25a; --accent-ink: #06210d;
+  --down: #ff6464; --imd: #a590ff;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+a { color: inherit; text-decoration: none; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; }
+.muted { color: var(--muted); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+header { border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+header .wrap { display: flex; align-items: center; gap: 12px; height: 64px; }
+.logo { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
+.logo i { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: inline-block; }
+.spacer { flex: 1; }
+button, .btn {
+  font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); padding: 9px 16px; border-radius: 999px; cursor: pointer;
+}
+button.primary, .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+input, textarea {
+  font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text);
+}
+textarea { min-height: 80px; resize: vertical; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+main { padding: 28px 0 60px; }
+.hero { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-bottom: 24px; }
+.hero h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; }
+.hero p { margin: 4px 0 0; color: var(--muted); }
+.seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; color: var(--muted); }
+.seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.tcard { display: flex; gap: 12px; transition: border-color .15s; }
+.tcard:hover { border-color: var(--accent); }
+.avatar { width: 64px; height: 64px; border-radius: 12px; background: var(--panel-2); object-fit: cover; flex: none;
+  display: grid; place-items: center; font-weight: 700; color: var(--muted); overflow: hidden; }
+.avatar.lg { width: 88px; height: 88px; }
+.tcard .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.eth { color: var(--accent); } .pill.imd { color: var(--imd); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.stat { font-size: 13px; color: var(--muted); }
+.stat b { color: var(--text); font-weight: 600; }
+.two { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
+@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
+.stats .card { padding: 12px 14px; }
+.stats .k { font-size: 12px; color: var(--muted); }
+.stats .v { font-weight: 600; font-size: 17px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+.tabs button { border-radius: 10px; }
+.tabs button.on.buy { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.tabs button.on.sell { background: var(--down); color: #fff; border-color: transparent; }
+.quick { display: flex; gap: 6px; margin-top: 8px; }
+.quick button { padding: 4px 10px; font-size: 12px; }
+.preview { margin: 12px 0; font-size: 13px; color: var(--muted); }
+.full { width: 100%; margin-top: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; }
+.b { color: var(--accent); } .s { color: var(--down); }
+.chart { width: 100%; height: 200px; display: block; }
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: calc(100% - 32px); z-index: 20; display: none; }
+.empty { text-align: center; padding: 60px 16px; color: var(--muted); }
+.fees { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+.desc { white-space: pre-wrap; word-break: break-word; }
+.links a { color: var(--accent); font-size: 13px; }
+.scroll-x { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="logo" href="#/"><i></i>PepesFamily</a>
+    <span class="spacer"></span>
+    <a class="btn primary" href="#/create">Launch</a>
+    <button id="connect">Connect</button>
+  </div>
+</header>
+<main class="wrap" id="app"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------------------------------------------------------------- Config
+// Fill in pad, router and deployBlock from contracts/deployments/robinhood.json after deploying.
+const CONFIG = {
+  chainId: 4663,
+  chainName: "Robinhood Chain",
+  rpc: "https://rpc.mainnet.chain.robinhood.com", // use a paid RPC in production
+  explorer: "https://robinhoodchain.blockscout.com",
+  pad: "0x0000000000000000000000000000000000000000",    // PepesFamily (launchpad + v4 hook)
+  router: "0x0000000000000000000000000000000000000000", // PepesFamilyRouter
+  deployBlock: 0,                                      // L2 block of the deployment
+  imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
+  quoter: "0x8dc178efb8111bb0973dd9d722ebeff267c98f94", // Uniswap V4Quoter on Robinhood Chain
+};
+
+const KEY_T = "tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks)";
+const INFO_T = "tuple(address token, string name, string symbol, string metadata, address quote, address creator, uint64 createdAt, uint64 createdBlock, bool quoteIsCurrency0, bytes32 poolId, uint160 sqrtPriceX96, uint256 marketCap, uint256 pendingHolderFees, uint256 totalDividendsDistributed)";
+const PAD_ABI = [
+  "function tokenCount() view returns (uint256)",
+  "function startTick(address) view returns (int24)",
+  `function poolKey(address token) view returns (${KEY_T})`,
+  `function getTokens(uint256 offset, uint256 limit) view returns (${INFO_T}[])`,
+  `function getTokenInfo(address token) view returns (${INFO_T})`,
+  "event TokenLaunched(address indexed token, address indexed creator, address indexed quote, string name, string symbol, string metadata, bytes32 poolId, int24 startTick)",
+  "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 quoteAmount, uint256 tokenAmount, uint256 fee, uint160 sqrtPriceX96)",
+];
+const ROUTER_ABI = [
+  "function launch(string name, string symbol, string metadata, address quote, uint256 initialBuy, uint256 minTokensOut) payable returns (address, uint256)",
+  "function buy(address token, uint256 amountIn, uint256 minTokensOut, uint256 deadline) payable returns (uint256)",
+  "function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline) returns (uint256)",
+];
+// Uniswap's deployed V4Quoter: simulates the swap through the pool and our hook, so the 4% fee is included.
+const QUOTER_ABI = [
+  `function quoteExactInputSingle(tuple(${KEY_T} poolKey, bool zeroForOne, uint128 exactAmount, bytes hookData) params) returns (uint256 amountOut, uint256 gasEstimate)`,
+];
+const TOKEN_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function withdrawableDividendOf(address) view returns (uint256)",
+  "function withdrawnDividends(address) view returns (uint256)",
+  "function claim() returns (uint256)",
+];
+const ERC20_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address, address) view returns (uint256)",
+  "function approve(address, uint256) returns (bool)",
+];
+const ZERO = ethers.ZeroAddress;
+const SUPPLY = 10n ** 27n;
+const ONE = 10n ** 18n;
+
+const reader = new ethers.JsonRpcProvider(CONFIG.rpc, CONFIG.chainId, { staticNetwork: true });
+const padR = new ethers.Contract(CONFIG.pad, PAD_ABI, reader);
+const quoterR = new ethers.Contract(CONFIG.quoter, QUOTER_ABI, reader);
+let signer = null, account = null;
+
+/// Tokens out (buy) or quote out (sell) for exact-in `amount`, via Uniswap's V4Quoter.
+async function quoteSwap(token, quoteIsCurrency0, isBuy, amount) {
+  const key = [...(await padR.poolKey(token))]; // plain copy: ethers results are read-only
+  const zeroForOne = isBuy === quoteIsCurrency0;
+  const [out] = await quoterR.quoteExactInputSingle.staticCall([key, zeroForOne, amount, "0x"]);
+  return out;
+}
+
+// ---------------------------------------------------------------- Helpers
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+const qsym = (q) => (q === ZERO ? "ETH" : "IMD");
+const pill = (q) => `<span class="pill ${q === ZERO ? "eth" : "imd"}">${qsym(q)}</span>`;
+
+function fmt(wei, max = 4) {
+  const n = Number(ethers.formatUnits(wei, 18));
+  if (n === 0) return "0";
+  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(2) + "K";
+  if (n < 1e-6) return n.toExponential(2);
+  return n.toLocaleString(undefined, { maximumFractionDigits: max });
+}
+/// Quote per token from a v4 sqrtPriceX96 (price = currency1 per currency0).
+function priceOf(sqrtPriceX96, quoteIsCurrency0) {
+  const r = Number(sqrtPriceX96) / 2 ** 96;
+  const p = r * r;
+  return quoteIsCurrency0 ? 1 / p : p;
+}
+/// Starting market cap (quote wei) for a start tick (tick of tokens per quote).
+const startMcap = (tick) => BigInt(Math.floor(1e9 / Math.pow(1.0001, Number(tick)) * 1e6)) * 10n ** 12n;
+const ago = (ts) => {
+  const s = Math.max(0, Date.now() / 1000 - Number(ts));
+  if (s < 60) return Math.floor(s) + "s ago";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+};
+function meta(json) { try { const m = JSON.parse(json); return typeof m === "object" && m ? m : {}; } catch { return {}; } }
+function safeUrl(u) {
+  if (typeof u !== "string") return "";
+  if (u.startsWith("ipfs://")) return "https://ipfs.io/ipfs/" + u.slice(7);
+  return /^https:\/\//i.test(u) ? u : "";
+}
+function avatar(info, cls = "") {
+  const img = safeUrl(meta(info.metadata).image);
+  const letter = esc((info.symbol || "?").slice(0, 2));
+  return img ? `<img class="avatar ${cls}" src="${esc(img)}" alt="${letter}" loading="lazy" referrerpolicy="no-referrer">`
+             : `<div class="avatar ${cls}">${letter}</div>`;
+}
+// Broken images fall back to the ticker letters (no inline handlers: names and tickers are user input).
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.classList.contains("avatar")) return;
+  const div = document.createElement("div");
+  div.className = img.className;
+  div.textContent = img.alt;
+  img.replaceWith(div);
+}, true);
+function toast(msg, ms = 4000) {
+  const t = $("#toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = "none"), ms);
+}
+function errMsg(e) { return e?.shortMessage || e?.info?.error?.message || e?.reason || e?.message || String(e); }
+const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
+const withSlippage = (x, bps) => (x * (10000n - BigInt(bps))) / 10000n;
+
+// ---------------------------------------------------------------- Wallet
+async function connect() {
+  if (!window.ethereum) return toast("No wallet found. Install a browser wallet such as MetaMask.");
+  const hex = "0x" + CONFIG.chainId.toString(16);
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+  } catch (e) {
+    if (e.code === 4902) {
+      await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
+        chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.rpc],
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [CONFIG.explorer],
+      }] });
+    } else throw e;
+  }
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  account = await signer.getAddress();
+  $("#connect").textContent = short(account);
+  route();
+}
+async function requireWallet() {
+  if (!signer) await connect();
+  if (!signer) throw new Error("Connect a wallet first");
+  const net = await signer.provider.getNetwork();
+  if (Number(net.chainId) !== CONFIG.chainId) await connect();
+}
+$("#connect").onclick = () => connect().catch((e) => toast(errMsg(e)));
+if (window.ethereum) {
+  window.ethereum.on?.("accountsChanged", () => { signer = null; account = null; $("#connect").textContent = "Connect"; connect().catch(() => {}); });
+  window.ethereum.on?.("chainChanged", () => location.reload());
+}
+
+async function ensureImdAllowance(amount) {
+  const imd = new ethers.Contract(CONFIG.imd, ERC20_ABI, signer);
+  const current = await imd.allowance(account, CONFIG.router);
+  if (current >= amount) return;
+  toast("Approve IMD in your wallet…", 8000);
+  const tx = await imd.approve(CONFIG.router, amount);
+  await tx.wait();
+}
+
+// ---------------------------------------------------------------- Routing
+window.addEventListener("hashchange", route);
+function route() {
+  const h = location.hash.slice(1) || "/";
+  if (CONFIG.pad === ZERO) return renderSetup();
+  if (h.startsWith("/t/")) return renderToken(h.slice(3));
+  if (h === "/create") return renderCreate();
+  return renderHome();
+}
+
+function renderSetup() {
+  $("#app").innerHTML = `<div class="card empty"><h2>Not deployed yet</h2>
+    <p>Deploy the contracts, then set <span class="mono">CONFIG.pad</span>, <span class="mono">CONFIG.router</span> and <span class="mono">CONFIG.deployBlock</span> at the top of this file.</p></div>`;
+}
+
+// ---------------------------------------------------------------- Home
+let homeFilter = "all";
+async function renderHome() {
+  const app = $("#app");
+  app.innerHTML = `
+    <div class="hero">
+      <div><h1>Launch a token on Robinhood Chain</h1>
+      <p>1B fixed supply · locked liquidity from block one · pair with ETH or IMD · 3% of every trade paid to holders</p></div>
+      <span class="spacer"></span>
+      <div class="seg" id="filter">
+        <button data-f="all">All</button><button data-f="eth">ETH</button><button data-f="imd">IMD</button>
+      </div>
+    </div>
+    <div class="grid" id="list"><div class="muted">Loading…</div></div>`;
+  app.querySelectorAll("#filter button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.f === homeFilter);
+    b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
+  });
+  try {
+    const n = Number(await padR.tokenCount());
+    const limit = 60, offset = Math.max(0, n - limit);
+    const infos = n ? [...(await padR.getTokens(offset, limit))].reverse() : [];
+    const shown = infos.filter((i) => homeFilter === "all" || (homeFilter === "eth") === (i.quote === ZERO));
+    $("#list").innerHTML = shown.length ? shown.map((i) => {
+      const m = meta(i.metadata);
+      return `<a class="card tcard" href="#/t/${i.token}">
+        ${avatar(i)}
+        <div style="min-width:0;flex:1">
+          <div class="row"><span class="name">${esc(i.name)}</span>${pill(i.quote)}</div>
+          <div class="stat mono">$${esc(i.symbol)}</div>
+          <div class="stat">MC <b>${fmt(i.marketCap)} ${qsym(i.quote)}</b> · ${ago(i.createdAt)}</div>
+          ${m.description ? `<div class="stat" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.description)}</div>` : ""}
+        </div></a>`;
+    }).join("") : `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a href="#/create" style="color:var(--accent)">Launch the first one →</a></div>`;
+  } catch (e) {
+    $("#list").innerHTML = `<div class="card">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
+  }
+}
+
+// ---------------------------------------------------------------- Create
+async function renderCreate() {
+  let quote = ZERO;
+  $("#app").innerHTML = `
+    <div class="two">
+      <form class="card" id="cf">
+        <h2 style="margin:0">Launch a token</h2>
+        <p class="muted" style="margin:4px 0 0">1,000,000,000 supply, all placed in a locked pool. No creator allocation beyond what you buy.</p>
+        <label>Pair</label>
+        <div class="seg" id="pair"><button type="button" data-q="${ZERO}" class="on">ETH</button><button type="button" data-q="${CONFIG.imd}">IMD</button></div>
+        <label for="n">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
+        <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
+        <label for="img">Image URL (https:// or ipfs://)</label><input id="img" placeholder="https://…/logo.png" />
+        <label for="d">Description</label><textarea id="d" maxlength="500"></textarea>
+        <div class="row" style="gap:10px">
+          <div style="flex:1;min-width:140px"><label for="w">Website</label><input id="w" placeholder="https://" /></div>
+          <div style="flex:1;min-width:140px"><label for="x">X</label><input id="x" placeholder="https://x.com/…" /></div>
+          <div style="flex:1;min-width:140px"><label for="tg">Telegram</label><input id="tg" placeholder="https://t.me/…" /></div>
+        </div>
+        <label for="ib">Initial buy (<span id="ibq">ETH</span>, optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
+        <div class="preview" id="ibp"></div>
+        <button class="primary full" id="go" type="submit">Launch token</button>
+      </form>
+      <div class="card">
+        <h3 style="margin-top:0">How it works</h3>
+        <p class="muted">Your token gets a Uniswap v4 pool against ETH or IMD holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
+        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>1% protocol · 3% shared by all holders, pro rata to their balance, paid in the pair asset. Holders claim anytime.</div>
+        <div class="fees" id="startmc"></div>
+      </div>
+    </div>`;
+  const updStart = async () => {
+    try {
+      const v = startMcap(await padR.startTick(quote));
+      $("#startmc").innerHTML = `Starting market cap: <b style="color:var(--text)">≈ ${fmt(v)} ${qsym(quote)}</b>`;
+    } catch {}
+  };
+  const updPreview = () => {
+    const v = $("#ib").value.trim();
+    let amt = 0n; try { amt = v ? ethers.parseUnits(v, 18) : 0n; } catch {}
+    if (!amt) return ($("#ibp").textContent = "");
+    padR.startTick(quote).then((tick) => {
+      const vq = startMcap(tick); // the pool behaves like x*y=k with this much virtual quote
+      const net = amt - (amt * 400n) / 10000n;
+      const out = (SUPPLY * net) / (vq + net);
+      $("#ibp").textContent = `≈ ${fmt(out)} tokens (${(Number((out * 10000n) / SUPPLY) / 100).toFixed(2)}% of supply)`;
+    }).catch(() => {});
+  };
+  $("#pair").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    quote = b.dataset.q;
+    $("#pair").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    $("#ibq").textContent = qsym(quote); updStart(); updPreview();
+  });
+  $("#ib").oninput = updPreview;
+  updStart();
+
+  $("#cf").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const btn = $("#go"); btn.disabled = true;
+    try {
+      await requireWallet();
+      const m = {};
+      const put = (k, id) => { const v = $(id).value.trim(); if (v) m[k] = v; };
+      put("image", "#img"); put("description", "#d"); put("website", "#w"); put("x", "#x"); put("telegram", "#tg");
+      const ibv = $("#ib").value.trim();
+      const initialBuy = ibv ? ethers.parseUnits(ibv, 18) : 0n;
+      if (quote !== ZERO && initialBuy > 0n) await ensureImdAllowance(initialBuy);
+      const router = new ethers.Contract(CONFIG.router, ROUTER_ABI, signer);
+      toast("Confirm the launch in your wallet…", 8000);
+      const tx = await router.launch($("#n").value.trim(), $("#s").value.trim(), JSON.stringify(m), quote, initialBuy, 0n,
+        { value: quote === ZERO ? initialBuy : 0n });
+      toast("Launching…", 15000);
+      const rc = await tx.wait();
+      const ev2 = rc.logs.map((l) => { try { return padR.interface.parseLog(l); } catch { return null; } }).find((l) => l?.name === "TokenLaunched");
+      toast("Token launched");
+      location.hash = ev2 ? "#/t/" + ev2.args.token : "#/";
+    } catch (e) { toast(errMsg(e), 7000); }
+    btn.disabled = false;
+  };
+}
+
+// ---------------------------------------------------------------- Token page
+let tradeSide = "buy";
+async function renderToken(addr) {
+  if (!ethers.isAddress(addr)) return ($("#app").innerHTML = `<div class="card empty">Invalid token address</div>`);
+  const app = $("#app");
+  app.innerHTML = `<div class="muted">Loading…</div>`;
+  let info;
+  try { info = await padR.getTokenInfo(addr); }
+  catch (e) { return (app.innerHTML = `<div class="card empty">Token not found on this launchpad.</div>`); }
+  const p = info, q = info.quote, Q = qsym(q), m = meta(info.metadata);
+  const links = [["website", "Website"], ["x", "X"], ["telegram", "Telegram"]]
+    .map(([k, l]) => safeUrl(m[k]) ? `<a href="${esc(safeUrl(m[k]))}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "").filter(Boolean).join(" · ");
+
+  app.innerHTML = `
+    <div class="two">
+      <div>
+        <div class="card">
+          <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap">
+            ${avatar(info, "lg")}
+            <div style="min-width:0">
+              <div class="row"><h2 style="margin:0">${esc(info.name)}</h2>${pill(q)}</div>
+              <div class="mono muted">$${esc(info.symbol)} · <a href="${CONFIG.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)} ↗</a></div>
+              <div class="stat">Created by <a class="mono" href="${CONFIG.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> · ${ago(p.createdAt)}</div>
+              ${links ? `<div class="links">${links}</div>` : ""}
+            </div>
+          </div>
+          ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
+        </div>
+        <div class="stats">
+          <div class="card"><div class="k">Market cap</div><div class="v">${fmt(info.marketCap)} ${Q}</div></div>
+          <div class="card"><div class="k">Price</div><div class="v">${priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4)} ${Q}</div></div>
+          <div class="card"><div class="k">Liquidity</div><div class="v">Locked forever</div></div>
+          <div class="card"><div class="k">Earned by holders</div><div class="v">${fmt(info.totalDividendsDistributed + info.pendingHolderFees)} ${Q}</div></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <div class="row"><b>Price</b><span class="spacer"></span><span class="stat">${Q} per token</span></div>
+          <svg class="chart" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <b>Trades</b>
+          <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th>${Q}</th><th>Tokens</th><th>Tx</th></tr></thead>
+          <tbody id="trades"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
+          <label for="amt" style="margin-top:0" id="amtl"></label>
+          <input id="amt" inputmode="decimal" placeholder="0.0" />
+          <div class="quick" id="quick"></div>
+          <div class="stat" id="bal" style="margin-top:8px"></div>
+          <div class="preview" id="pv">&nbsp;</div>
+          <label for="slip">Max slippage (%)</label><input id="slip" value="5" inputmode="decimal" />
+          <button class="primary full" id="trade" style="margin-top:14px"></button>
+          <div class="fees">4% fee: 1% protocol, 3% to holders of $${esc(info.symbol)}.</div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <b>Your holder rewards</b>
+          <div id="pos" class="stat" style="margin-top:6px">Connect a wallet to see your balance and rewards.</div>
+          <button class="full" id="claim" disabled>Claim</button>
+        </div>
+      </div>
+    </div>`;
+
+  const routerW = () => new ethers.Contract(CONFIG.router, ROUTER_ABI, signer);
+  const tokR = new ethers.Contract(addr, TOKEN_ABI, reader);
+  let tokBal = 0n, quoteBal = 0n;
+
+  async function loadPosition() {
+    if (!account) return;
+    const qBalP = q === ZERO ? reader.getBalance(account) : new ethers.Contract(q, ERC20_ABI, reader).balanceOf(account);
+    const [b, d, w, qb] = await Promise.all([tokR.balanceOf(account), tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), qBalP]);
+    tokBal = b; quoteBal = qb;
+    const share = Number((b * 1000000n) / SUPPLY) / 10000;
+    $("#pos").innerHTML = `Holding <b>${fmt(b)}</b> $${esc(info.symbol)} (${share}% of supply)<br/>
+      Claimable: <b>${fmt(d, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}`;
+    $("#claim").disabled = d === 0n;
+    setSide(tradeSide);
+  }
+
+  function setSide(s) {
+    tradeSide = s;
+    app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === s));
+    const buying = s === "buy";
+    $("#amtl").textContent = buying ? `Amount (${Q})` : `Amount ($${info.symbol})`;
+    $("#trade").textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`;
+    $("#bal").textContent = account ? `Balance: ${fmt(buying ? quoteBal : tokBal)} ${buying ? Q : "$" + info.symbol}` : "";
+    const opts = buying ? (q === ZERO ? ["0.01", "0.05", "0.1", "0.5"] : ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
+    $("#quick").innerHTML = opts.map((o) => `<button type="button">${o}</button>`).join("");
+    $("#quick").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      const t = b.textContent;
+      $("#amt").value = t.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(t))) / 100n, 18) : t;
+      preview();
+    });
+    preview();
+  }
+  app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { $("#amt").value = ""; setSide(b.dataset.s); });
+
+  let pvSeq = 0;
+  async function preview() {
+    const seq = ++pvSeq;
+    let amt = 0n; try { amt = ethers.parseUnits($("#amt").value.trim() || "0", 18); } catch {}
+    if (!amt) return ($("#pv").innerHTML = "&nbsp;");
+    try {
+      const out = await quoteSwap(addr, info.quoteIsCurrency0, tradeSide === "buy", amt);
+      if (seq === pvSeq) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${tradeSide === "buy" ? "$" + info.symbol : Q}`;
+    } catch (e) { if (seq === pvSeq) $("#pv").textContent = "Can't quote this amount"; }
+  }
+  $("#amt").oninput = preview;
+
+  $("#trade").onclick = async () => {
+    const btn = $("#trade"); btn.disabled = true;
+    try {
+      await requireWallet();
+      const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
+      if (!amt) throw new Error("Enter an amount");
+      const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
+      let tx;
+      if (tradeSide === "buy") {
+        const expected = await quoteSwap(addr, info.quoteIsCurrency0, true, amt);
+        if (q !== ZERO) await ensureImdAllowance(amt);
+        toast("Confirm in your wallet…", 8000);
+        tx = await routerW().buy(addr, amt, withSlippage(expected, slipBps), deadline(), { value: q === ZERO ? amt : 0n });
+      } else {
+        const expected = await quoteSwap(addr, info.quoteIsCurrency0, false, amt);
+        toast("Confirm in your wallet…", 8000);
+        tx = await routerW().sell(addr, amt, withSlippage(expected, slipBps), deadline());
+      }
+      toast("Transaction sent…", 15000);
+      await tx.wait();
+      toast(tradeSide === "buy" ? "Bought" : "Sold");
+      renderToken(addr);
+    } catch (e) { toast(errMsg(e), 7000); }
+    btn.disabled = false;
+  };
+
+  $("#claim").onclick = async () => {
+    try {
+      await requireWallet();
+      const tx = await new ethers.Contract(addr, TOKEN_ABI, signer).claim();
+      toast("Claiming…", 15000);
+      await tx.wait();
+      toast("Rewards claimed");
+      loadPosition();
+    } catch (e) { toast(errMsg(e), 7000); }
+  };
+
+  setSide(tradeSide);
+  loadPosition().catch(() => {});
+  loadTrades(addr, info).catch((e) => ($("#trades").innerHTML = `<tr><td colspan="5" class="muted">${esc(errMsg(e))}</td></tr>`));
+}
+
+async function loadTrades(addr, info) {
+  const p = info, Q = qsym(info.quote);
+  const latest = await reader.getBlockNumber();
+  const filter = padR.filters.Trade(addr);
+  const CHUNK = 50000, MAX_CHUNKS = 40;
+  let from = Math.max(Number(p.createdBlock), latest - CHUNK * MAX_CHUNKS);
+  const logs = [];
+  for (let start = from; start <= latest; start += CHUNK) {
+    logs.push(...(await padR.queryFilter(filter, start, Math.min(start + CHUNK - 1, latest))));
+  }
+  const trades = logs.map((l) => ({ ...l.args.toObject(), hash: l.transactionHash }));
+  $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
+    <tr><td class="${t.isBuy ? "b" : "s"}">${t.isBuy ? "Buy" : "Sell"}</td>
+    <td class="mono"><a href="${CONFIG.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
+    <td>${fmt(t.quoteAmount, 6)}</td><td>${fmt(t.tokenAmount)}</td>
+    <td><a href="${CONFIG.explorer}/tx/${t.hash}" target="_blank" rel="noopener">↗</a></td></tr>`).join("")
+    : `<tr><td colspan="5" class="muted">No trades yet</td></tr>`;
+
+  // price series: launch price, then price after each trade
+  const startSqrt = trades.length ? null : info.sqrtPriceX96;
+  const pts = startSqrt ? [priceOf(startSqrt, info.quoteIsCurrency0)] : trades.map((t) => priceOf(t.sqrtPriceX96, info.quoteIsCurrency0));
+  drawChart(pts);
+}
+
+function drawChart(pts) {
+  const svg = $("#chart"); if (!svg) return;
+  if (pts.length < 2) pts = [pts[0], pts[0]];
+  const W = 600, H = 200, pad = 10;
+  const min = Math.min(...pts), max = Math.max(...pts), span = max - min || max || 1;
+  const xy = pts.map((v, i) => [pad + (i * (W - 2 * pad)) / (pts.length - 1), H - pad - ((v - min) / span) * (H - 2 * pad)]);
+  const d = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
+  const up = pts[pts.length - 1] >= pts[0];
+  const c = up ? "var(--accent)" : "var(--down)";
+  svg.innerHTML = `<path d="${d}L${W - pad},${H - pad}L${pad},${H - pad}Z" fill="${c}" opacity=".12"/>
+    <path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+}
+
+route();
+</script>
+</body>
+</html>
