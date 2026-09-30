@@ -8,6 +8,7 @@ A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663), bu
 | --- | --- |
 | PepesFamily (launchpad + v4 hook) | [`0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC`](https://robinhoodchain.blockscout.com/address/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC) |
 | PepesFamilyRouter | [`0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC`](https://robinhoodchain.blockscout.com/address/0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC) |
+| PepesFamilyEthRouter (trade IMD pairs with ETH) | [`0x79eeE0C12C1284bc046e4494Eea6180695F5028A`](https://robinhoodchain.blockscout.com/address/0x79eeE0C12C1284bc046e4494Eea6180695F5028A) |
 
 Deployed at block 76719371. Source verified on [Sourcify](https://repo.sourcify.dev/4663/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC). Owner and fee recipient: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
 
@@ -21,6 +22,8 @@ Deployed at block 76719371. Source verified on [Sourcify](https://repo.sourcify.
   - The hook holds fees as PoolManager ERC-6909 claims until they are flushed. `PepesFamilyRouter` flushes on every trade. Credit goes to holders before a buyer receives tokens and after a seller's tokens leave, so a trader doesn't earn from their own trade.
   - For swaps through other routers, fees are flushed at the next PepesFamilyRouter trade or `claim()`. The holders at that moment receive them, which can include that trader.
 - **Approvals:** sells need no approval. IMD buys need an IMD approval for `PepesFamilyRouter`.
+- **Paying with ETH on IMD pairs:** the website routes buys and sells through `PepesFamilyEthRouter`. Selling to ETH needs a one-time token approval for that router.
+- **USD prices:** the website shows market caps and prices in USD, read from on-chain Uniswap v4 pools (ETH/USDG and IMD/ETH). No off-chain price API is involved.
 
 Pushing rewards into every holder's wallet on every trade isn't possible on-chain, because gas would grow with the number of holders. So rewards accrue automatically and each holder claims them, the same way reflection/dividend tokens work.
 
@@ -30,6 +33,7 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | --- | --- |
 | `src/PepesFamily.sol` | Launcher, v4 hook (fees), and owner of the locked liquidity. Its address must carry hook flags `0x28CC` (mined CREATE2 salt). |
 | `src/PepesFamilyRouter.sol` | Buy, sell, and launch-with-initial-buy for the website. Deployed by PepesFamily. |
+| `src/PepesFamilyEthRouter.sol` | Buy or sell IMD-paired tokens with ETH in one transaction (ETH ⇄ IMD ⇄ token through the Uniswap v4 IMD/ETH pool). No owner, holds no funds. |
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards. |
 
 Uniswap v4 on Robinhood Chain: PoolManager `0x8366a39CC670B4001A1121B8F6A443A643e40951`, V4Quoter `0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94`.
@@ -48,8 +52,8 @@ forge build
 
 ```bash
 cd contracts
-forge test                                                          # 18 unit tests against a real v4 PoolManager
-FORK_RPC=https://robinhood-rpc.publicnode.com forge test --mc ForkTest   # against live mainnet state
+forge test                                           # 25 unit + attack tests against a real v4 PoolManager
+FORK_RPC=https://robinhood.drpc.org forge test       # + 5 fork tests against live mainnet (incl. the deployed contracts)
 ```
 
 The tests cover:

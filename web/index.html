@@ -125,6 +125,12 @@ const CONFIG = {
   deployBlock: 76719371,                                      // L2 block of the deployment
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
   quoter: "0x8dc178efb8111bb0973dd9d722ebeff267c98f94", // Uniswap V4Quoter on Robinhood Chain
+  ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", // PepesFamilyEthRouter: trade IMD pairs with ETH
+  stateView: "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b", // Uniswap v4 StateView (pool prices)
+  // USD prices come from on-chain Uniswap v4 pools, no off-chain price API.
+  ethUsdPoolId: "0xbac3aa3b91584a53a579b3c999a56756e954e59247e497bad1d25a4334bde551", // ETH/USDG (6 decimals)
+  imdEthPoolId: "0xd2fc01ee6f8400b6b4ea3b341a188568f2bd6c72b07b96741a82396fa6eb8f02", // ETH/IMD
+  imdEthKey: ["0x0000000000000000000000000000000000000000", "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127", 10000, 100, "0x0000000000000000000000000000000000000000"],
 };
 
 const KEY_T = "tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks)";
@@ -144,6 +150,10 @@ const ROUTER_ABI = [
   "function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline) returns (uint256)",
 ];
 // Uniswap's deployed V4Quoter: simulates the swap through the pool and our hook, so the 4% fee is included.
+const ETH_ROUTER_ABI = [
+  "function buyWithEth(address token, uint256 minTokensOut, uint256 deadline) payable returns (uint256)",
+  "function sellForEth(address token, uint256 tokenAmount, uint256 minEthOut, uint256 deadline) returns (uint256)",
+];
 const QUOTER_ABI = [
   `function quoteExactInputSingle(tuple(${KEY_T} poolKey, bool zeroForOne, uint128 exactAmount, bytes hookData) params) returns (uint256 amountOut, uint256 gasEstimate)`,
 ];
@@ -167,12 +177,54 @@ const padR = new ethers.Contract(CONFIG.pad, PAD_ABI, reader);
 const quoterR = new ethers.Contract(CONFIG.quoter, QUOTER_ABI, reader);
 let signer = null, account = null;
 
+const quoteExact = async (key, zeroForOne, amount) =>
+  (await quoterR.quoteExactInputSingle.staticCall([key, zeroForOne, amount, "0x"]))[0];
+
 /// Tokens out (buy) or quote out (sell) for exact-in `amount`, via Uniswap's V4Quoter.
 async function quoteSwap(token, quoteIsCurrency0, isBuy, amount) {
   const key = [...(await padR.poolKey(token))]; // plain copy: ethers results are read-only
-  const zeroForOne = isBuy === quoteIsCurrency0;
-  const [out] = await quoterR.quoteExactInputSingle.staticCall([key, zeroForOne, amount, "0x"]);
-  return out;
+  return quoteExact(key, isBuy === quoteIsCurrency0, amount);
+}
+
+/// Same, but paying/receiving ETH on an IMD pair: routes through the IMD/ETH pool (as PepesFamilyEthRouter does).
+async function quoteSwapEth(token, quoteIsCurrency0, isBuy, amount) {
+  if (isBuy) return quoteSwap(token, quoteIsCurrency0, true, await quoteExact(CONFIG.imdEthKey, true, amount));
+  return quoteExact(CONFIG.imdEthKey, false, await quoteSwap(token, quoteIsCurrency0, false, amount));
+}
+
+let ethRouterCode = null;
+async function ethRouterLive() {
+  if (ethRouterCode === null) {
+    try { ethRouterCode = await reader.getCode(CONFIG.ethRouter); } catch { return false; }
+  }
+  return ethRouterCode.length > 2;
+}
+
+// ---------------------------------------------------------------- USD prices
+const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
+const prices = { ethUsd: 0, imdEth: 0 };
+async function loadPrices() {
+  try {
+    const sv = new ethers.Contract(CONFIG.stateView, STATEVIEW_ABI, reader);
+    const [a, b] = await Promise.all([sv.getSlot0(CONFIG.ethUsdPoolId), sv.getSlot0(CONFIG.imdEthPoolId)]);
+    const r1 = Number(a[0]) / 2 ** 96, r2 = Number(b[0]) / 2 ** 96;
+    prices.ethUsd = r1 * r1 * 1e12; // USDG (6 dec) per ETH (18 dec)
+    prices.imdEth = 1 / (r2 * r2);   // ETH per IMD
+  } catch (e) { console.warn("price load failed", e); }
+}
+const quoteUsd = (q) => (q === ZERO ? prices.ethUsd : prices.imdEth * prices.ethUsd);
+function fmtUsd(n) {
+  if (n >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+  if (n >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+  if (n >= 1e3) return "$" + (n / 1e3).toFixed(1) + "K";
+  if (n >= 1) return "$" + n.toFixed(2);
+  if (n <= 0) return "$0";
+  return "$" + n.toFixed(Math.min(18, 1 - Math.floor(Math.log10(n)))); // 2 significant digits
+}
+/// Quote-denominated wei amount as USD, falling back to the quote asset if prices are unavailable.
+function usd(wei, q) {
+  const u = quoteUsd(q);
+  return u ? fmtUsd(Number(ethers.formatUnits(wei, 18)) * u) : `${fmt(wei)} ${qsym(q)}`;
 }
 
 // ---------------------------------------------------------------- Helpers
@@ -321,7 +373,7 @@ async function renderHome() {
         <div style="min-width:0;flex:1">
           <div class="row"><span class="name">${esc(i.name)}</span>${pill(i.quote)}</div>
           <div class="stat mono">$${esc(i.symbol)}</div>
-          <div class="stat">MC <b>${fmt(i.marketCap)} ${qsym(i.quote)}</b> · ${ago(i.createdAt)}</div>
+          <div class="stat">MC <b>${usd(i.marketCap, i.quote)}</b> · ${ago(i.createdAt)}</div>
           ${m.description ? `<div class="stat" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.description)}</div>` : ""}
         </div></a>`;
     }).join("") : `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a href="#/create" style="color:var(--accent)">Launch the first one →</a></div>`;
@@ -351,6 +403,7 @@ async function renderCreate() {
         </div>
         <label for="ib">Initial buy (<span id="ibq">ETH</span>, optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
+        <div class="stat" id="ibnote" style="display:none">The launch-time buy is paid in IMD. After launch, anyone can buy with ETH too.</div>
         <button class="primary full" id="go" type="submit">Launch token</button>
       </form>
       <div class="card">
@@ -363,7 +416,7 @@ async function renderCreate() {
   const updStart = async () => {
     try {
       const v = startMcap(await padR.startTick(quote));
-      $("#startmc").innerHTML = `Starting market cap: <b style="color:var(--text)">≈ ${fmt(v)} ${qsym(quote)}</b>`;
+      $("#startmc").innerHTML = `Starting market cap: <b style="color:var(--text)">≈ ${usd(v, quote)}</b> <span class="muted">(${fmt(v)} ${qsym(quote)})</span>`;
     } catch {}
   };
   const updPreview = () => {
@@ -381,6 +434,7 @@ async function renderCreate() {
     quote = b.dataset.q;
     $("#pair").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
     $("#ibq").textContent = qsym(quote); updStart(); updPreview();
+    $("#ibnote").style.display = quote === ZERO ? "none" : "";
   });
   $("#ib").oninput = updPreview;
   updStart();
@@ -439,18 +493,18 @@ async function renderToken(addr) {
           ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
         </div>
         <div class="stats">
-          <div class="card"><div class="k">Market cap</div><div class="v">${fmt(info.marketCap)} ${Q}</div></div>
-          <div class="card"><div class="k">Price</div><div class="v">${priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4)} ${Q}</div></div>
+          <div class="card"><div class="k">Market cap</div><div class="v">${usd(info.marketCap, q)}</div><div class="stat">${fmt(info.marketCap)} ${Q}</div></div>
+          <div class="card"><div class="k">Price</div><div class="v">${quoteUsd(q) ? fmtUsd(priceOf(info.sqrtPriceX96, info.quoteIsCurrency0) * quoteUsd(q)) : priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4) + " " + Q}</div></div>
           <div class="card"><div class="k">Liquidity</div><div class="v">Locked forever</div></div>
-          <div class="card"><div class="k">Earned by holders</div><div class="v">${fmt(info.totalDividendsDistributed + info.pendingHolderFees)} ${Q}</div></div>
+          <div class="card"><div class="k">Earned by holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">paid in ${Q}</div></div>
         </div>
         <div class="card" style="margin-top:14px">
-          <div class="row"><b>Price</b><span class="spacer"></span><span class="stat">${Q} per token</span></div>
+          <div class="row"><b>Price</b><span class="spacer"></span><span class="stat">USD per token</span></div>
           <svg class="chart" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
         </div>
         <div class="card" style="margin-top:14px">
           <b>Trades</b>
-          <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th>${Q}</th><th>Tokens</th><th>Tx</th></tr></thead>
+          <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th>Value</th><th>Tokens</th><th>Tx</th></tr></thead>
           <tbody id="trades"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
         </div>
       </div>
@@ -458,6 +512,7 @@ async function renderToken(addr) {
       <div>
         <div class="card">
           <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
+          ${q !== ZERO ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">ETH</button><button type="button" data-v="imd">IMD</button></div></div>` : ""}
           <label for="amt" style="margin-top:0" id="amtl"></label>
           <input id="amt" inputmode="decimal" placeholder="0.0" />
           <div class="quick" id="quick"></div>
@@ -477,13 +532,19 @@ async function renderToken(addr) {
 
   const routerW = () => new ethers.Contract(CONFIG.router, ROUTER_ABI, signer);
   const tokR = new ethers.Contract(addr, TOKEN_ABI, reader);
-  let tokBal = 0n, quoteBal = 0n;
+  let tokBal = 0n, quoteBal = 0n, ethBal = 0n;
+  // IMD pairs can be traded with ETH through PepesFamilyEthRouter (ETH <-> IMD <-> token in one tx).
+  // Only offered once the router's code is confirmed on-chain, so ETH can never be sent to an empty address.
+  let viaEth = q !== ZERO && (await ethRouterLive());
+  if (q !== ZERO && !viaEth) $("#via")?.parentElement.remove();
+  const payUnit = () => (q === ZERO || viaEth ? "ETH" : "IMD");
+  const ethRouterW = () => new ethers.Contract(CONFIG.ethRouter, ETH_ROUTER_ABI, signer);
 
   async function loadPosition() {
     if (!account) return;
     const qBalP = q === ZERO ? reader.getBalance(account) : new ethers.Contract(q, ERC20_ABI, reader).balanceOf(account);
-    const [b, d, w, qb] = await Promise.all([tokR.balanceOf(account), tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), qBalP]);
-    tokBal = b; quoteBal = qb;
+    const [b, d, w, qb, eb] = await Promise.all([tokR.balanceOf(account), tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), qBalP, reader.getBalance(account)]);
+    tokBal = b; quoteBal = qb; ethBal = eb;
     const share = Number((b * 1000000n) / SUPPLY) / 10000;
     $("#pos").innerHTML = `Holding <b>${fmt(b)}</b> $${esc(info.symbol)} (${share}% of supply)<br/>
       Claimable: <b>${fmt(d, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}`;
@@ -495,10 +556,13 @@ async function renderToken(addr) {
     tradeSide = s;
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === s));
     const buying = s === "buy";
-    $("#amtl").textContent = buying ? `Amount (${Q})` : `Amount ($${info.symbol})`;
+    app.querySelectorAll("#via button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "eth") === viaEth));
+    if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
+    $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
     $("#trade").textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`;
-    $("#bal").textContent = account ? `Balance: ${fmt(buying ? quoteBal : tokBal)} ${buying ? Q : "$" + info.symbol}` : "";
-    const opts = buying ? (q === ZERO ? ["0.01", "0.05", "0.1", "0.5"] : ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
+    const payBal = payUnit() === "ETH" ? ethBal : quoteBal;
+    $("#bal").textContent = account ? `Balance: ${fmt(buying ? payBal : tokBal)} ${buying ? payUnit() : "$" + info.symbol}` : "";
+    const opts = buying ? (payUnit() === "ETH" ?["0.01", "0.05", "0.1", "0.5"] : ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
     $("#quick").innerHTML = opts.map((o) => `<button type="button">${o}</button>`).join("");
     $("#quick").querySelectorAll("button").forEach((b) => b.onclick = () => {
       const t = b.textContent;
@@ -508,6 +572,7 @@ async function renderToken(addr) {
     preview();
   }
   app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { $("#amt").value = ""; setSide(b.dataset.s); });
+  app.querySelectorAll("#via button").forEach((b) => b.onclick = () => { viaEth = b.dataset.v === "eth"; $("#amt").value = ""; setSide(tradeSide); });
 
   let pvSeq = 0;
   async function preview() {
@@ -515,8 +580,11 @@ async function renderToken(addr) {
     let amt = 0n; try { amt = ethers.parseUnits($("#amt").value.trim() || "0", 18); } catch {}
     if (!amt) return ($("#pv").innerHTML = "&nbsp;");
     try {
-      const out = await quoteSwap(addr, info.quoteIsCurrency0, tradeSide === "buy", amt);
-      if (seq === pvSeq) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${tradeSide === "buy" ? "$" + info.symbol : Q}`;
+      const buying = tradeSide === "buy";
+      const out = q !== ZERO && viaEth
+        ? await quoteSwapEth(addr, info.quoteIsCurrency0, buying, amt)
+        : await quoteSwap(addr, info.quoteIsCurrency0, buying, amt);
+      if (seq === pvSeq) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${buying ? "$" + info.symbol : payUnit()}`;
     } catch (e) { if (seq === pvSeq) $("#pv").textContent = "Can't quote this amount"; }
   }
   $("#amt").oninput = preview;
@@ -529,7 +597,22 @@ async function renderToken(addr) {
       if (!amt) throw new Error("Enter an amount");
       const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
       let tx;
-      if (tradeSide === "buy") {
+      if (q !== ZERO && viaEth) {
+        const buying = tradeSide === "buy";
+        const expected = await quoteSwapEth(addr, info.quoteIsCurrency0, buying, amt);
+        if (buying) {
+          toast("Confirm in your wallet…", 8000);
+          tx = await ethRouterW().buyWithEth(addr, withSlippage(expected, slipBps), deadline(), { value: amt });
+        } else {
+          const tokW = new ethers.Contract(addr, ERC20_ABI, signer);
+          if ((await tokW.allowance(account, CONFIG.ethRouter)) < amt) {
+            toast(`Approve $${info.symbol} for the ETH router in your wallet…`, 8000);
+            await (await tokW.approve(CONFIG.ethRouter, amt)).wait();
+          }
+          toast("Confirm in your wallet…", 8000);
+          tx = await ethRouterW().sellForEth(addr, amt, withSlippage(expected, slipBps), deadline());
+        }
+      } else if (tradeSide === "buy") {
         const expected = await quoteSwap(addr, info.quoteIsCurrency0, true, amt);
         if (q !== ZERO) await ensureImdAllowance(amt);
         toast("Confirm in your wallet…", 8000);
@@ -602,14 +685,14 @@ async function loadTrades(addr, info) {
   $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
     <tr><td class="${t.isBuy ? "b" : "s"}">${t.isBuy ? "Buy" : "Sell"}</td>
     <td class="mono"><a href="${CONFIG.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
-    <td>${fmt(t.quoteAmount, 6)}</td><td>${fmt(t.tokenAmount)}</td>
+    <td title="${fmt(t.quoteAmount, 6)} ${qsym(info.quote)}">${usd(t.quoteAmount, info.quote)}</td><td>${fmt(t.tokenAmount)}</td>
     <td><a href="${CONFIG.explorer}/tx/${t.hash}" target="_blank" rel="noopener">↗</a></td></tr>`).join("")
     : `<tr><td colspan="5" class="muted">No trades yet</td></tr>`;
 
   // price series: launch price, then price after each trade
   const startSqrt = trades.length ? null : info.sqrtPriceX96;
   const pts = startSqrt ? [priceOf(startSqrt, info.quoteIsCurrency0)] : trades.map((t) => priceOf(t.sqrtPriceX96, info.quoteIsCurrency0));
-  drawChart(pts);
+  drawChart(pts.map((x) => x * (quoteUsd(info.quote) || 1)));
 }
 
 function drawChart(pts) {
@@ -625,7 +708,8 @@ function drawChart(pts) {
     <path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
 }
 
-route();
+loadPrices().finally(route);
+setInterval(loadPrices, 60_000);
 </script>
 </body>
 </html>
