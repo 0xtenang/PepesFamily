@@ -10,11 +10,11 @@ Owner and fee recipient for both versions: `0x3c8A4d94B3219F6633F2cC94094f4765b3
 
 | Contract | Address |
 | --- | --- |
-| PepesFamily v2 (launchpad + v4 hook) | `0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC` |
-| PepesFamilyRouter v2 | `0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b` |
-| PepesFamilyEthRouter v2 (trade IMD pairs with ETH) | `0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF` |
+| PepesFamily v2 (launchpad + v4 hook) | [`0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC`](https://robinhoodchain.blockscout.com/address/0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC) |
+| PepesFamilyRouter v2 | [`0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b`](https://robinhoodchain.blockscout.com/address/0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b) |
+| PepesFamilyEthRouter v2 (trade IMD pairs with ETH) | [`0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF`](https://robinhoodchain.blockscout.com/address/0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF) |
 
-v2 tokens have no admin and expose `owner() = 0x0` (shown as renounced). They use standard ERC-20 approvals with no exempt addresses, plus EIP-2612 `permit` for gasless sell approvals.
+v2 was deployed at block 76968615 and its source is verified on Sourcify. v2 tokens have no admin and expose `owner() = 0x0` (shown as renounced). They use standard ERC-20 approvals with no exempt addresses, plus EIP-2612 `permit` for gasless sell approvals.
 
 **v1: still live.** Its tokens, including Pepes, keep trading forever.
 
