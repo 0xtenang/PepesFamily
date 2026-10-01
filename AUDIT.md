@@ -6,7 +6,15 @@ This branch is the PepesFamily **v1** code exactly as deployed on Robinhood Chai
 
 **Pepes** `0xE2C46c7068566740A33A4C93f5445B07BCfE5644` is an instance of `contracts/src/PadToken.sol`, deployed by the v1 launchpad. Its source is verified on Blockscout (exact match) and on Sourcify.
 
-GoPlus currently reports `is_honeypot = 1` and `owner_change_balance = 1` for it. Everything else is clean: not mintable, no owner, no blacklist, not pausable, not a proxy, no self-destruct, no hidden owner. **We want an independent answer: can anyone block holders from selling, change balances, mint, or take holders' tokens or rewards?**
+Scanners (GoPlus, and GMGN, which shows GoPlus results) currently raise three warnings for it:
+
+1. **Possible honeypot** (`is_honeypot = 1`): can selling be blocked?
+2. **Owner can change balance** (`owner_change_balance = 1`): can a privileged address change or move holders' balances?
+3. **Has suspicious function**: does the token expose a non-standard function that gives someone special power?
+
+Everything else they check is clean: not mintable, no owner, no blacklist, not pausable, not a proxy, no self-destruct, no hidden owner, open source.
+
+**We want an independent verdict on each of the three warnings:** a real risk, or a false positive? And can anyone block holders from selling, change balances, mint, or take holders' tokens or rewards?
 
 | Contract | Address | Source |
 | --- | --- | --- |
@@ -29,7 +37,7 @@ PepesFamily is a fixed-supply token launchpad built on Uniswap v4.
 
 ## Look at hardest
 
-**1. The flagged pattern: `PadToken.transferFrom` skips the allowance check when `msg.sender == router`** (the immutable v1 `PepesFamilyRouter`).
+**1. "Owner can change balance": `PadToken.transferFrom` skips the allowance check when `msg.sender == router`** (the immutable v1 `PepesFamilyRouter`). We believe this one pattern is what triggers both the balance warning and the honeypot warning.
 - We believe the router can only ever pull tokens from its own caller: `sell` → `_swap` → `unlockCallback` uses `d.user = msg.sender`.
 - Please check every path through the router: `buy`, `sell`, `launch`, `unlockCallback`, and crafted pool keys or tokens. Confirm no one, including the owner, can move another holder's Pepes.
 - The router has no owner and no admin functions.
@@ -39,11 +47,21 @@ PepesFamily is a fixed-supply token launchpad built on Uniswap v4.
 - Whether any owner action, third-party call or state (for example a reverting `flush`/`distribute`, pending fees, or a quote balance below `accountedBalance`) can make sells or claims revert.
 - `beforeInitialize` and `beforeAddLiquidity` always revert, so no one else can create pools or add liquidity with this hook.
 
-**3. Can balances or supply change any other way?**
+**3. The "suspicious function" warning: every non-standard function on the token.** Beyond ERC-20 (`transfer`, `transferFrom`, `approve`, `balanceOf`, `allowance`, `totalSupply`, `name`, `symbol`, `decimals`), the deployed token exposes the following. We believe none is privileged; please confirm, and identify which one scanners likely flag and why.
+- **Holder rewards:**
+  - `claim()`: pays the caller's own rewards; calls `pad.flush(token)` first and sends ETH or IMD to the caller (reentrancy-guarded).
+  - `distribute()`: anyone can call; spreads new quote balance over holders; never reverts.
+  - `accumulativeDividendOf`, `withdrawableDividendOf`, `withdrawnDividends`, `magnifiedDividendPerShare`, `eligibleSupply`, `accountedBalance`, `totalDividendsDistributed`, `MIN_ELIGIBLE_SUPPLY`: read-only.
+- **Info:**
+  - `isExcluded(address)`: read-only; a fixed list (PoolManager, launchpad, router, the token itself, `0x0`, `0x…dEaD`) with no setter.
+  - `pad()`, `router()`, `poolManager()`, `quote()`, `creator()`, `metadata()`: immutable or set once.
+- **`receive()`:** accepts ETH only when the quote is ETH (Pepes' quote is IMD, so it reverts).
+
+**4. Can balances or supply change any other way?**
 - `totalSupply` is a constant (1e27). Balances only change in `_transfer`.
 - Check the reward accounting (magnified dividend per share, `int256` corrections, the exclusion list) for anything that touches balances or pays out more than was distributed.
 
-**4. The fee and claims flow**
+**5. The fee and claims flow**
 - The hook mints ERC-6909 claims for fees during swaps.
 - `flush` and `collectProtocolFees` (callable by anyone, including mid-unlock) burn claims and `take` real currency.
 - Can this be abused against holders, the pool, or the PoolManager?
