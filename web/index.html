@@ -95,6 +95,7 @@ th { color: var(--muted); font-weight: 500; }
 .fees { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
 .desc { white-space: pre-wrap; word-break: break-word; }
 .links a { color: var(--accent); font-size: 13px; }
+.ext .btn { padding: 5px 12px; font-size: 13px; }
 .scroll-x { overflow-x: auto; }
 </style>
 </head>
@@ -604,6 +605,10 @@ async function renderToken(addr) {
               <div class="mono muted">$${esc(info.symbol)} · <a href="${CONFIG.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)} ↗</a></div>
               <div class="stat">Created by <a class="mono" href="${CONFIG.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> · ${ago(p.createdAt)} · launchpad v${P.version}</div>
               ${links ? `<div class="links">${links}</div>` : ""}
+              <div class="row ext" style="margin-top:8px">
+                <a class="btn" href="https://gmgn.ai/robinhood/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>
+                <a class="btn" href="https://dexscreener.com/robinhood/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
+              </div>
             </div>
           </div>
           ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
