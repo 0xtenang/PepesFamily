@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Script, console} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {DeployLib} from "./DeployLib.sol";
@@ -12,6 +13,9 @@ contract Deploy is Script {
     IPoolManager constant POOL_MANAGER = IPoolManager(0x8366a39CC670B4001A1121B8F6A443A643e40951);
     address constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
+    // Uniswap v4 IMD/ETH pool 0xd2fc01ee…8f02 (1% fee, tick spacing 100, no hooks), used by the ETH router.
+    uint24 constant IMD_ETH_FEE = 10_000;
+    int24 constant IMD_ETH_TICK_SPACING = 100;
 
     function _l2BlockNumber() internal view returns (uint256) {
         (bool ok, bytes memory data) = address(100).staticcall(abi.encodeWithSignature("arbBlockNumber()"));
@@ -32,7 +36,8 @@ contract Deploy is Script {
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(ethStartMcap),
-                DeployLib.startTickForMarketCap(imdStartMcap)
+                DeployLib.startTickForMarketCap(imdStartMcap),
+                PepesFamily.ImdEthPool({fee: IMD_ETH_FEE, tickSpacing: IMD_ETH_TICK_SPACING, hooks: address(0)})
             )
         );
         (bytes32 salt, address expected) =
@@ -47,17 +52,21 @@ contract Deploy is Script {
         PepesFamily pad = PepesFamily(expected);
         console.log("PepesFamily (hook)  :", address(pad));
         console.log("PepesFamilyRouter   :", pad.router());
+        console.log("PepesFamilyEthRouter:", pad.ethRouter());
         console.log("Owner               :", pad.owner());
         console.log("Fee recipient       :", pad.feeRecipient());
         uint256 l2Block = _l2BlockNumber();
         console.log("L2 block            :", l2Block);
 
+        // Only record real deployments; simulations must not overwrite the deployment file.
+        if (!vm.isContext(VmSafe.ForgeContext.ScriptBroadcast)) return;
         string memory json = "deployment";
         vm.serializeAddress(json, "pad", address(pad));
         vm.serializeAddress(json, "router", pad.router());
+        vm.serializeAddress(json, "ethRouter", pad.ethRouter());
         vm.serializeAddress(json, "owner", pad.owner());
         vm.serializeAddress(json, "feeRecipient", pad.feeRecipient());
         string memory out = vm.serializeUint(json, "block", l2Block);
-        vm.writeJson(out, "./deployments/robinhood.json");
+        vm.writeJson(out, "./deployments/robinhood-v2.json");
     }
 }

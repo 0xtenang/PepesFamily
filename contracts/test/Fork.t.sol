@@ -56,7 +56,8 @@ contract ForkTest is Test {
                 address(this),
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(1.5 ether),
-                DeployLib.startTickForMarketCap(635e18)
+                DeployLib.startTickForMarketCap(635e18),
+                PepesFamily.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), pad_flags(), initCode, 0);
@@ -99,8 +100,10 @@ contract ForkTest is Test {
         assertApproxEqAbs(carol.balance - before, 0.033 ether, 10);
 
         uint256 bobTokens = t.balanceOf(bob);
-        vm.prank(bob);
+        vm.startPrank(bob);
+        t.approve(address(router), bobTokens);
         router.sell(token, bobTokens, 0, block.timestamp);
+        vm.stopPrank();
 
         uint256 feeBefore = FEE_RECIPIENT.balance;
         pad.collectProtocolFees(address(0));
@@ -116,8 +119,10 @@ contract ForkTest is Test {
         console.log("IMD launch mcap after 100 IMD buy (wei)", pad.marketCap(token));
 
         uint256 imdBefore = IERC20(IMD).balanceOf(bob);
-        vm.prank(bob);
+        vm.startPrank(bob);
+        t.approve(address(router), out);
         uint256 got = router.sell(token, out, 0, block.timestamp);
+        vm.stopPrank();
         assertEq(IERC20(IMD).balanceOf(bob) - imdBefore, got);
         assertGt(got, 90e18);
 

@@ -11,7 +11,7 @@ import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
-import {IPepesFamily} from "./PepesFamilyRouter.sol";
+import {IPepesFamily, PermitHelper} from "./PepesFamilyRouter.sol";
 
 /// @title PepesFamilyEthRouter
 /// @notice Lets people trade IMD-paired PepesFamily tokens with ETH in one transaction, by routing through the
@@ -91,6 +91,24 @@ contract PepesFamilyEthRouter is IUnlockCallback {
     {
         if (tokenAmount == 0 || tokenAmount > uint256(type(int256).max)) revert BadAmount();
         _checkImdPair(token);
+        ethOut = abi.decode(
+            poolManager.unlock(abi.encode(Route(msg.sender, token, false, tokenAmount, minEthOut))), (uint256)
+        );
+    }
+
+    /// @notice Same as `sellForEth`, with a gasless EIP-2612 approval signed for this router.
+    function sellForEthWithPermit(
+        address token,
+        uint256 tokenAmount,
+        uint256 minEthOut,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external checkDeadline(deadline) returns (uint256 ethOut) {
+        if (tokenAmount == 0 || tokenAmount > uint256(type(int256).max)) revert BadAmount();
+        _checkImdPair(token);
+        PermitHelper.permit(token, tokenAmount, deadline, v, r, s);
         ethOut = abi.decode(
             poolManager.unlock(abi.encode(Route(msg.sender, token, false, tokenAmount, minEthOut))), (uint256)
         );

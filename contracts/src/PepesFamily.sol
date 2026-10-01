@@ -19,6 +19,7 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 
 import {PadToken} from "./PadToken.sol";
 import {PepesFamilyRouter} from "./PepesFamilyRouter.sol";
+import {PepesFamilyEthRouter} from "./PepesFamilyEthRouter.sol";
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 
 /// @title PepesFamily
@@ -100,12 +101,21 @@ contract PepesFamily is IHooks, IUnlockCallback {
     IPoolManager public immutable poolManager;
     address public immutable IMD;
     address public immutable router;
+    /// @notice Router for trading IMD-paired tokens with ETH (through the Uniswap v4 IMD/ETH pool).
+    address public immutable ethRouter;
 
     address public owner;
     address public pendingOwner;
     address public feeRecipient;
     /// @notice Launch tick per quote asset, expressed as the tick of (tokens per quote). Sets the starting market cap.
     mapping(address quote => int24) public startTick;
+
+    /// @notice Uniswap v4 IMD/ETH pool used by `ethRouter` (ETH is currency0, IMD currency1).
+    struct ImdEthPool {
+        uint24 fee;
+        int24 tickSpacing;
+        address hooks;
+    }
 
     struct Launch {
         address quote;
@@ -157,7 +167,8 @@ contract PepesFamily is IHooks, IUnlockCallback {
         address owner_,
         address feeRecipient_,
         int24 ethStartTick,
-        int24 imdStartTick
+        int24 imdStartTick,
+        ImdEthPool memory imdEthPool
     ) {
         if (imd == address(0) || owner_ == address(0) || feeRecipient_ == address(0)) revert ZeroAddress();
         Hooks.validateHookPermissions(
@@ -184,6 +195,11 @@ contract PepesFamily is IHooks, IUnlockCallback {
         owner = owner_;
         feeRecipient = feeRecipient_;
         router = address(new PepesFamilyRouter(poolManager_, address(this)));
+        ethRouter = address(
+            new PepesFamilyEthRouter(
+                poolManager_, address(this), imd, imdEthPool.fee, imdEthPool.tickSpacing, imdEthPool.hooks
+            )
+        );
         _setStartTick(ETH, ethStartTick);
         _setStartTick(imd, imdStartTick);
         emit OwnershipTransferred(address(0), owner_);

@@ -27,6 +27,25 @@ interface IPepesFamily {
     function flush(address token) external;
 }
 
+interface IERC20Permit {
+    function permit(address holder, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external;
+    function allowance(address holder, address spender) external view returns (uint256);
+}
+
+library PermitHelper {
+    error PermitFailed();
+
+    /// @dev Applies `msg.sender`'s permit for this contract. If someone front-ran it with the same signature the
+    ///      call reverts, but the allowance is already set, so that case is accepted instead of failing the trade.
+    function permit(address token, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s) internal {
+        try IERC20Permit(token).permit(msg.sender, address(this), amount, deadline, v, r, s) {}
+        catch {
+            if (IERC20Permit(token).allowance(msg.sender, address(this)) < amount) revert PermitFailed();
+        }
+    }
+}
+
 /// @title PepesFamilyRouter
 /// @notice Simple buy/sell/launch entry points for PepesFamily tokens on Uniswap v4. Deployed by PepesFamily.
 ///         Fees are charged by the PepesFamily hook exactly as for any other router; this router also forwards the
@@ -86,12 +105,27 @@ contract PepesFamilyRouter is IUnlockCallback {
         return _swap(token, true, amountIn, minTokensOut);
     }
 
-    /// @notice Sell tokens for the pool's quote asset. No approval needed.
+    /// @notice Sell tokens for the pool's quote asset. Approve this router for `tokenAmount` first,
+    ///         or use `sellWithPermit`.
     function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline)
         external
         checkDeadline(deadline)
         returns (uint256 quoteOut)
     {
+        return _swap(token, false, tokenAmount, minQuoteOut);
+    }
+
+    /// @notice Sell with a gasless EIP-2612 approval signed for this router (`value` >= `tokenAmount`).
+    function sellWithPermit(
+        address token,
+        uint256 tokenAmount,
+        uint256 minQuoteOut,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external checkDeadline(deadline) returns (uint256 quoteOut) {
+        PermitHelper.permit(token, tokenAmount, deadline, v, r, s);
         return _swap(token, false, tokenAmount, minQuoteOut);
     }
 

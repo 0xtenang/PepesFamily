@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {SafeTransfer} from "./lib/SafeTransfer.sol";
+import {SafeTransfer} from "../lib/SafeTransfer.sol";
 
 interface IPadFlush {
     function flush(address token) external;
 }
 
-/// @title PadToken
+/// @title PadTokenV1 (deployed by PepesFamily v1 0x2d7689E4…68CC; kept so v1 tokens can be source-verified)
 /// @notice Fixed-supply ERC20 launched by PepesFamily. Holders earn a pro-rata share of the 3% holder fee
 ///         charged on every Uniswap v4 swap of this token, paid in its quote asset (ETH or IMD).
 /// @dev Dividends use the "magnified dividend per share" pattern: accrual is O(1) and automatic for every
 ///      holder on each distribution; holders withdraw with `claim()`. The pad, the router, the v4
 ///      PoolManager (which holds the pool's tokens), this contract and burn addresses are excluded.
-contract PadToken {
+contract PadTokenV1 {
     using SafeTransfer for address;
 
     error InsufficientBalance();
@@ -22,8 +22,6 @@ contract PadToken {
     error EthNotAccepted();
     error Overflow();
     error Reentrancy();
-    error PermitExpired();
-    error InvalidSignature();
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -63,12 +61,6 @@ contract PadToken {
 
     uint256 private _locked = 1;
 
-    bytes32 public constant PERMIT_TYPEHASH =
-        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-    mapping(address => uint256) public nonces;
-    uint256 private immutable _initialChainId;
-    bytes32 private immutable _initialDomainSeparator;
-
     constructor(
         string memory name_,
         string memory symbol_,
@@ -88,55 +80,10 @@ contract PadToken {
         metadata = metadata_;
         balanceOf[msg.sender] = totalSupply;
         emit Transfer(address(0), msg.sender, totalSupply);
-        _initialChainId = block.chainid;
-        _initialDomainSeparator = _domainSeparator();
     }
 
     receive() external payable {
         if (quote != address(0)) revert EthNotAccepted();
-    }
-
-    /// @notice This token has no owner and no admin functions: nothing about it can ever be changed.
-    ///         Exposed as the zero address so explorers and scanners show it as renounced.
-    function owner() external pure returns (address) {
-        return address(0);
-    }
-
-    // ------------------------------------------------------------ EIP-2612
-
-    /// @notice EIP-712 domain separator for `permit` (gasless approvals).
-    function DOMAIN_SEPARATOR() public view returns (bytes32) {
-        return block.chainid == _initialChainId ? _initialDomainSeparator : _domainSeparator();
-    }
-
-    /// @notice Sets `spender`'s allowance from `holder`'s signature instead of an `approve` transaction.
-    function permit(address holder, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
-        external
-    {
-        if (block.timestamp > deadline) revert PermitExpired();
-        bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR(),
-                keccak256(abi.encode(PERMIT_TYPEHASH, holder, spender, value, nonces[holder]++, deadline))
-            )
-        );
-        address signer = ecrecover(digest, v, r, s);
-        if (signer == address(0) || signer != holder) revert InvalidSignature();
-        allowance[holder][spender] = value;
-        emit Approval(holder, spender, value);
-    }
-
-    function _domainSeparator() private view returns (bytes32) {
-        return keccak256(
-            abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-                keccak256(bytes(name)),
-                keccak256("1"),
-                block.chainid,
-                address(this)
-            )
-        );
     }
 
     // ---------------------------------------------------------------- ERC20
@@ -152,14 +99,16 @@ contract PadToken {
         return true;
     }
 
-    /// @dev Standard allowance for every spender: no address is exempt. Routers get approval via
-    ///      `approve` or a gasless EIP-2612 `permit` signature.
+    /// @dev PepesFamilyRouter can move tokens without an allowance so selling needs no approve tx.
+    ///      The router only ever pulls from its own `msg.sender` inside `sell`.
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        uint256 allowed = allowance[from][msg.sender];
-        if (allowed != type(uint256).max) {
-            if (allowed < amount) revert InsufficientAllowance();
-            unchecked {
-                allowance[from][msg.sender] = allowed - amount;
+        if (msg.sender != router) {
+            uint256 allowed = allowance[from][msg.sender];
+            if (allowed != type(uint256).max) {
+                if (allowed < amount) revert InsufficientAllowance();
+                unchecked {
+                    allowance[from][msg.sender] = allowed - amount;
+                }
             }
         }
         _transfer(from, to, amount);

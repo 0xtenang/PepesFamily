@@ -4,13 +4,27 @@ A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663), bu
 
 ## Live on Robinhood Chain (4663)
 
+Owner and fee recipient for both versions: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
+
+**v2: current. All new launches go here.** One deployment creates all three contracts.
+
 | Contract | Address |
 | --- | --- |
-| PepesFamily (launchpad + v4 hook) | [`0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC`](https://robinhoodchain.blockscout.com/address/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC) |
-| PepesFamilyRouter | [`0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC`](https://robinhoodchain.blockscout.com/address/0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC) |
-| PepesFamilyEthRouter (trade IMD pairs with ETH) | [`0x79eeE0C12C1284bc046e4494Eea6180695F5028A`](https://robinhoodchain.blockscout.com/address/0x79eeE0C12C1284bc046e4494Eea6180695F5028A) |
+| PepesFamily v2 (launchpad + v4 hook) | `0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC` |
+| PepesFamilyRouter v2 | `0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b` |
+| PepesFamilyEthRouter v2 (trade IMD pairs with ETH) | `0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF` |
 
-Deployed at block 76719371. Source verified on [Sourcify](https://repo.sourcify.dev/4663/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC). Owner and fee recipient: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
+v2 tokens have no admin and expose `owner() = 0x0` (shown as renounced). They use standard ERC-20 approvals with no exempt addresses, plus EIP-2612 `permit` for gasless sell approvals.
+
+**v1: still live.** Its tokens, including Pepes, keep trading forever.
+
+| Contract | Address |
+| --- | --- |
+| PepesFamily v1 | [`0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC`](https://robinhoodchain.blockscout.com/address/0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC) |
+| PepesFamilyRouter v1 | [`0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC`](https://robinhoodchain.blockscout.com/address/0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC) |
+| PepesFamilyEthRouter v1 | [`0x79eeE0C12C1284bc046e4494Eea6180695F5028A`](https://robinhoodchain.blockscout.com/address/0x79eeE0C12C1284bc046e4494Eea6180695F5028A) |
+
+v1 was deployed at block 76719371 and verified on Sourcify. Its token source is kept in `src/v1/PadTokenV1.sol` so v1 tokens can still be verified. The other v1 sources are in git history at commit `a549093`.
 
 ## How it works
 
@@ -21,7 +35,7 @@ Deployed at block 76719371. Source verified on [Sourcify](https://repo.sourcify.
   - 3% goes to the token's holders pro rata, paid in ETH or IMD. The accrual is O(1) and automatic, and holders withdraw with `claim()` on the token.
   - The hook holds fees as PoolManager ERC-6909 claims until they are flushed. `PepesFamilyRouter` flushes on every trade. Credit goes to holders before a buyer receives tokens and after a seller's tokens leave, so a trader doesn't earn from their own trade.
   - For swaps through other routers, fees are flushed at the next PepesFamilyRouter trade or `claim()`. The holders at that moment receive them, which can include that trader.
-- **Approvals:** sells need no approval. IMD buys need an IMD approval for `PepesFamilyRouter`.
+- **Approvals:** v2 sells use a gasless permit signature (or a normal approval) for the router. v1 sells need no approval. IMD buys need an IMD approval for the router.
 - **Paying with ETH on IMD pairs:** the website routes buys and sells through `PepesFamilyEthRouter`. Selling to ETH needs a one-time token approval for that router.
 - **USD prices:** the website shows market caps and prices in USD, read from on-chain Uniswap v4 pools (ETH/USDG and IMD/ETH). No off-chain price API is involved.
 
@@ -52,8 +66,8 @@ forge build
 
 ```bash
 cd contracts
-forge test                                           # 25 unit + attack tests against a real v4 PoolManager
-FORK_RPC=https://robinhood.drpc.org forge test       # + 5 fork tests against live mainnet (incl. the deployed contracts)
+forge test                                           # 31 unit + attack tests against a real v4 PoolManager
+FORK_RPC=https://robinhood.drpc.org forge test       # + 7 fork tests against live mainnet state
 ```
 
 The tests cover:
@@ -107,7 +121,7 @@ The owner **can't** change the fee percentages, touch pool liquidity or holder r
 **What the contracts guarantee (each one covered by tests):**
 - **Liquidity is locked.** The position belongs to `PepesFamily`, which has no remove function. The hook reverts on any outside pool creation or liquidity add.
 - **Hook entry points only accept the PoolManager**, and `launchFor` only accepts the router. The unlock callbacks can only be reached through the contracts' own `unlock` calls.
-- **The router only moves `msg.sender`'s funds.** The allowance-free token pull is limited to that one router and to the caller's own tokens.
+- **The routers only move `msg.sender`'s funds.** v2 tokens have no allowance exemptions at all. v1 tokens let their router pull the caller's own tokens without an allowance.
 - **Fees can't be redirected.** Anyone can trigger `collectProtocolFees`/`flush`, but the funds only go to `feeRecipient` or the token's holders. The fee claims (ERC-6909) can only be spent by `PepesFamily`.
 - **Casts are checked.** Fee math uses checked casts (`SafeCast`), so extreme swap sizes revert instead of truncating.
 - **Payouts can't get stuck.** `distribute()` never reverts, so an unusual quote balance can't block trades or claims. `claim()` is reentrancy-guarded and updates state before paying.

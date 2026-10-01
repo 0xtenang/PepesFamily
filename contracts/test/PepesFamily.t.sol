@@ -14,6 +14,7 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
+import {PepesFamilyEthRouter} from "../src/PepesFamilyEthRouter.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 
@@ -84,7 +85,8 @@ contract PepesFamilyTest is Test {
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(ETH_START_MCAP),
-                DeployLib.startTickForMarketCap(IMD_START_MCAP)
+                DeployLib.startTickForMarketCap(IMD_START_MCAP),
+                PepesFamily.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt, address expected) = DeployLib.mineSalt(address(this), pad_flags(), initCode, 0);
@@ -125,6 +127,8 @@ contract PepesFamilyTest is Test {
     }
 
     function _sell(address who, PadToken t, uint256 amt) internal returns (uint256) {
+        vm.prank(who);
+        t.approve(address(router), amt);
         vm.prank(who);
         return router.sell(address(t), amt, 0, block.timestamp);
     }
@@ -470,7 +474,10 @@ contract PepesFamilyTest is Test {
         vm.expectRevert();
         router.sell(address(t), bobBal, 0, block.timestamp);
         assertEq(t.balanceOf(bob), bobBal);
-        // and nobody but the router can skip the allowance
+        // and no address can skip the allowance, not even the router (v2 has no exemptions)
+        vm.prank(address(router));
+        vm.expectRevert(PadToken.InsufficientAllowance.selector);
+        t.transferFrom(bob, carol, 1);
         vm.prank(carol);
         vm.expectRevert(PadToken.InsufficientAllowance.selector);
         t.transferFrom(bob, carol, 1);
@@ -533,5 +540,95 @@ contract PepesFamilyTest is Test {
         vm.prank(bob);
         pad.acceptOwnership();
         assertEq(pad.owner(), bob);
+    }
+
+    // ------------------------------------------------------------ v2 token
+
+    function _permitSig(uint256 pk, PadToken t, address spender, uint256 value, uint256 deadline)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
+        address holder = vm.addr(pk);
+        bytes32 structHash =
+            keccak256(abi.encode(t.PERMIT_TYPEHASH(), holder, spender, value, t.nonces(holder), deadline));
+        return vm.sign(pk, keccak256(abi.encodePacked("\x19\x01", t.DOMAIN_SEPARATOR(), structHash)));
+    }
+
+    function test_v2_ownerIsZeroAddress() public {
+        PadToken t = _launch(address(0));
+        assertEq(t.owner(), address(0)); // scanners show "renounced"
+    }
+
+    function test_v2_padDeploysEthRouter() public view {
+        address eth = pad.ethRouter();
+        assertGt(eth.code.length, 0);
+        assertEq(address(PepesFamilyEthRouter(payable(eth)).pad()), address(pad));
+        assertEq(PepesFamilyEthRouter(payable(eth)).IMD(), address(imd));
+    }
+
+    function test_v2_routerNeedsApproval() public {
+        PadToken t = _launch(address(0));
+        _buy(bob, t, 1 ether);
+        uint256 bal = t.balanceOf(bob);
+        vm.prank(bob);
+        vm.expectRevert(); // no allowance -> the router can't pull bob's tokens
+        router.sell(address(t), bal, 0, block.timestamp);
+    }
+
+    function test_v2_sellWithPermit() public {
+        (address dan, uint256 pk) = makeAddrAndKey("dan");
+        vm.deal(dan, 10 ether);
+        PadToken t = _launch(address(0));
+        _buy(dan, t, 1 ether);
+        uint256 bal = t.balanceOf(dan);
+        (uint8 v, bytes32 r, bytes32 s) = _permitSig(pk, t, address(router), bal, block.timestamp);
+        uint256 ethBefore = dan.balance;
+        vm.prank(dan);
+        uint256 out = router.sellWithPermit(address(t), bal, 1, block.timestamp, v, r, s);
+        assertEq(t.balanceOf(dan), 0);
+        assertEq(dan.balance - ethBefore, out);
+        assertEq(t.nonces(dan), 1);
+    }
+
+    function test_v2_permitFrontRunDoesNotBlockSale() public {
+        (address dan, uint256 pk) = makeAddrAndKey("dan");
+        vm.deal(dan, 10 ether);
+        PadToken t = _launch(address(0));
+        _buy(dan, t, 1 ether);
+        uint256 bal = t.balanceOf(dan);
+        (uint8 v, bytes32 r, bytes32 s) = _permitSig(pk, t, address(router), bal, block.timestamp);
+        // attacker copies the signature from the mempool and uses it first
+        vm.prank(carol);
+        t.permit(dan, address(router), bal, block.timestamp, v, r, s);
+        // dan's sale still goes through (allowance is already in place)
+        vm.prank(dan);
+        router.sellWithPermit(address(t), bal, 1, block.timestamp, v, r, s);
+        assertEq(t.balanceOf(dan), 0);
+    }
+
+    function test_v2_permitRejectsWrongSignerAndReplay() public {
+        (address dan, uint256 pk) = makeAddrAndKey("dan");
+        (, uint256 evePk) = makeAddrAndKey("eve");
+        vm.deal(dan, 10 ether);
+        PadToken t = _launch(address(0));
+        _buy(dan, t, 1 ether);
+        uint256 bal = t.balanceOf(dan);
+
+        // eve signs a permit claiming to be dan
+        (uint8 v, bytes32 r, bytes32 s) = _permitSig(evePk, t, address(router), bal, block.timestamp);
+        vm.expectRevert(PadToken.InvalidSignature.selector);
+        t.permit(dan, address(router), bal, block.timestamp, v, r, s);
+
+        // a valid signature can't be used twice
+        (v, r, s) = _permitSig(pk, t, address(router), bal, block.timestamp);
+        t.permit(dan, address(router), bal, block.timestamp, v, r, s);
+        vm.expectRevert(PadToken.InvalidSignature.selector);
+        t.permit(dan, address(router), bal, block.timestamp, v, r, s);
+
+        // and expired permits are rejected
+        (v, r, s) = _permitSig(pk, t, address(router), bal, block.timestamp - 1);
+        vm.expectRevert(PadToken.PermitExpired.selector);
+        t.permit(dan, address(router), bal, block.timestamp - 1, v, r, s);
     }
 }

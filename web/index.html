@@ -113,7 +113,7 @@ th { color: var(--muted); font-weight: 500; }
 
 <script>
 // ---------------------------------------------------------------- Config
-// Robinhood Chain mainnet deployment (see contracts/deployments/robinhood.json).
+// Robinhood Chain mainnet deployments (see contracts/deployments/).
 const CONFIG = {
   chainId: 4663,
   chainName: "Robinhood Chain",
@@ -121,12 +121,14 @@ const CONFIG = {
   walletRpc: "https://rpc.mainnet.chain.robinhood.com", // added to wallets that don't know the chain yet
   explorer: "https://robinhoodchain.blockscout.com",
   blockscoutApi: "https://robinhoodchain.blockscout.com/api/v2", // trade history
-  pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC",    // PepesFamily (launchpad + v4 hook)
-  router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", // PepesFamilyRouter
-  deployBlock: 76719371,                                      // L2 block of the deployment
+  // Launchpads, newest first. New tokens launch on the first one that is live on-chain; tokens from every
+  // version stay listed and tradable. v2 tokens: owner() = 0x0 (renounced), standard approvals + permit.
+  pads: [
+    { version: 2, pad: "0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC", router: "0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b", ethRouter: "0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF", permit: true },
+    { version: 1, pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC", router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", permit: false },
+  ],
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
   quoter: "0x8dc178efb8111bb0973dd9d722ebeff267c98f94", // Uniswap V4Quoter on Robinhood Chain
-  ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", // PepesFamilyEthRouter: trade IMD pairs with ETH
   stateView: "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b", // Uniswap v4 StateView (pool prices)
   // USD prices come from on-chain Uniswap v4 pools, no off-chain price API.
   ethUsdPoolId: "0xbac3aa3b91584a53a579b3c999a56756e954e59247e497bad1d25a4334bde551", // ETH/USDG (6 decimals)
@@ -154,11 +156,13 @@ const ROUTER_ABI = [
   "function launch(string name, string symbol, string metadata, address quote, uint256 initialBuy, uint256 minTokensOut) payable returns (address, uint256)",
   "function buy(address token, uint256 amountIn, uint256 minTokensOut, uint256 deadline) payable returns (uint256)",
   "function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline) returns (uint256)",
+  "function sellWithPermit(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline, uint8 v, bytes32 r, bytes32 s) returns (uint256)",
 ];
 // Uniswap's deployed V4Quoter: simulates the swap through the pool and our hook, so the 4% fee is included.
 const ETH_ROUTER_ABI = [
   "function buyWithEth(address token, uint256 minTokensOut, uint256 deadline) payable returns (uint256)",
   "function sellForEth(address token, uint256 tokenAmount, uint256 minEthOut, uint256 deadline) returns (uint256)",
+  "function sellForEthWithPermit(address token, uint256 tokenAmount, uint256 minEthOut, uint256 deadline, uint8 v, bytes32 r, bytes32 s) returns (uint256)",
 ];
 const QUOTER_ABI = [
   `function quoteExactInputSingle(tuple(${KEY_T} poolKey, bool zeroForOne, uint128 exactAmount, bytes hookData) params) returns (uint256 amountOut, uint256 gasEstimate)`,
@@ -173,37 +177,73 @@ const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address, address) view returns (uint256)",
   "function approve(address, uint256) returns (bool)",
+  "function name() view returns (string)",
+  "function nonces(address) view returns (uint256)",
 ];
 const ZERO = ethers.ZeroAddress;
 const SUPPLY = 10n ** 27n;
 const ONE = 10n ** 18n;
 
 const reader = new ethers.JsonRpcProvider(CONFIG.rpc, CONFIG.chainId, { staticNetwork: true });
-const padR = new ethers.Contract(CONFIG.pad, PAD_ABI, reader);
 const quoterR = new ethers.Contract(CONFIG.quoter, QUOTER_ABI, reader);
 let signer = null, account = null;
+
+// Each launchpad version with a read-only contract. `live` is filled at startup from on-chain code, so a version
+// is only used once it is actually deployed (nothing is ever sent to an address without code).
+const PADS = CONFIG.pads.map((p) => ({ ...p, c: new ethers.Contract(p.pad, PAD_ABI, reader), live: false, ethLive: false }));
+let LAUNCH = null; // newest live launchpad: where new tokens are created
+let padR = null;   // LAUNCH's contract (launch form + admin owner lookups)
+async function loadPads() {
+  await Promise.all(PADS.map(async (P) => {
+    try {
+      const [a, b] = await Promise.all([reader.getCode(P.pad), reader.getCode(P.ethRouter)]);
+      P.live = a.length > 2; P.ethLive = b.length > 2;
+    } catch {}
+  }));
+  LAUNCH = PADS.find((P) => P.live) || null;
+  padR = LAUNCH?.c || null;
+}
+const livePads = () => PADS.filter((P) => P.live);
 
 const quoteExact = async (key, zeroForOne, amount) =>
   (await quoterR.quoteExactInputSingle.staticCall([key, zeroForOne, amount, "0x"]))[0];
 
 /// Tokens out (buy) or quote out (sell) for exact-in `amount`, via Uniswap's V4Quoter.
-async function quoteSwap(token, quoteIsCurrency0, isBuy, amount) {
-  const key = [...(await padR.poolKey(token))]; // plain copy: ethers results are read-only
+async function quoteSwap(P, token, quoteIsCurrency0, isBuy, amount) {
+  const key = [...(await P.c.poolKey(token))]; // plain copy: ethers results are read-only
   return quoteExact(key, isBuy === quoteIsCurrency0, amount);
 }
 
 /// Same, but paying/receiving ETH on an IMD pair: routes through the IMD/ETH pool (as PepesFamilyEthRouter does).
-async function quoteSwapEth(token, quoteIsCurrency0, isBuy, amount) {
-  if (isBuy) return quoteSwap(token, quoteIsCurrency0, true, await quoteExact(CONFIG.imdEthKey, true, amount));
-  return quoteExact(CONFIG.imdEthKey, false, await quoteSwap(token, quoteIsCurrency0, false, amount));
+async function quoteSwapEth(P, token, quoteIsCurrency0, isBuy, amount) {
+  if (isBuy) return quoteSwap(P, token, quoteIsCurrency0, true, await quoteExact(CONFIG.imdEthKey, true, amount));
+  return quoteExact(CONFIG.imdEthKey, false, await quoteSwap(P, token, quoteIsCurrency0, false, amount));
 }
 
-let ethRouterCode = null;
-async function ethRouterLive() {
-  if (ethRouterCode === null) {
-    try { ethRouterCode = await reader.getCode(CONFIG.ethRouter); } catch { return false; }
+/// Gets `spender` allowed to pull `amount` of `token` for a sale. Returns permit {v,r,s} when the user signed one
+/// (v2 tokens: no extra transaction), or null when an allowance is in place (existing, or via an approve tx).
+async function authorizeSell(P, token, spender, amount, dl) {
+  const tok = new ethers.Contract(token, ERC20_ABI, signer);
+  if ((await tok.allowance(account, spender)) >= amount) return null;
+  if (P.permit) {
+    try {
+      const [name, nonce] = await Promise.all([tok.name(), tok.nonces(account)]);
+      toast("Sign the approval in your wallet (no gas)…", 8000);
+      const sig = await signer.signTypedData(
+        { name, version: "1", chainId: CONFIG.chainId, verifyingContract: token },
+        { Permit: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] },
+        { owner: account, spender, value: amount, nonce, deadline: dl },
+      );
+      const s = ethers.Signature.from(sig);
+      return { v: s.v, r: s.r, s: s.s };
+    } catch (e) {
+      if (e?.code === "ACTION_REJECTED" || e?.code === 4001) throw e; // user said no
+      // wallet can't sign typed data: fall back to a normal approval
+    }
   }
-  return ethRouterCode.length > 2;
+  toast("Approve the token for selling in your wallet…", 8000);
+  await (await tok.approve(spender, amount)).wait();
+  return null;
 }
 
 // ---------------------------------------------------------------- USD prices
@@ -326,12 +366,12 @@ if (window.ethereum) {
   window.ethereum.on?.("chainChanged", () => location.reload());
 }
 
-async function ensureImdAllowance(amount) {
+async function ensureImdAllowance(amount, spender) {
   const imd = new ethers.Contract(CONFIG.imd, ERC20_ABI, signer);
-  const current = await imd.allowance(account, CONFIG.router);
+  const current = await imd.allowance(account, spender);
   if (current >= amount) return;
   toast("Approve IMD in your wallet…", 8000);
-  const tx = await imd.approve(CONFIG.router, amount);
+  const tx = await imd.approve(spender, amount);
   await tx.wait();
 }
 
@@ -339,7 +379,7 @@ async function ensureImdAllowance(amount) {
 window.addEventListener("hashchange", route);
 function route() {
   const h = location.hash.slice(1) || "/";
-  if (CONFIG.pad === ZERO) return renderSetup();
+  if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
   if (h === "/admin") return renderAdmin();
@@ -348,7 +388,7 @@ function route() {
 
 function renderSetup() {
   $("#app").innerHTML = `<div class="card empty"><h2>Not deployed yet</h2>
-    <p>Deploy the contracts, then set <span class="mono">CONFIG.pad</span>, <span class="mono">CONFIG.router</span> and <span class="mono">CONFIG.deployBlock</span> at the top of this file.</p></div>`;
+    <p>No launchpad contract found on-chain. Check <span class="mono">CONFIG.pads</span> and <span class="mono">CONFIG.rpc</span> at the top of this file.</p></div>`;
 }
 
 // ---------------------------------------------------------------- Home
@@ -370,9 +410,13 @@ async function renderHome() {
     b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
   });
   try {
-    const n = Number(await padR.tokenCount());
-    const limit = 60, offset = Math.max(0, n - limit);
-    const infos = n ? [...(await padR.getTokens(offset, limit))].reverse() : [];
+    // newest 60 tokens from every live launchpad version, merged newest first
+    const lists = await Promise.all(livePads().map(async (P) => {
+      const n = Number(await P.c.tokenCount());
+      const limit = 60, offset = Math.max(0, n - limit);
+      return n ? [...(await P.c.getTokens(offset, limit))] : [];
+    }));
+    const infos = lists.flat().sort((a, b) => Number(b.createdAt) - Number(a.createdAt)).slice(0, 60);
     const shown = infos.filter((i) => homeFilter === "all" || (homeFilter === "eth") === (i.quote === ZERO));
     $("#list").innerHTML = shown.length ? shown.map((i) => {
       const m = meta(i.metadata);
@@ -397,49 +441,55 @@ async function showAdminLink() {
   $("#adminlink").style.display = me && (me === owner.toLowerCase() || me === feeTo.toLowerCase()) ? "" : "none";
 }
 
-/// Protocol fees accrue in the contract (as Uniswap v4 claims) until collected. Anyone may trigger a
-/// collection, but the contract always sends the funds to `feeRecipient`, so this page is safe to expose.
+/// Protocol fees accrue in each launchpad contract (as Uniswap v4 claims) until collected. Anyone may trigger a
+/// collection, but the contract always sends the funds to its `feeRecipient`, so this page is safe to expose.
 async function renderAdmin() {
   const app = $("#app");
   app.innerHTML = `<div class="muted">Loading…</div>`;
-  let owner, feeTo, pending;
-  try {
-    [owner, feeTo, ...pending] = await Promise.all([
-      padR.owner(), padR.feeRecipient(), padR.pendingProtocolFees(ZERO), padR.pendingProtocolFees(CONFIG.imd),
-    ]);
-  } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
   const assets = [ZERO, CONFIG.imd];
-  const totalUsd = assets.reduce((s, q, i) => s + Number(ethers.formatUnits(pending[i], 18)) * quoteUsd(q), 0);
+  let rows;
+  try {
+    rows = await Promise.all(livePads().map(async (P) => {
+      const [owner, feeTo, ...pending] = await Promise.all([
+        P.c.owner(), P.c.feeRecipient(), ...assets.map((q) => P.c.pendingProtocolFees(q)),
+      ]);
+      return { P, owner, feeTo, pending };
+    }));
+  } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
+  const toUsd = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
+  const totalUsd = rows.reduce((s, r) => s + assets.reduce((t, q, i) => t + toUsd(r.pending[i], q), 0), 0);
   app.innerHTML = `
-    <div class="hero"><div><h1>Admin</h1><p>Protocol fees: 1% of every trade, waiting to be collected.</p></div></div>
-    <div class="stats" style="margin-top:0">
-      ${assets.map((q, i) => `
-        <div class="card">
-          <div class="k">Pending ${qsym(q)}</div>
-          <div class="v">${fmt(pending[i], 6)} ${qsym(q)}</div>
-          <div class="stat">${quoteUsd(q) ? "≈ " + usd(pending[i], q) : ""}</div>
-          <button class="primary full" data-q="${q}" ${pending[i] === 0n ? "disabled" : ""}>Collect ${qsym(q)}</button>
-        </div>`).join("")}
-      <div class="card"><div class="k">Total pending</div><div class="v">${fmtUsd(totalUsd)}</div></div>
-    </div>
-    <div class="card" style="margin-top:14px">
-      <table>
-        <tr><td class="muted">Fees are sent to</td><td class="mono"><a href="${CONFIG.explorer}/address/${feeTo}" target="_blank" rel="noopener">${feeTo}</a></td></tr>
-        <tr><td class="muted">Owner</td><td class="mono"><a href="${CONFIG.explorer}/address/${owner}" target="_blank" rel="noopener">${owner}</a></td></tr>
-        <tr><td class="muted">Launchpad contract</td><td class="mono"><a href="${CONFIG.explorer}/address/${CONFIG.pad}" target="_blank" rel="noopener">${CONFIG.pad}</a></td></tr>
-      </table>
-      <p class="stat" style="margin-bottom:0">Collecting always pays the fee address above, whichever wallet signs. The signer only pays gas.</p>
-    </div>`;
+    <div class="hero"><div><h1>Admin</h1><p>Protocol fees: 1% of every trade, waiting to be collected. Total pending: <b style="color:var(--text)">${fmtUsd(totalUsd)}</b></p></div></div>
+    ${rows.map((r, ri) => `
+      <h3 style="margin:18px 0 8px">Launchpad v${r.P.version}</h3>
+      <div class="stats" style="margin-top:0">
+        ${assets.map((q, i) => `
+          <div class="card">
+            <div class="k">Pending ${qsym(q)}</div>
+            <div class="v">${fmt(r.pending[i], 6)} ${qsym(q)}</div>
+            <div class="stat">${quoteUsd(q) ? "≈ " + usd(r.pending[i], q) : ""}</div>
+            <button class="primary full" data-r="${ri}" data-q="${q}" ${r.pending[i] === 0n ? "disabled" : ""}>Collect ${qsym(q)}</button>
+          </div>`).join("")}
+      </div>
+      <div class="card" style="margin-top:10px">
+        <table>
+          <tr><td class="muted">Fees are sent to</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.feeTo}" target="_blank" rel="noopener">${r.feeTo}</a></td></tr>
+          <tr><td class="muted">Owner</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.owner}" target="_blank" rel="noopener">${r.owner}</a></td></tr>
+          <tr><td class="muted">Contract</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.P.pad}" target="_blank" rel="noopener">${r.P.pad}</a></td></tr>
+        </table>
+      </div>`).join("")}
+    <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. The signer only pays gas.</p>`;
   app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
+    const r = rows[Number(b.dataset.r)];
     try {
       await requireWallet();
-      const pad = new ethers.Contract(CONFIG.pad, PAD_ABI, signer);
+      const pad = new ethers.Contract(r.P.pad, PAD_ABI, signer);
       toast("Confirm in your wallet…", 8000);
       const tx = await pad.collectProtocolFees(b.dataset.q);
       toast("Collecting…", 15000);
       await tx.wait();
-      toast(`${qsym(b.dataset.q)} fees sent to ${short(feeTo)}`);
+      toast(`${qsym(b.dataset.q)} fees sent to ${short(r.feeTo)}`);
       renderAdmin();
     } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
   });
@@ -512,8 +562,8 @@ async function renderCreate() {
       put("image", "#img"); put("description", "#d"); put("website", "#w"); put("x", "#x"); put("telegram", "#tg");
       const ibv = $("#ib").value.trim();
       const initialBuy = ibv ? ethers.parseUnits(ibv, 18) : 0n;
-      if (quote !== ZERO && initialBuy > 0n) await ensureImdAllowance(initialBuy);
-      const router = new ethers.Contract(CONFIG.router, ROUTER_ABI, signer);
+      if (quote !== ZERO && initialBuy > 0n) await ensureImdAllowance(initialBuy, LAUNCH.router);
+      const router = new ethers.Contract(LAUNCH.router, ROUTER_ABI, signer);
       toast("Confirm the launch in your wallet…", 8000);
       const tx = await router.launch($("#n").value.trim(), $("#s").value.trim(), JSON.stringify(m), quote, initialBuy, 0n,
         { value: quote === ZERO ? initialBuy : 0n });
@@ -533,9 +583,12 @@ async function renderToken(addr) {
   if (!ethers.isAddress(addr)) return ($("#app").innerHTML = `<div class="card empty">Invalid token address</div>`);
   const app = $("#app");
   app.innerHTML = `<div class="muted">Loading…</div>`;
-  let info;
-  try { info = await padR.getTokenInfo(addr); }
-  catch (e) { return (app.innerHTML = `<div class="card empty">Token not found on this launchpad.</div>`); }
+  // find which launchpad version created this token (getTokenInfo reverts for tokens it doesn't know)
+  let info, P;
+  for (const cand of livePads()) {
+    try { info = await cand.c.getTokenInfo(addr); P = cand; break; } catch {}
+  }
+  if (!P) return (app.innerHTML = `<div class="card empty">Token not found on this launchpad.</div>`);
   const p = info, q = info.quote, Q = qsym(q), m = meta(info.metadata);
   const links = [["website", "Website"], ["x", "X"], ["telegram", "Telegram"]]
     .map(([k, l]) => safeUrl(m[k]) ? `<a href="${esc(safeUrl(m[k]))}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "").filter(Boolean).join(" · ");
@@ -549,7 +602,7 @@ async function renderToken(addr) {
             <div style="min-width:0">
               <div class="row"><h2 style="margin:0">${esc(info.name)}</h2>${pill(q)}</div>
               <div class="mono muted">$${esc(info.symbol)} · <a href="${CONFIG.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)} ↗</a></div>
-              <div class="stat">Created by <a class="mono" href="${CONFIG.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> · ${ago(p.createdAt)}</div>
+              <div class="stat">Created by <a class="mono" href="${CONFIG.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> · ${ago(p.createdAt)} · launchpad v${P.version}</div>
               ${links ? `<div class="links">${links}</div>` : ""}
             </div>
           </div>
@@ -593,15 +646,15 @@ async function renderToken(addr) {
       </div>
     </div>`;
 
-  const routerW = () => new ethers.Contract(CONFIG.router, ROUTER_ABI, signer);
+  const routerW = () => new ethers.Contract(P.router, ROUTER_ABI, signer);
   const tokR = new ethers.Contract(addr, TOKEN_ABI, reader);
   let tokBal = 0n, quoteBal = 0n, ethBal = 0n;
   // IMD pairs can be traded with ETH through PepesFamilyEthRouter (ETH <-> IMD <-> token in one tx).
   // Only offered once the router's code is confirmed on-chain, so ETH can never be sent to an empty address.
-  let viaEth = q !== ZERO && (await ethRouterLive());
+  let viaEth = q !== ZERO && P.ethLive;
   if (q !== ZERO && !viaEth) $("#via")?.parentElement.remove();
   const payUnit = () => (q === ZERO || viaEth ? "ETH" : "IMD");
-  const ethRouterW = () => new ethers.Contract(CONFIG.ethRouter, ETH_ROUTER_ABI, signer);
+  const ethRouterW = () => new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer);
 
   async function loadPosition() {
     if (!account) return;
@@ -645,8 +698,8 @@ async function renderToken(addr) {
     try {
       const buying = tradeSide === "buy";
       const out = q !== ZERO && viaEth
-        ? await quoteSwapEth(addr, info.quoteIsCurrency0, buying, amt)
-        : await quoteSwap(addr, info.quoteIsCurrency0, buying, amt);
+        ? await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt)
+        : await quoteSwap(P, addr, info.quoteIsCurrency0, buying, amt);
       if (seq === pvSeq) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${buying ? "$" + info.symbol : payUnit()}`;
     } catch (e) { if (seq === pvSeq) $("#pv").textContent = "Can't quote this amount"; }
   }
@@ -662,28 +715,32 @@ async function renderToken(addr) {
       let tx;
       if (q !== ZERO && viaEth) {
         const buying = tradeSide === "buy";
-        const expected = await quoteSwapEth(addr, info.quoteIsCurrency0, buying, amt);
+        const expected = await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt);
         if (buying) {
           toast("Confirm in your wallet…", 8000);
           tx = await ethRouterW().buyWithEth(addr, withSlippage(expected, slipBps), deadline(), { value: amt });
         } else {
-          const tokW = new ethers.Contract(addr, ERC20_ABI, signer);
-          if ((await tokW.allowance(account, CONFIG.ethRouter)) < amt) {
-            toast(`Approve $${info.symbol} for the ETH router in your wallet…`, 8000);
-            await (await tokW.approve(CONFIG.ethRouter, amt)).wait();
-          }
+          const dl = deadline();
+          const sig = await authorizeSell(P, addr, P.ethRouter, amt, dl);
           toast("Confirm in your wallet…", 8000);
-          tx = await ethRouterW().sellForEth(addr, amt, withSlippage(expected, slipBps), deadline());
+          tx = sig
+            ? await ethRouterW().sellForEthWithPermit(addr, amt, withSlippage(expected, slipBps), dl, sig.v, sig.r, sig.s)
+            : await ethRouterW().sellForEth(addr, amt, withSlippage(expected, slipBps), dl);
         }
       } else if (tradeSide === "buy") {
-        const expected = await quoteSwap(addr, info.quoteIsCurrency0, true, amt);
-        if (q !== ZERO) await ensureImdAllowance(amt);
+        const expected = await quoteSwap(P, addr, info.quoteIsCurrency0, true, amt);
+        if (q !== ZERO) await ensureImdAllowance(amt, P.router);
         toast("Confirm in your wallet…", 8000);
         tx = await routerW().buy(addr, amt, withSlippage(expected, slipBps), deadline(), { value: q === ZERO ? amt : 0n });
       } else {
-        const expected = await quoteSwap(addr, info.quoteIsCurrency0, false, amt);
+        const expected = await quoteSwap(P, addr, info.quoteIsCurrency0, false, amt);
+        const dl = deadline();
+        // v1 tokens let their router sell without approval; v2 tokens use a permit signature (or an approval)
+        const sig = P.permit ? await authorizeSell(P, addr, P.router, amt, dl) : null;
         toast("Confirm in your wallet…", 8000);
-        tx = await routerW().sell(addr, amt, withSlippage(expected, slipBps), deadline());
+        tx = sig
+          ? await routerW().sellWithPermit(addr, amt, withSlippage(expected, slipBps), dl, sig.v, sig.r, sig.s)
+          : await routerW().sell(addr, amt, withSlippage(expected, slipBps), dl);
       }
       toast("Transaction sent…", 15000);
       await tx.wait();
@@ -706,15 +763,16 @@ async function renderToken(addr) {
 
   setSide(tradeSide);
   loadPosition().catch(() => {});
-  loadTrades(addr, info).catch((e) => ($("#trades").innerHTML = `<tr><td colspan="5" class="muted">${esc(errMsg(e))}</td></tr>`));
+  loadTrades(P, addr, info).catch((e) => ($("#trades").innerHTML = `<tr><td colspan="5" class="muted">${esc(errMsg(e))}</td></tr>`));
 }
 
 /// Trade logs for `addr`, oldest first. Blockscout's API has full history and CORS; the RPC is a fallback
 /// because free RPCs cap eth_getLogs ranges (a few minutes of blocks on this fast chain).
-async function fetchTradeLogs(addr, createdBlock) {
-  const tradeTopic = padR.interface.getEvent("Trade").topicHash;
+async function fetchTradeLogs(P, addr, createdBlock) {
+  const padC = P.c;
+  const tradeTopic = padC.interface.getEvent("Trade").topicHash;
   try {
-    const url = `${CONFIG.blockscoutApi}/addresses/${CONFIG.pad}/logs?topic=${ethers.zeroPadValue(addr, 32)}`;
+    const url = `${CONFIG.blockscoutApi}/addresses/${P.pad}/logs?topic=${ethers.zeroPadValue(addr, 32)}`;
     const items = [];
     let next = null;
     for (let page = 0; page < 6; page++) {
@@ -728,7 +786,7 @@ async function fetchTradeLogs(addr, createdBlock) {
     }
     return items
       .filter((i) => i.topics[0] === tradeTopic && i.topics[1]?.toLowerCase() === ethers.zeroPadValue(addr, 32).toLowerCase())
-      .map((i) => ({ ...padR.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args.toObject(), hash: i.transaction_hash }))
+      .map((i) => ({ ...padC.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args.toObject(), hash: i.transaction_hash }))
       .reverse();
   } catch (e) {
     console.warn("Blockscout unavailable, using RPC for recent trades", e);
@@ -737,14 +795,14 @@ async function fetchTradeLogs(addr, createdBlock) {
     const from = Math.max(Number(createdBlock), latest - CHUNK * MAX_CHUNKS);
     const logs = [];
     for (let start = from; start <= latest; start += CHUNK) {
-      logs.push(...(await padR.queryFilter(padR.filters.Trade(addr), start, Math.min(start + CHUNK - 1, latest))));
+      logs.push(...(await padC.queryFilter(padC.filters.Trade(addr), start, Math.min(start + CHUNK - 1, latest))));
     }
     return logs.map((l) => ({ ...l.args.toObject(), hash: l.transactionHash }));
   }
 }
 
-async function loadTrades(addr, info) {
-  const trades = await fetchTradeLogs(addr, info.createdBlock);
+async function loadTrades(P, addr, info) {
+  const trades = await fetchTradeLogs(P, addr, info.createdBlock);
   $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
     <tr><td class="${t.isBuy ? "b" : "s"}">${t.isBuy ? "Buy" : "Sell"}</td>
     <td class="mono"><a href="${CONFIG.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
@@ -771,7 +829,7 @@ function drawChart(pts) {
     <path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
 }
 
-loadPrices().finally(route);
+Promise.all([loadPads(), loadPrices()]).finally(route);
 setInterval(loadPrices, 60_000);
 </script>
 </body>
