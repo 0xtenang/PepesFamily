@@ -142,6 +142,40 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .status > span:last-child { border-right: 0; border-left: 1px solid var(--line); margin-left: auto; }
 .status b { color: var(--text); font-weight: 500; }
 .status .dot { width: 7px; height: 7px; background: var(--accent); display: inline-block; }
+/* home scene: control wall + live screen + frog */
+.scene { position: relative; height: clamp(380px, 50vw, 560px); margin: 6px 0 28px; border: 1.5px solid var(--strong); overflow: hidden; background: #bdbdba; }
+.scene canvas.wall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.screen { position: absolute; left: 50%; top: 6%; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); height: 60%;
+  background: #050605; border: 5px solid #e8e8e5; outline: 1.5px solid #1b1b1b; color: #9aa79a; font-size: 12px;
+  display: flex; flex-direction: column; z-index: 1; }
+.scr-head { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #1d261d; color: #6f7d6f; white-space: nowrap; overflow: hidden; }
+.scr-head b { color: #3ddc84; font-weight: 500; }
+.scr-head .pulse { color: #3ddc84; animation: blink 2s steps(1) infinite; }
+.scr-log { flex: 1; overflow: hidden; padding: 6px 12px; display: flex; flex-direction: column; justify-content: flex-end; }
+.scr-log .ln { display: grid; grid-template-columns: 12px 44px 50px minmax(72px, max-content) 1fr; gap: 8px; white-space: nowrap; line-height: 1.8; color: #8e9b8e; }
+.scr-log a.ln:hover { background: #0e170e; }
+.scr-log .ln > span { overflow: hidden; text-overflow: ellipsis; }
+.scr-log .gt { color: #3ddc84; }
+.scr-log .ev.launch { color: #ffffff; } .scr-log .ev.buy { color: #3ddc84; } .scr-log .ev.sell { color: #ff7b72; }
+.scr-log .sym { color: #e6ede6; }
+.scr-log .new { animation: appear .5s ease-out; }
+@keyframes appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.scr-input { margin: 0 12px 10px; border: 1px solid #1f5e35; padding: 5px 10px; color: #3ddc84; font-size: 12px; }
+.scr-input:hover { background: #0e170e; }
+.cur { animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.frog { position: absolute; bottom: 3.5%; left: 50%; transform: translateX(-190%); width: clamp(62px, 8.5vw, 104px); z-index: 2; pointer-events: none; }
+.frog svg { width: 100%; height: auto; display: block; transform-origin: 50% 100%; animation: bob 5s ease-in-out infinite; }
+@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1.5deg); } }
+@media (prefers-reduced-motion: reduce) { .frog svg, .cur, .scr-head .pulse, .scr-log .new { animation: none; } }
+@media (max-width: 600px) {
+  .screen { top: 4%; height: 64%; font-size: 11px; }
+  .scr-log .ln { grid-template-columns: 40px 38px minmax(60px, max-content) 1fr; gap: 6px; }
+  .scr-log .ln .gt { display: none; }
+  .scr-head .wide { display: none; }
+  .frog { transform: translateX(-150%); }
+}
+
 </style>
 </head>
 <body>
@@ -455,6 +489,7 @@ function route() {
   const h = location.hash.slice(1) || "/";
   const navKey = h.startsWith("/t/") ? "/" : h;
   document.querySelectorAll("nav.top a").forEach((a) => a.classList.toggle("on", a.dataset.nav === navKey));
+  Scene.unmount(); Feed.stop(); // the home page restarts them
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
@@ -468,10 +503,278 @@ function renderSetup() {
 }
 
 // ---------------------------------------------------------------- Home
+// ---------------------------------------------------------------- Home scene
+// A procedurally drawn wall of instrument panels (canvas), a live "terminal" of launches and trades, and a frog
+// watching it. The wall layout is seeded, so it is the same on every visit; only the gauges move.
+const FROG_SVG = `<svg viewBox="0 0 120 172" aria-hidden="true">
+  <g stroke="#1e3d16" stroke-width="5" stroke-linejoin="round">
+    <circle cx="38" cy="36" r="17" fill="#5aa845"/><circle cx="82" cy="36" r="17" fill="#5aa845"/>
+    <ellipse cx="60" cy="60" rx="42" ry="30" fill="#5aa845"/>
+  </g>
+  <g fill="#5aa845">
+    <circle cx="38" cy="36" r="14.5"/><circle cx="82" cy="36" r="14.5"/><ellipse cx="60" cy="60" rx="39.5" ry="27.5"/>
+  </g>
+  <path d="M30 52 Q36 48 42 51" stroke="#3f8a31" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M78 51 Q84 48 90 52" stroke="#3f8a31" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <rect x="44" y="140" width="13" height="20" fill="#7a5a32" stroke="#3b2a14" stroke-width="2"/>
+  <rect x="63" y="140" width="13" height="20" fill="#7a5a32" stroke="#3b2a14" stroke-width="2"/>
+  <ellipse cx="49" cy="163" rx="12" ry="5.5" fill="#4f9a3b" stroke="#1e3d16" stroke-width="2"/>
+  <ellipse cx="71" cy="163" rx="12" ry="5.5" fill="#4f9a3b" stroke="#1e3d16" stroke-width="2"/>
+  <path d="M20 142 Q16 104 34 88 L86 88 Q104 104 100 142 Q60 150 20 142 Z" fill="#2557c4" stroke="#0f2559" stroke-width="2.5"/>
+  <path d="M34 90 Q60 108 86 90 Q80 80 60 79 Q40 80 34 90 Z" fill="#1c459e" stroke="#0f2559" stroke-width="2"/>
+  <path d="M60 104 L60 140" stroke="#1c459e" stroke-width="2"/>
+  <path d="M22 118 Q14 128 18 140" stroke="#0f2559" stroke-width="2.5" fill="none"/>
+  <path d="M98 118 Q106 128 102 140" stroke="#0f2559" stroke-width="2.5" fill="none"/>
+</svg>`;
+
+const Scene = (() => {
+  const C = { wall: "#b9b9b6", panel: "#dcdcd9", ink: "#1b1b1b", dim: "#7d7d7a", green: "#3ddc84", dark: "#0c0f0c" };
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let canvas, ctx, mods = [], specks = [], W = 0, H = 0, raf = 0, last = 0, visible = true, ro, io;
+  const rng = (seed) => { let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); };
+  const h01 = (a) => { const v = Math.sin(a * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const TYPES = ["knobs", "leds", "meter", "scope", "eq", "digits", "sliders", "grill", "dial", "buttons", "leds", "knobs"];
+  const floorH = () => Math.max(36, Math.round(H * 0.11));
+
+  function layout() {
+    const r = rng(7);
+    mods = [];
+    const cell = W < 600 ? 15 : 20, wallH = H - floorH();
+    for (let y = 3; y < wallH - cell; ) {
+      const h = Math.min(cell * (2 + Math.floor(r() * 4)), wallH - y - 3);
+      for (let x = 3; x < W - cell; ) {
+        const w = Math.min(cell * (2 + Math.floor(r() * 6)), W - x - 3);
+        mods.push({ x, y, w: w - 3, h: h - 3, t: TYPES[Math.floor(r() * TYPES.length)], s: r(), hl: r() < 0.07 });
+        x += w;
+      }
+      y += h;
+    }
+    specks = Array.from({ length: Math.round(W / 2.5) }, () => [r(), r(), r()]);
+  }
+
+  function circle(x, y, r, fill) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); fill ? ctx.fill() : ctx.stroke(); }
+
+  function mod(m, t) {
+    const { x, y, w, h, s } = m;
+    ctx.fillStyle = C.panel; ctx.fillRect(x, y, w, h);
+    ctx.lineWidth = 1.5; ctx.strokeStyle = m.hl ? C.green : C.ink; ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
+    const p = 5, ix = x + p, iy = y + p, iw = w - 2 * p, ih = h - 2 * p;
+    if (iw < 6 || ih < 6) return;
+    ctx.strokeStyle = C.ink; ctx.fillStyle = C.ink; ctx.lineWidth = 1.3;
+    switch (m.t) {
+      case "knobs": {
+        const r = Math.max(3, Math.min(ih / 2 - 1, 9)), n = Math.max(1, Math.floor(iw / (r * 2 + 7)));
+        for (let i = 0; i < n; i++) {
+          const cx = ix + (i + 0.5) * (iw / n), cy = iy + ih / 2, a = s * 9 + i * 1.9;
+          circle(cx, cy, r);
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
+        }
+        break;
+      }
+      case "leds": {
+        const sz = 5, g = 4, cols = Math.floor(iw / (sz + g)), rows = Math.floor(ih / (sz + g));
+        for (let i = 0; i < cols * rows; i++) {
+          const lx = ix + (i % cols) * (sz + g), ly = iy + Math.floor(i / cols) * (sz + g);
+          if (h01(i + s * 999 + Math.floor(t * 1.5 + s * 7)) < 0.28) { ctx.fillStyle = m.hl ? C.green : C.ink; ctx.fillRect(lx, ly, sz, sz); }
+          else ctx.strokeRect(lx + 0.5, ly + 0.5, sz - 1, sz - 1);
+        }
+        break;
+      }
+      case "meter": {
+        const cx = ix + iw / 2, cy = iy + ih * 0.9, r = Math.min(iw / 2, ih * 0.8);
+        ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+        for (let k = 0; k <= 6; k++) { const a = Math.PI * (1.15 + k * 0.7 / 6); ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.lineTo(cx + Math.cos(a) * (r - 4), cy + Math.sin(a) * (r - 4)); ctx.stroke(); }
+        const a = Math.PI * (1.2 + 0.6 * (0.5 + 0.45 * Math.sin(t * 1.1 + s * 20)));
+        ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 2), cy + Math.sin(a) * (r - 2)); ctx.stroke();
+        break;
+      }
+      case "scope": {
+        ctx.fillStyle = C.dark; ctx.fillRect(ix, iy, iw, ih);
+        ctx.strokeStyle = C.green; ctx.lineWidth = 1.4; ctx.beginPath();
+        for (let k = 0; k <= iw; k += 2) {
+          const yy = iy + ih / 2 + Math.sin(k * (0.08 + s * 0.1) + t * 3 + s * 30) * ih * 0.32 * (0.6 + 0.4 * Math.sin(t + s * 5));
+          k ? ctx.lineTo(ix + k, yy) : ctx.moveTo(ix + k, yy);
+        }
+        ctx.stroke();
+        break;
+      }
+      case "eq": {
+        const n = Math.max(3, Math.floor(iw / 6));
+        for (let i = 0; i < n; i++) {
+          const bh = ih * (0.2 + 0.8 * Math.abs(Math.sin(t * 2.2 + i * 1.7 + s * 13)));
+          ctx.fillRect(ix + i * (iw / n), iy + ih - bh, Math.max(2, iw / n - 2), bh);
+        }
+        break;
+      }
+      case "digits": {
+        ctx.fillStyle = C.dark; ctx.fillRect(ix, iy, iw, ih);
+        ctx.fillStyle = C.green; ctx.font = `${Math.max(8, Math.min(ih * 0.62, 18))}px "IBM Plex Mono", monospace`;
+        ctx.textBaseline = "middle";
+        const d = new Date(), txt = s < 0.5
+          ? [d.getHours(), d.getMinutes(), d.getSeconds()].map((v) => String(v).padStart(2, "0")).join(":")
+          : String(Math.floor(s * 900000 + t * 3)).slice(-6);
+        ctx.save(); ctx.beginPath(); ctx.rect(ix, iy, iw, ih); ctx.clip(); ctx.fillText(txt, ix + 4, iy + ih / 2 + 1); ctx.restore();
+        break;
+      }
+      case "sliders": {
+        const n = Math.max(2, Math.floor(iw / 12));
+        for (let i = 0; i < n; i++) {
+          const sx = ix + (i + 0.5) * (iw / n);
+          ctx.beginPath(); ctx.moveTo(sx, iy); ctx.lineTo(sx, iy + ih); ctx.stroke();
+          const ky = iy + ih * (0.15 + 0.7 * (0.5 + 0.5 * Math.sin(t * 0.4 + i * 2.1 + s * 9)));
+          ctx.fillRect(sx - 4, ky - 2, 8, 4);
+        }
+        break;
+      }
+      case "grill": for (let yy = iy + 2; yy < iy + ih; yy += 5) { ctx.beginPath(); ctx.moveTo(ix, yy); ctx.lineTo(ix + iw, yy); ctx.stroke(); } break;
+      case "dial": {
+        const cx = ix + iw / 2, cy = iy + ih / 2, r = Math.min(iw, ih) / 2 - 1;
+        circle(cx, cy, r);
+        for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.lineTo(cx + Math.cos(a) * r * 0.82, cy + Math.sin(a) * r * 0.82); ctx.stroke(); }
+        const a = t * 0.6 + s * 10;
+        ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.7); ctx.stroke();
+        break;
+      }
+      case "buttons": {
+        const bw = 12, n = Math.max(1, Math.floor(iw / (bw + 4))), on = Math.floor(h01(s * 77 + Math.floor(t / 3)) * n);
+        for (let i = 0; i < n; i++) {
+          const bx = ix + i * (bw + 4), bh = Math.min(10, ih);
+          if (i === on) { ctx.fillStyle = m.hl ? C.green : C.ink; ctx.fillRect(bx, iy + (ih - bh) / 2, bw, bh); }
+          else ctx.strokeRect(bx + 0.5, iy + (ih - bh) / 2 + 0.5, bw - 1, bh - 1);
+        }
+        break;
+      }
+    }
+  }
+
+  function draw(t) {
+    const wallH = H - floorH();
+    ctx.fillStyle = C.wall; ctx.fillRect(0, 0, W, wallH);
+    for (const m of mods) mod(m, t);
+    // a dark baseboard, then a speckled floor
+    ctx.fillStyle = "#121212"; ctx.fillRect(0, wallH, W, Math.max(8, floorH() * 0.3));
+    const fy = wallH + Math.max(8, floorH() * 0.3);
+    ctx.fillStyle = "#f2f2ef"; ctx.fillRect(0, fy, W, H - fy);
+    ctx.fillStyle = "#2a2a2a";
+    for (const [a, b, c] of specks) ctx.fillRect(a * W, fy + b * (H - fy), 1 + c * 2, 1);
+  }
+
+  function frame(now) {
+    raf = requestAnimationFrame(frame);
+    if (!visible || document.hidden || now - last < 110) return;
+    last = now;
+    draw(now / 1000);
+  }
+
+  function size() {
+    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    layout(); draw(performance.now() / 1000);
+  }
+
+  function mount(root) {
+    unmount();
+    canvas = root.querySelector("canvas.wall");
+    ctx = canvas.getContext("2d");
+    size();
+    ro = new ResizeObserver(() => size()); ro.observe(canvas);
+    io = new IntersectionObserver(([e]) => (visible = e.isIntersecting)); io.observe(canvas);
+    if (!reduce) raf = requestAnimationFrame(frame);
+  }
+
+  function unmount() {
+    cancelAnimationFrame(raf); raf = 0;
+    ro?.disconnect(); io?.disconnect(); ro = io = null;
+  }
+
+  return { mount, unmount };
+})();
+
+/// Live terminal: recent launches and trades across every launchpad version, polled every 20 s.
+const Feed = (() => {
+  let timer = 0, seen = new Set(), tokens = new Map();
+  const hhmm = (sec) => new Date(sec * 1000).toTimeString().slice(0, 5);
+
+  async function loadTokens() {
+    const lists = await Promise.all(livePads().map(async (P) => {
+      const n = Number(await P.c.tokenCount());
+      const out = [];
+      for (let off = 0; off < n; off += 100) out.push(...(await P.c.getTokens(off, 100)));
+      return out;
+    }));
+    for (const t of lists.flat()) tokens.set(t.token.toLowerCase(), t);
+    const n = $("#scr-n"); if (n) n.textContent = String(tokens.size);
+  }
+
+  async function recentTrades() {
+    const out = [];
+    await Promise.all(livePads().map(async (P) => {
+      const topic = P.c.interface.getEvent("Trade").topicHash;
+      try {
+        const r = await fetch(`${CONFIG.blockscoutApi}/addresses/${P.pad}/logs?topic=${topic}`, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) return;
+        for (const i of (await r.json()).items) {
+          if (i.topics[0] !== topic) continue;
+          const a = P.c.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args;
+          out.push({ key: i.transaction_hash + ":" + i.index, ts: Date.parse(i.block_timestamp) / 1000, kind: a.isBuy ? "buy" : "sell", token: a.token, a });
+        }
+      } catch {}
+    }));
+    return out;
+  }
+
+  function line(e, fresh) {
+    const t = tokens.get(e.token.toLowerCase());
+    if (!t) return "";
+    const sym = "$" + esc(t.symbol);
+    const detail = e.kind === "launch"
+      ? `${qsym(t.quote)} pair · MC ${usd(t.marketCap, t.quote)}`
+      : `${fmt(e.a.tokenAmount)} · ${usd(e.a.quoteAmount, t.quote)}`;
+    return `<a class="ln${fresh ? " new" : ""}" href="#/t/${t.token}"><span class="gt">&gt;</span><span>${hhmm(e.ts)}</span><span class="ev ${e.kind}">${e.kind}</span><span class="sym">${sym}</span><span>${esc(detail)}</span></a>`;
+  }
+
+  async function tick(first) {
+    const log = $("#scr-log");
+    if (!log) return stop();
+    try {
+      await loadTokens();
+      const events = [
+        ...[...tokens.values()].map((t) => ({ key: "launch:" + t.token, ts: Number(t.createdAt), kind: "launch", token: t.token })),
+        ...(await recentTrades()),
+      ].sort((x, y) => x.ts - y.ts);
+      const fresh = events.filter((e) => !seen.has(e.key));
+      fresh.forEach((e) => seen.add(e.key));
+      if (first) {
+        log.innerHTML = events.slice(-28).map((e) => line(e, false)).join("") || `<div class="ln"><span></span><span></span><span class="ev">idle</span><span>no activity yet</span></div>`;
+      } else if (fresh.length) {
+        log.insertAdjacentHTML("beforeend", fresh.map((e) => line(e, true)).join(""));
+        while (log.children.length > 40) log.firstElementChild.remove();
+      }
+    } catch (e) {
+      if (first) log.innerHTML = `<div class="ln"><span></span><span></span><span class="ev sell">error</span><span>${esc(errMsg(e))}</span></div>`;
+    }
+  }
+
+  function start() { stop(); seen = new Set(); tick(true); timer = setInterval(() => tick(false), 20000); }
+  function stop() { clearInterval(timer); timer = 0; }
+  return { start, stop };
+})();
+
 let homeFilter = "all";
 async function renderHome() {
   const app = $("#app");
   app.innerHTML = `
+    <div class="scene" id="scene">
+      <canvas class="wall" aria-hidden="true"></canvas>
+      <div class="screen">
+        <div class="scr-head"><span class="pulse">■</span><b id="scr-n">…</b> tokens · <b id="scr-vol">…</b> volume<span class="wide"> · <b id="scr-hold">…</b> to holders</span><span class="spacer"></span><span class="wide">robinhood chain · live</span></div>
+        <div class="scr-log" id="scr-log"><div class="ln"><span></span><span></span><span class="ev">boot</span><span>reading the chain…</span></div></div>
+        <a class="scr-input" href="#/create">&gt; <span class="cur">▌</span> launch a token</a>
+      </div>
+      <div class="frog">${FROG_SVG}</div>
+    </div>
     <div class="hero">
       <div><h1>Launch a token on Robinhood Chain</h1>
       <p>1B fixed supply · liquidity locked forever · pair with ETH or IMD · 3% of every trade paid to holders</p>
@@ -489,6 +792,8 @@ async function renderHome() {
     b.classList.toggle("on", b.dataset.f === homeFilter);
     b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
   });
+  Scene.mount($("#scene"));
+  Feed.start();
   loadTotals().catch((e) => console.warn("totals", e));
   try {
     // newest 60 tokens from every live launchpad version, merged newest first
@@ -552,6 +857,7 @@ async function loadTotals() {
   // bottom status bar (every page)
   $("#sb-vol").textContent = approx + fmtUsd(toUsd(volume));
   $("#sb-hold").textContent = fmtUsd(toUsd(holders));
+  if ($("#scr-vol")) { $("#scr-vol").textContent = $("#sb-vol").textContent; $("#scr-hold").textContent = $("#sb-hold").textContent; }
 
   if (!$("#tot-holders")) return; // not on the home page
   $("#tot-holders").textContent = fmtUsd(toUsd(holders));
