@@ -175,6 +175,8 @@ const TOKEN_ABI = [
   "function withdrawableDividendOf(address) view returns (uint256)",
   "function withdrawnDividends(address) view returns (uint256)",
   "function claim() returns (uint256)",
+  "function accountedBalance() view returns (uint256)",
+  "function distribute() returns (uint256)",
 ];
 const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
@@ -519,18 +521,33 @@ async function renderAdmin() {
       const [owner, feeTo, n, ...pending] = await Promise.all([
         P.c.owner(), P.c.feeRecipient(), P.c.tokenCount(), ...assets.map((q) => P.c.pendingProtocolFees(q)),
       ]);
-      // holder fees waiting to be paid out (from trades through other routers)
-      const waiting = [];
-      for (let off = 0; off < Number(n); off += 100) {
-        for (const t of await P.c.getTokens(off, 100)) if (t.pendingHolderFees > 0n) waiting.push(t);
-      }
-      return { P, owner, feeTo, pending, waiting };
+      const infos = [];
+      for (let off = 0; off < Number(n); off += 100) infos.push(...(await P.c.getTokens(off, 100)));
+      // Per token: rewards paid out to holders but not yet claimed (accountedBalance, held by the token contract),
+      // and holder fees not yet paid out (pending in the launchpad + any quote in the token not yet distributed).
+      const tokens = await Promise.all(infos.map(async (t) => {
+        const tok = new ethers.Contract(t.token, TOKEN_ABI, reader);
+        const [unclaimed, bal] = await Promise.all([
+          tok.accountedBalance(),
+          t.quote === ZERO ? reader.getBalance(t.token) : new ethers.Contract(t.quote, ERC20_ABI, reader).balanceOf(t.token),
+        ]);
+        const inToken = bal > unclaimed ? bal - unclaimed : 0n;
+        return { t, unclaimed, inToken, waiting: t.pendingHolderFees + inToken };
+      }));
+      return { P, owner, feeTo, pending, tokens };
     }));
   } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
   const toUsd = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
   const totalUsd = rows.reduce((s, r) => s + assets.reduce((t, q, i) => t + toUsd(r.pending[i], q), 0), 0);
+  const unclaimedUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.unclaimed, x.t.quote), 0), 0);
+  const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
-    <div class="hero"><div><h1>Admin</h1><p>Protocol fees: 1% of every trade, waiting to be collected. Total pending: <b style="color:var(--text)">${fmtUsd(totalUsd)}</b></p></div></div>
+    <div class="hero"><div><h1>Admin</h1><p>Protocol fees: 1% of every trade, waiting to be collected.</p></div></div>
+    <div class="stats" style="margin:0 0 6px">
+      <div class="card"><div class="k">Protocol fees to collect</div><div class="v">${fmtUsd(totalUsd)}</div><div class="stat">yours, all versions</div></div>
+      <div class="card"><div class="k">Unclaimed by holders</div><div class="v">${fmtUsd(unclaimedUsd)}</div><div class="stat">paid out, holders haven't claimed yet</div></div>
+      <div class="card"><div class="k">Holder fees not paid out yet</div><div class="v">${fmtUsd(waitingUsd)}</div><div class="stat">use "Pay out" below</div></div>
+    </div>
     ${rows.map((r, ri) => `
       <h3 style="margin:18px 0 8px">Launchpad v${r.P.version}</h3>
       <div class="stats" style="margin-top:0">
@@ -543,23 +560,26 @@ async function renderAdmin() {
           </div>`).join("")}
       </div>
       <div class="card" style="margin-top:10px">
+        <b>Holder rewards</b>
+        <p class="stat" style="margin:4px 0 8px"><b>Unclaimed</b>: already paid out to holders, waiting for them to press Claim (safe, nothing to do). <b>Not paid out</b>: fees from trades through other routers (GMGN, aggregators) not yet sent to holders.${r.P.version < 3 ? ` On v${r.P.version} these can be partly captured by a flash-borrow trick, so pay them out regularly (costs only gas).` : ""}</p>
+        ${r.tokens.length ? `<div class="scroll-x"><table>
+          <thead><tr><th>Token</th><th>Unclaimed</th><th>Not paid out</th><th></th></tr></thead>
+          <tbody>${r.tokens.map((x) => `
+            <tr>
+              <td><a href="#/t/${x.t.token}">$${esc(x.t.symbol)}</a></td>
+              <td>${usd(x.unclaimed, x.t.quote)}<div class="stat">${fmt(x.unclaimed, 6)} ${qsym(x.t.quote)}</div></td>
+              <td>${usd(x.waiting, x.t.quote)}<div class="stat">${fmt(x.waiting, 6)} ${qsym(x.t.quote)}</div></td>
+              <td>${x.waiting > 0n ? `<button data-r="${ri}" data-flush="${x.t.token}" data-direct="${x.t.pendingHolderFees === 0n ? 1 : 0}">Pay out</button>` : ""}</td>
+            </tr>`).join("")}</tbody></table></div>` : `<div class="stat">No tokens yet.</div>`}
+      </div>
+      <div class="card" style="margin-top:10px">
         <table>
           <tr><td class="muted">Fees are sent to</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.feeTo}" target="_blank" rel="noopener">${r.feeTo}</a></td></tr>
           <tr><td class="muted">Owner</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.owner}" target="_blank" rel="noopener">${r.owner}</a></td></tr>
           <tr><td class="muted">Contract</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.P.pad}" target="_blank" rel="noopener">${r.P.pad}</a></td></tr>
         </table>
-      </div>
-      ${r.P.version < 3 ? `
-      <div class="card" style="margin-top:10px">
-        <b>Holder fees waiting to be paid out</b>
-        <p class="stat" style="margin:4px 0 8px">Fees from trades through other routers (GMGN, aggregators) wait in the launchpad until paid out. On v${r.P.version}, waiting fees can be partly captured by a flash-borrow trick, so pay them out regularly: it sends them to holders and costs only gas.</p>
-        ${r.waiting.length ? r.waiting.map((t) => `
-          <div class="row" style="padding:6px 0;border-top:1px solid var(--line)">
-            <span>$${esc(t.symbol)}</span><span class="stat">${fmt(t.pendingHolderFees, 6)} ${qsym(t.quote)} ≈ ${usd(t.pendingHolderFees, t.quote)}</span>
-            <span class="spacer"></span><button data-r="${ri}" data-flush="${t.token}">Pay out</button>
-          </div>`).join("") : `<div class="stat">Nothing waiting.</div>`}
-      </div>` : ""}`).join("")}
-    <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. The signer only pays gas.</p>`;
+      </div>`).join("")}
+    <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. Paying out always pays the token's holders. The signer only pays gas.</p>`;
   app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     const r = rows[Number(b.dataset.r)];
@@ -574,15 +594,18 @@ async function renderAdmin() {
       renderAdmin();
     } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
   });
-  // flush() from a wallet transaction runs outside any PoolManager unlock, which is the safe way to distribute.
+  // Paying out from a wallet transaction runs outside any PoolManager unlock, which is the safe way to distribute.
+  // flush() sends the launchpad's pending fees and distributes them; when only quote already sitting in the token
+  // is left, distribute() on the token does it directly.
   app.querySelectorAll("button[data-flush]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     const r = rows[Number(b.dataset.r)];
     try {
       await requireWallet();
-      const pad = new ethers.Contract(r.P.pad, PAD_ABI, signer);
       toast("Confirm in your wallet…", 8000);
-      const tx = await pad.flush(b.dataset.flush);
+      const tx = b.dataset.direct === "1"
+        ? await new ethers.Contract(b.dataset.flush, TOKEN_ABI, signer).distribute()
+        : await new ethers.Contract(r.P.pad, PAD_ABI, signer).flush(b.dataset.flush);
       toast("Paying out…", 15000);
       await tx.wait();
       toast("Holder fees paid out");
