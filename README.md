@@ -36,6 +36,17 @@ v2 was deployed at block 76968615 and its source is verified on Sourcify. v2 tok
 
 v1 was deployed at block 76719371 and verified on Sourcify. Its token source is kept in `src/v1/PadTokenV1.sol` so v1 tokens can still be verified. The other v1 sources are in git history at commit `a549093`.
 
+## Audits (IMD Swarm)
+
+| Scope | Code | Result | Report |
+| --- | --- | --- | --- |
+| PepesFamily launchpad (v2 contracts) | `d1ad578` | 1 medium, 3 low, 3 info | [explorer.imd.fun/jobs/a3e708e2…](https://explorer.imd.fun/jobs/a3e708e2-fb57-43ea-a163-d93b916694a2) |
+| Pepes token (v1, as deployed) | `8c1869c` (branch `audit-pepes-v1`) | 1 high, 1 medium, 3 low, 6 info; the "honeypot", "owner can change balance" and "suspicious function" scanner warnings were confirmed false positives | [explorer.imd.fun/jobs/46a0c47b…](https://explorer.imd.fun/jobs/46a0c47b-d3ad-4c50-973e-369203a488ce) |
+
+Status of the main findings:
+- **High (rewards captured with flash-borrowed pool tokens):** fixed in v3. For v1 and v2 tokens, waiting holder fees are paid out promptly from the Admin page.
+- **Medium (fee on partially filled swaps):** open. A swap through a third-party router that sets a tight price limit, and only partly fills, pays 4% of the requested amount. PepesFamily's own routers always fill fully and are not affected.
+
 ## How it works
 
 - **Launch:** each launch deploys a `PadToken` with a fixed 1,000,000,000 supply. All of it goes into a new Uniswap v4 pool as single-sided liquidity, running from the launch price to the end of the price curve. The pool is paired with ETH or IMD, the creator's choice. It behaves like `x*y=k` with virtual quote liquidity, so the starting market cap is about 1.5 ETH or about 635 IMD (both roughly $4k on 2026-09-30).

@@ -223,6 +223,23 @@ const CONFIG = {
     { version: 1, pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC", router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", permit: false },
   ],
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
+  // Independent audits by the IMD Swarm (reports are public on explorer.imd.fun).
+  audits: {
+    launchpad: {
+      url: "https://explorer.imd.fun/jobs/a3e708e2-fb57-43ea-a163-d93b916694a2",
+      title: "PepesFamily launchpad",
+      result: "7 findings: 1 medium, 3 low, 3 info",
+      note: "Medium: a third-party swap with a tight price limit that only partly fills pays 4% of the requested amount. Our routers always fill fully and are not affected.",
+    },
+    tokens: {
+      "0xe2c46c7068566740a33a4c93f5445b07bcfe5644": {
+        url: "https://explorer.imd.fun/jobs/46a0c47b-d3ad-4c50-973e-369203a488ce",
+        title: "Pepes token",
+        result: "Scanner warnings confirmed false positives",
+        note: "\"Possible honeypot\", \"owner can change balance\" and \"suspicious function\" were all confirmed false positives. Its high finding (rewards captured with flash-borrowed tokens) is fixed in v3; for v1 tokens like Pepes, waiting holder fees are paid out promptly so nothing is left to capture.",
+      },
+    },
+  },
   quoter: "0x8dc178efb8111bb0973dd9d722ebeff267c98f94", // Uniswap V4Quoter on Robinhood Chain
   stateView: "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b", // Uniswap v4 StateView (pool prices)
   // USD prices come from on-chain Uniswap v4 pools, no off-chain price API.
@@ -802,7 +819,17 @@ async function renderHome() {
       <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
     </div>
     ${sec(2, "Tokens", `<div class="seg" id="filter"><button data-f="all">All</button><button data-f="eth">ETH</button><button data-f="imd">IMD</button></div>`)}
-    <div class="grid" id="list"><div class="card muted">Loading…</div></div>`;
+    <div class="grid" id="list"><div class="card muted">Loading…</div></div>
+    ${sec(3, "Audits")}
+    <div class="grid audits">
+      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens)].map((a) => `
+        <a class="card" href="${a.url}" target="_blank" rel="noopener noreferrer">
+          <span class="h">Audited by IMD Swarm ↗</span>
+          <div style="font-weight:600">${esc(a.title)}</div>
+          <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
+          <div class="stat">${esc(a.note)}</div>
+        </a>`).join("")}
+    </div>`;
   app.querySelectorAll("#filter button").forEach((b) => {
     b.classList.toggle("on", b.dataset.f === homeFilter);
     b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
@@ -1126,6 +1153,7 @@ async function renderToken(addr) {
               <div class="row ext" style="margin-top:8px">
                 <a class="btn" href="https://gmgn.ai/robinhood/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>
                 <a class="btn" href="https://dexscreener.com/robinhood/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
+                <a class="btn" href="${(CONFIG.audits.tokens[addr.toLowerCase()] || CONFIG.audits.launchpad).url}" target="_blank" rel="noopener noreferrer" title="${esc((CONFIG.audits.tokens[addr.toLowerCase()] || CONFIG.audits.launchpad).result)}">Audit ↗</a>
               </div>
             </div>
           </div>
