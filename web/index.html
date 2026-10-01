@@ -64,8 +64,16 @@ button.icon { border: 0; background: none; color: var(--text); font-size: 15px; 
   .logo .mk { border-right: 0; }
   nav.top a { padding: 5px 6px; font-size: 11px; }
   #connect { padding: 7px 10px; }
+  #connect.addr { text-transform: none; letter-spacing: 0; }
   h1 { font-size: 24px; }
   .stats:not(.q) { grid-template-columns: 1fr; }
+}
+@media (max-width: 360px) {
+  header .wrap { gap: 4px; }
+  nav.top { gap: 0; }
+  nav.top a { padding: 4px 5px; font-size: 10px; }
+  button.icon { padding: 4px; }
+  #connect { padding: 6px 7px; font-size: 11px; }
 }
 
 /* controls */
@@ -143,6 +151,10 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .h { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
 
 /* bottom status bar */
+.modal { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .6); display: grid; place-items: center; }
+.modal .card { width: min(340px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 8px; }
+.wopt { display: flex; align-items: center; gap: 10px; text-align: left; text-transform: none; letter-spacing: 0; font-size: 13px; }
+.wopt img { width: 22px; height: 22px; }
 .status { position: fixed; left: 0; right: 0; bottom: 0; height: 40px; z-index: 6; background: var(--bg); border-top: 1px solid var(--line);
   display: flex; align-items: center; font-size: 12px; color: var(--muted); overflow-x: auto; white-space: nowrap; }
 .status > span { padding: 0 16px; border-right: 1px solid var(--line); height: 100%; display: flex; align-items: center; gap: 6px; }
@@ -455,23 +467,84 @@ const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
 const withSlippage = (x, bps) => (x * (10000n - BigInt(bps))) / 10000n;
 
 // ---------------------------------------------------------------- Wallet
+// Wallet discovery via EIP-6963, so MetaMask, Phantom, Rabby, OKX, ... can all be installed side by side and the
+// visitor picks one. Falls back to window.ethereum for wallets that don't announce themselves.
+const WALLETS = [];
+window.addEventListener("eip6963:announceProvider", (e) => {
+  const { info, provider } = e.detail || {};
+  if (info?.uuid && provider && !WALLETS.some((w) => w.info.uuid === info.uuid)) WALLETS.push({ info, provider });
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+let WALLET = null, walletName = "Your wallet", listening = null;
+
+function pickWallet() {
+  if (WALLETS.length === 0) return Promise.resolve(window.ethereum ? { provider: window.ethereum, info: { name: "Your wallet" } } : null);
+  if (WALLETS.length === 1) return Promise.resolve(WALLETS[0]);
+  return new Promise((resolve) => {
+    const m = document.createElement("div");
+    m.className = "modal";
+    m.innerHTML = `<div class="card"><span class="h">Connect a wallet</span>
+      ${WALLETS.map((w, i) => `<button class="wopt" data-i="${i}">${/^data:image\//.test(w.info.icon || "") ? `<img src="${esc(w.info.icon)}" alt="" />` : ""}<span>${esc(w.info.name)}</span></button>`).join("")}
+      <button class="wopt" data-cancel="1">Cancel</button></div>`;
+    m.onclick = (ev) => {
+      const b = ev.target.closest("button");
+      if (!b && ev.target !== m) return; // click inside the card, not on a button
+      m.remove();
+      resolve(b && b.dataset.i != null ? WALLETS[Number(b.dataset.i)] : null);
+    };
+    document.body.appendChild(m);
+  });
+}
+
+function listen(eth) {
+  if (listening === eth) return;
+  listening = eth;
+  eth.on?.("accountsChanged", (accs) => {
+    signer = null; account = null; $("#connect").textContent = "Connect"; $("#connect").classList.remove("addr");
+    if (accs?.length) connect().catch(() => {});
+  });
+  // Switching network inside the wallet: drop the session if it leaves Robinhood Chain (no page reload).
+  eth.on?.("chainChanged", (id) => {
+    if (Number(id) !== CONFIG.chainId) { signer = null; account = null; $("#connect").textContent = "Connect"; $("#connect").classList.remove("addr"); }
+  });
+}
+
 async function connect() {
-  if (!window.ethereum) return toast("No wallet found. Install a browser wallet such as MetaMask.");
-  const hex = "0x" + CONFIG.chainId.toString(16);
-  try {
-    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
-  } catch (e) {
-    if (e.code === 4902) {
-      await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
-        chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.walletRpc],
-        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [CONFIG.explorer],
-      }] });
-    } else throw e;
+  const picked = WALLET ? { provider: WALLET, info: { name: walletName } } : await pickWallet();
+  if (!picked) {
+    if (!WALLETS.length && !window.ethereum) toast("No wallet found. Install a browser wallet such as MetaMask, Rabby or Phantom.");
+    return;
   }
-  const provider = new ethers.BrowserProvider(window.ethereum);
+  const eth = picked.provider;
+  walletName = picked.info?.name || "Your wallet";
+  // Ask for the account first: some wallets (Phantom) reject every other request until the site is authorized.
+  await eth.request({ method: "eth_requestAccounts" });
+  const hex = "0x" + CONFIG.chainId.toString(16);
+  if ((await eth.request({ method: "eth_chainId" })) !== hex) {
+    try {
+      await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+    } catch (e) {
+      const code = e?.code ?? e?.data?.originalError?.code;
+      if (code === 4001) throw e; // user said no
+      try {
+        await eth.request({ method: "wallet_addEthereumChain", params: [{
+          chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.walletRpc],
+          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [CONFIG.explorer],
+        }] });
+      } catch (e2) {
+        if ((e2?.code ?? 0) === 4001) throw e2;
+        throw new Error(`${walletName} couldn't switch to Robinhood Chain. Select Robinhood Chain in ${walletName} (chain ID ${CONFIG.chainId}) and try again.`);
+      }
+    }
+  }
+  WALLET = eth;
+  listen(eth);
+  const provider = new ethers.BrowserProvider(eth);
   signer = await provider.getSigner();
   account = await signer.getAddress();
   $("#connect").textContent = short(account);
+  $("#connect").classList.add("addr");
   showAdminLink().catch(() => {});
   route();
 }
@@ -481,11 +554,7 @@ async function requireWallet() {
   const net = await signer.provider.getNetwork();
   if (Number(net.chainId) !== CONFIG.chainId) await connect();
 }
-$("#connect").onclick = () => connect().catch((e) => toast(errMsg(e)));
-if (window.ethereum) {
-  window.ethereum.on?.("accountsChanged", () => { signer = null; account = null; $("#connect").textContent = "Connect"; connect().catch(() => {}); });
-  window.ethereum.on?.("chainChanged", () => location.reload());
-}
+$("#connect").onclick = () => connect().catch((e) => toast(errMsg(e), 7000));
 
 async function ensureImdAllowance(amount, spender) {
   const imd = new ethers.Contract(CONFIG.imd, ERC20_ABI, signer);
