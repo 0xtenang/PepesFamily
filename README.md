@@ -14,6 +14,8 @@ Owner and fee recipient for every version: `0x3c8A4d94B3219F6633F2cC94094f4765b3
 | PepesFamilyRouter v3 | [`0x8A9b6A990d13f25F6393aCacfB013F980c763a27`](https://robinhoodchain.blockscout.com/address/0x8A9b6A990d13f25F6393aCacfB013F980c763a27) |
 | PepesFamilyEthRouter v3 | [`0x891B710b36D0bDb1D6B53CB979696EbE43c2d129`](https://robinhoodchain.blockscout.com/address/0x891B710b36D0bDb1D6B53CB979696EbE43c2d129) |
 
+v3 was deployed at block 77210723 and its source is verified on Sourcify.
+
 **v2: still live.** Its tokens keep trading. The v2 token source is kept in `src/v2/PadTokenV2.sol`, and the rest of v2 is at commit `68ba9e3`.
 
 | Contract | Address |
