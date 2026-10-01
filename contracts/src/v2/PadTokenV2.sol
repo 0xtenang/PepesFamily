@@ -1,23 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {SafeTransfer} from "./lib/SafeTransfer.sol";
-import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
-import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
+import {SafeTransfer} from "../lib/SafeTransfer.sol";
 
 interface IPadFlush {
     function flush(address token) external;
 }
 
-/// @title PadToken
+/// @title PadTokenV2 (deployed by PepesFamily v2 0x072Fb5A1…E8CC; kept so v2 tokens can be source-verified)
 /// @notice Fixed-supply ERC20 launched by PepesFamily. Holders earn a pro-rata share of the 3% holder fee
 ///         charged on every Uniswap v4 swap of this token, paid in its quote asset (ETH or IMD).
 /// @dev Dividends use the "magnified dividend per share" pattern: accrual is O(1) and automatic for every
 ///      holder on each distribution; holders withdraw with `claim()`. The pad, the router, the v4
 ///      PoolManager (which holds the pool's tokens), this contract and burn addresses are excluded.
-contract PadToken {
+contract PadTokenV2 {
     using SafeTransfer for address;
-    using TransientStateLibrary for IPoolManager;
 
     error InsufficientBalance();
     error InsufficientAllowance();
@@ -200,10 +197,6 @@ contract PadToken {
     /// @dev Called by the pad after it forwards holder fees; anyone may call it (e.g. after a donation).
     ///      If nobody holds tokens yet, the funds wait here for the next distribution.
     function distribute() public returns (uint256 amount) {
-        // While the PoolManager is unlocked its tokens can be flash-borrowed and would count as held, so a
-        // distribution then could be captured without owning anything. Only the pad (from its own unlock or one of
-        // its routers') may distribute mid-unlock; otherwise funds wait for a distribution outside an unlock.
-        if (msg.sender != pad && IPoolManager(poolManager).isUnlocked()) return 0;
         uint256 bal = quote.balanceOf(address(this));
         uint256 eligible = eligibleSupply;
         // Never revert: trades and claims call this, so an odd quote balance must not block them.

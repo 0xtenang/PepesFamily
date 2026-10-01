@@ -67,6 +67,6 @@ contract Deploy is Script {
         vm.serializeAddress(json, "owner", pad.owner());
         vm.serializeAddress(json, "feeRecipient", pad.feeRecipient());
         string memory out = vm.serializeUint(json, "block", l2Block);
-        vm.writeJson(out, "./deployments/robinhood-v2.json");
+        vm.writeJson(out, "./deployments/robinhood-v3.json");
     }
 }

@@ -17,6 +17,7 @@ import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../src/PepesFamilyEthRouter.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
+import {FlashHolder} from "./FlashHolder.sol";
 
 contract MockIMD {
     string public name = "Identity.md";
@@ -630,5 +631,60 @@ contract PepesFamilyTest is Test {
         (v, r, s) = _permitSig(pk, t, address(router), bal, block.timestamp - 1);
         vm.expectRevert(PadToken.PermitExpired.selector);
         t.permit(dan, address(router), bal, block.timestamp - 1, v, r, s);
+    }
+
+    // ------------------------------------------- audit: flash-held rewards
+
+    /// Fees pending from a third-party-router trade must not be claimable by a contract that only borrows
+    /// the pool's tokens inside its own unlock.
+    function test_audit_flashHolderCannotClaimPendingFees() public {
+        PadToken t = _launchImdWithOrder(true);
+        _buy(bob, t, 10e18);
+        _buy(bob, t, 10e18);
+        PoolKey memory key = pad.poolKey(address(t));
+        (,,,, bool quoteIs0) = pad.launches(address(t));
+        vm.prank(carol);
+        extRouter.swap(key, SwapParams(quoteIs0, -100e18, quoteIs0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1), settings, "");
+        assertEq(pad.pendingHolderFees(address(t)), 3e18);
+
+        FlashHolder attacker = new FlashHolder(pm, t);
+        attacker.run(0);
+        assertEq(imd.balanceOf(address(attacker)), 0, "flash holder captured holder rewards");
+
+        // the fees still reach the real holders
+        pad.flush(address(t));
+        assertApproxEqAbs(t.withdrawableDividendOf(bob) + t.withdrawableDividendOf(carol), 3e18 + 0.6e18, 10);
+    }
+
+    /// Quote waiting in the token contract (e.g. the first buy's fee) must not be distributable to a flash holder.
+    function test_audit_flashHolderCannotTriggerDistribution() public {
+        PadToken t = _launchImdWithOrder(true);
+        _buy(bob, t, 10e18); // 0.3 IMD waits in the token (nobody held tokens at distribution time)
+        FlashHolder attacker = new FlashHolder(pm, t);
+        attacker.run(1);
+        vm.prank(address(attacker));
+        t.claim();
+        assertEq(imd.balanceOf(address(attacker)), 0, "flash holder captured waiting rewards");
+    }
+
+    /// A trader buying inside its own unlock must not get its own 3% holder fee back by flash-holding the pool.
+    function test_audit_traderCannotRecoverOwnFee() public {
+        PadToken t = _launchImdWithOrder(true);
+        _buy(bob, t, 10e18);
+        _buy(bob, t, 10e18);
+        uint256 bobBefore = t.withdrawableDividendOf(bob);
+        FlashHolder attacker = new FlashHolder(pm, t);
+        imd.mint(address(attacker), 100e18);
+        (,,,, bool quoteIs0) = pad.launches(address(t));
+        attacker.runBuy(pad.poolKey(address(t)), quoteIs0, 100e18);
+        assertEq(imd.balanceOf(address(attacker)), 0, "trader recovered its own holder fee");
+        // The fee is paid out later, outside any unlock, strictly by real balances: the trader now really holds
+        // what it bought and shares like any holder (the documented third-party-router behaviour), but the
+        // borrowed pool tokens no longer count.
+        pad.flush(address(t));
+        uint256 bobGain = t.withdrawableDividendOf(bob) - bobBefore;
+        uint256 traderGain = t.withdrawableDividendOf(address(attacker));
+        assertApproxEqAbs(bobGain + traderGain, 3e18, 10);
+        assertApproxEqRel(bobGain * t.balanceOf(address(attacker)), traderGain * t.balanceOf(bob), 1e9);
     }
 }

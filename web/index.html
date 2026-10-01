@@ -123,8 +123,9 @@ const CONFIG = {
   explorer: "https://robinhoodchain.blockscout.com",
   blockscoutApi: "https://robinhoodchain.blockscout.com/api/v2", // trade history
   // Launchpads, newest first. New tokens launch on the first one that is live on-chain; tokens from every
-  // version stay listed and tradable. v2 tokens: owner() = 0x0 (renounced), standard approvals + permit.
+  // version stay listed and tradable. v2+: owner() = 0x0 (renounced), standard approvals + permit; v3 also blocks flash-held reward capture.
   pads: [
+    { version: 3, pad: "0xC5a1f48C03635b83D79667463785bC2c6BcE28cC", router: "0x8A9b6A990d13f25F6393aCacfB013F980c763a27", ethRouter: "0x891B710b36D0bDb1D6B53CB979696EbE43c2d129", permit: true },
     { version: 2, pad: "0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC", router: "0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b", ethRouter: "0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF", permit: true },
     { version: 1, pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC", router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", permit: false },
   ],
@@ -146,6 +147,7 @@ const PAD_ABI = [
   "function feeRecipient() view returns (address)",
   "function pendingProtocolFees(address quote) view returns (uint256)",
   "function collectProtocolFees(address quote)",
+  "function flush(address token)",
   "event ProtocolFeesCollected(address indexed quote, address indexed to, uint256 amount)",
   `function poolKey(address token) view returns (${KEY_T})`,
   `function getTokens(uint256 offset, uint256 limit) view returns (${INFO_T}[])`,
@@ -514,10 +516,15 @@ async function renderAdmin() {
   let rows;
   try {
     rows = await Promise.all(livePads().map(async (P) => {
-      const [owner, feeTo, ...pending] = await Promise.all([
-        P.c.owner(), P.c.feeRecipient(), ...assets.map((q) => P.c.pendingProtocolFees(q)),
+      const [owner, feeTo, n, ...pending] = await Promise.all([
+        P.c.owner(), P.c.feeRecipient(), P.c.tokenCount(), ...assets.map((q) => P.c.pendingProtocolFees(q)),
       ]);
-      return { P, owner, feeTo, pending };
+      // holder fees waiting to be paid out (from trades through other routers)
+      const waiting = [];
+      for (let off = 0; off < Number(n); off += 100) {
+        for (const t of await P.c.getTokens(off, 100)) if (t.pendingHolderFees > 0n) waiting.push(t);
+      }
+      return { P, owner, feeTo, pending, waiting };
     }));
   } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
   const toUsd = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
@@ -541,7 +548,17 @@ async function renderAdmin() {
           <tr><td class="muted">Owner</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.owner}" target="_blank" rel="noopener">${r.owner}</a></td></tr>
           <tr><td class="muted">Contract</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.P.pad}" target="_blank" rel="noopener">${r.P.pad}</a></td></tr>
         </table>
-      </div>`).join("")}
+      </div>
+      ${r.P.version < 3 ? `
+      <div class="card" style="margin-top:10px">
+        <b>Holder fees waiting to be paid out</b>
+        <p class="stat" style="margin:4px 0 8px">Fees from trades through other routers (GMGN, aggregators) wait in the launchpad until paid out. On v${r.P.version}, waiting fees can be partly captured by a flash-borrow trick, so pay them out regularly: it sends them to holders and costs only gas.</p>
+        ${r.waiting.length ? r.waiting.map((t) => `
+          <div class="row" style="padding:6px 0;border-top:1px solid var(--line)">
+            <span>$${esc(t.symbol)}</span><span class="stat">${fmt(t.pendingHolderFees, 6)} ${qsym(t.quote)} ≈ ${usd(t.pendingHolderFees, t.quote)}</span>
+            <span class="spacer"></span><button data-r="${ri}" data-flush="${t.token}">Pay out</button>
+          </div>`).join("") : `<div class="stat">Nothing waiting.</div>`}
+      </div>` : ""}`).join("")}
     <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. The signer only pays gas.</p>`;
   app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
@@ -554,6 +571,21 @@ async function renderAdmin() {
       toast("Collecting…", 15000);
       await tx.wait();
       toast(`${qsym(b.dataset.q)} fees sent to ${short(r.feeTo)}`);
+      renderAdmin();
+    } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
+  });
+  // flush() from a wallet transaction runs outside any PoolManager unlock, which is the safe way to distribute.
+  app.querySelectorAll("button[data-flush]").forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    const r = rows[Number(b.dataset.r)];
+    try {
+      await requireWallet();
+      const pad = new ethers.Contract(r.P.pad, PAD_ABI, signer);
+      toast("Confirm in your wallet…", 8000);
+      const tx = await pad.flush(b.dataset.flush);
+      toast("Paying out…", 15000);
+      await tx.wait();
+      toast("Holder fees paid out");
       renderAdmin();
     } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
   });

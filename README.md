@@ -4,9 +4,17 @@ A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663), bu
 
 ## Live on Robinhood Chain (4663)
 
-Owner and fee recipient for both versions: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
+Owner and fee recipient for every version: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
 
-**v2: current. All new launches go here.** One deployment creates all three contracts.
+**v3: current. All new launches go here.** Same as v2, plus a fix for an audit finding: rewards are never distributed while the Uniswap PoolManager is unlocked by an outside caller, so pool tokens borrowed through v4 flash accounting can't be counted as held (see `AUDIT.md`).
+
+| Contract | Address |
+| --- | --- |
+| PepesFamily v3 (launchpad + v4 hook) | [`0xC5a1f48C03635b83D79667463785bC2c6BcE28cC`](https://robinhoodchain.blockscout.com/address/0xC5a1f48C03635b83D79667463785bC2c6BcE28cC) |
+| PepesFamilyRouter v3 | [`0x8A9b6A990d13f25F6393aCacfB013F980c763a27`](https://robinhoodchain.blockscout.com/address/0x8A9b6A990d13f25F6393aCacfB013F980c763a27) |
+| PepesFamilyEthRouter v3 | [`0x891B710b36D0bDb1D6B53CB979696EbE43c2d129`](https://robinhoodchain.blockscout.com/address/0x891B710b36D0bDb1D6B53CB979696EbE43c2d129) |
+
+**v2: still live.** Its tokens keep trading. The v2 token source is kept in `src/v2/PadTokenV2.sol`, and the rest of v2 is at commit `68ba9e3`.
 
 | Contract | Address |
 | --- | --- |
@@ -66,7 +74,7 @@ forge build
 
 ```bash
 cd contracts
-forge test                                           # 31 unit + attack tests against a real v4 PoolManager
+forge test                                           # 34 unit + attack tests against a real v4 PoolManager
 FORK_RPC=https://robinhood.drpc.org forge test       # + 7 fork tests against live mainnet state
 ```
 
@@ -131,6 +139,8 @@ The owner **can't** change the fee percentages, touch pool liquidity or holder r
   - ethers.js is pinned with Subresource Integrity (SRI)
   - a Content-Security-Policy restricts where code can load from
   - IMD approvals are for the exact amount, never unlimited
+
+**Audit finding (fixed in v3, affects v1 and v2 tokens):** inside a Uniswap v4 unlock anyone can flash-borrow a pool's tokens and be counted as a holder if a reward distribution runs at that moment. They could capture part of the holder fees still waiting to be paid out, or, as a trader, part of their own 3%. Token balances, selling and already-earned rewards are not affected. v3 never distributes while an outside caller has the PoolManager unlocked. For v1/v2 tokens, pay out waiting holder fees regularly from the Admin page (a normal transaction, outside any unlock); then there is nothing to capture.
 
 **Known risks, by design:**
 - **Dividend sniping.** Someone can buy just before a big trade to catch part of its 3% holder fee, then sell. They pay 4% on each side, so it only pays off against trades much larger than their own position. Every reflection-style token has this trade-off.

@@ -15,18 +15,33 @@ PepesFamily is a fixed-supply token launchpad on **Robinhood Chain** (chain ID 4
 
 ## 2. Scope
 
-### In scope: v2 (live, receives all new launches)
+### In scope: v3 (receives all new launches)
 
-| File | Lines | Deployed at |
-| --- | --- | --- |
-| `contracts/src/PepesFamily.sol`: launcher, v4 hook, fee vault, LP position owner | 582 | `0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC` |
-| `contracts/src/PadToken.sol`: launched ERC-20 with pro-rata holder rewards and EIP-2612 permit | 242 | one instance per launch |
-| `contracts/src/PepesFamilyRouter.sol`: buy, sell (with permit), launch with initial buy; includes `PermitHelper` | 187 | `0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b` |
-| `contracts/src/PepesFamilyEthRouter.sol`: trades IMD-paired tokens with ETH via the v4 IMD/ETH pool | 181 | `0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF` |
-| `contracts/src/lib/SafeTransfer.sol`: ETH/ERC-20 transfer helpers | 33 | (library) |
-| `contracts/script/DeployLib.sol` and `Deploy.s.sol`: start-tick math, hook-address salt mining, deployment parameters | 116 | |
+| File | Deployed at |
+| --- | --- |
+| `contracts/src/PepesFamily.sol`: launcher, v4 hook, fee vault, LP position owner | `0xC5a1f48C03635b83D79667463785bC2c6BcE28cC` |
+| `contracts/src/PadToken.sol`: launched ERC-20 with pro-rata holder rewards and EIP-2612 permit | one instance per launch |
+| `contracts/src/PepesFamilyRouter.sol`: buy, sell (with permit), launch with initial buy; includes `PermitHelper` | `0x8A9b6A990d13f25F6393aCacfB013F980c763a27` |
+| `contracts/src/PepesFamilyEthRouter.sol`: trades IMD-paired tokens with ETH via the v4 IMD/ETH pool | `0x891B710b36D0bDb1D6B53CB979696EbE43c2d129` |
+| `contracts/src/lib/SafeTransfer.sol`: ETH/ERC-20 transfer helpers | (library) |
+| `contracts/script/DeployLib.sol` and `Deploy.s.sol`: start-tick math, hook-address salt mining, deployment parameters | |
 
-Both routers are created by the `PepesFamily` constructor. The deployment is a single CREATE2 transaction through `0x4e59b44847b379578588920ca78fbf26c0b4956c`, deployed at block 76968615.
+Both routers are created by the `PepesFamily` constructor. The deployment is a single CREATE2 transaction through `0x4e59b44847b379578588920ca78fbf26c0b4956c`.
+
+### Resolved finding: rewards captured by flash-borrowed pool tokens (fixed in v3)
+
+**The issue.** Inside a PoolManager unlock, anyone can `take` the pool's whole token balance (v4 flash accounting) and return it before the unlock ends. While borrowed, those tokens count toward `eligibleSupply`. A distribution triggered in that window (`PadToken.distribute()`, `PepesFamily.flush()` inline, or `claim()` → `flush()`) pays the borrower without them owning anything. This captures:
+- holder fees still pending from third-party-router trades
+- quote waiting in the token contract
+- for a trader swapping inside its own unlock, most of its own 3%
+
+**The v3 fix:**
+- `PepesFamily.flush()` distributes mid-unlock only when the caller is one of its own routers, which control their whole unlock. Any other mid-unlock call leaves the fees pending.
+- `PadToken.distribute()` is a no-op while the PoolManager is unlocked, unless the caller is the launchpad.
+
+Reproduction and regression tests: `test/FlashHolder.sol` and the `test_audit_*` tests in `test/PepesFamily.t.sol`.
+
+**v1 and v2 tokens remain affected** (immutable). Mitigation: pay out pending holder fees promptly with `flush()` from a normal transaction (the website's Admin page has a button for this). The trader self-rebate variant cannot be mitigated for those versions. The v2 token source is kept in `contracts/src/v2/PadTokenV2.sol`, and the rest of v2 is at commit `68ba9e3`. v2 addresses: PepesFamily `0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC`, routers `0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b` and `0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF`.
 
 ### Also live: v1 (holds real value, review requested where it differs)
 
@@ -200,7 +215,7 @@ The position is owned by the launchpad (salt 0). There is no remove path.
 
 ```bash
 cd contracts
-forge test                                       # 31 unit + attack tests against a real v4 PoolManager
+forge test                                       # 34 unit + attack tests against a real v4 PoolManager
 FORK_RPC=https://robinhood.drpc.org forge test   # + 7 fork tests on live Robinhood Chain state
 ```
 

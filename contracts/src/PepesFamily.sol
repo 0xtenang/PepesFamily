@@ -364,11 +364,17 @@ contract PepesFamily is IHooks, IUnlockCallback {
     // ------------------------------------------------------------ Fee flows
 
     /// @notice Sends pending holder fees for `token` to the token contract, which spreads them over holders.
-    ///         Works inside another contract's unlock (PepesFamilyRouter does this on every trade) or standalone.
+    ///         Standalone (opens its own unlock), or inside one of our routers' unlocks (they do it on every trade).
     function flush(address token) external {
         if (pendingHolderFees[token] == 0) return;
-        if (poolManager.isUnlocked()) _flush(token);
-        else poolManager.unlock(abi.encode(ACTION_FLUSH, abi.encode(token)));
+        if (poolManager.isUnlocked()) {
+            // Mid-unlock, anyone can flash-borrow the pool's tokens (v4 flash accounting) and would be counted as a
+            // holder at distribution time. Only our routers, which control their whole unlock, may distribute here;
+            // anyone else's call leaves the fees pending for a distribution outside an unlock.
+            if (msg.sender == router || msg.sender == ethRouter) _flush(token);
+        } else {
+            poolManager.unlock(abi.encode(ACTION_FLUSH, abi.encode(token)));
+        }
     }
 
     /// @notice Sends pending protocol fees for `quote` to `feeRecipient`. Callable by anyone.
