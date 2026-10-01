@@ -405,11 +405,16 @@ async function renderHome() {
         <button data-f="all">All</button><button data-f="eth">ETH</button><button data-f="imd">IMD</button>
       </div>
     </div>
+    <div class="stats" id="totals" style="margin:0 0 18px">
+      <div class="card"><div class="k">Earned by holders</div><div class="v" id="tot-holders">…</div><div class="stat" id="tot-holders-sub">3% of every trade</div></div>
+      <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
+    </div>
     <div class="grid" id="list"><div class="muted">Loading…</div></div>`;
   app.querySelectorAll("#filter button").forEach((b) => {
     b.classList.toggle("on", b.dataset.f === homeFilter);
     b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
   });
+  loadTotals().catch((e) => console.warn("totals", e));
   try {
     // newest 60 tokens from every live launchpad version, merged newest first
     const lists = await Promise.all(livePads().map(async (P) => {
@@ -433,6 +438,59 @@ async function renderHome() {
   } catch (e) {
     $("#list").innerHTML = `<div class="card">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
   }
+}
+
+// ---------------------------------------------------------------- Platform totals
+/// All-time totals across every launchpad version, summed per quote asset (ETH / IMD) and shown in USD.
+///   Holders:  for each token, dividends already distributed + holder fees still waiting to be flushed.
+///   Protocol: fees already collected (ProtocolFeesCollected events) + fees pending in each launchpad.
+async function loadTotals() {
+  const holders = { [ZERO]: 0n, [CONFIG.imd]: 0n };
+  const protocol = { [ZERO]: 0n, [CONFIG.imd]: 0n };
+  let protocolExact = true;
+
+  await Promise.all(livePads().map(async (P) => {
+    const n = Number(await P.c.tokenCount());
+    for (let off = 0; off < n; off += 100) {
+      for (const t of await P.c.getTokens(off, 100)) {
+        holders[t.quote] = (holders[t.quote] ?? 0n) + t.totalDividendsDistributed + t.pendingHolderFees;
+      }
+    }
+    const [pe, pi] = await Promise.all([P.c.pendingProtocolFees(ZERO), P.c.pendingProtocolFees(CONFIG.imd)]);
+    protocol[ZERO] += pe; protocol[CONFIG.imd] += pi;
+    try {
+      for (const ev of await fetchPadLogs(P, P.c.interface.getEvent("ProtocolFeesCollected").topicHash)) {
+        const { quote, amount } = P.c.interface.parseLog(ev).args;
+        protocol[quote] = (protocol[quote] ?? 0n) + amount;
+      }
+    } catch { protocolExact = false; }
+  }));
+
+  const toUsd = (m) => Object.entries(m).reduce((s, [q, wei]) => s + Number(ethers.formatUnits(wei, 18)) * quoteUsd(q), 0);
+  const parts = (m) => Object.entries(m).filter(([, w]) => w > 0n).map(([q, w]) => `${fmt(w)} ${qsym(q)}`).join(" + ") || "nothing yet";
+  if (!$("#tot-holders")) return; // navigated away
+  $("#tot-holders").textContent = fmtUsd(toUsd(holders));
+  $("#tot-holders-sub").textContent = `3% of every trade · ${parts(holders)}`;
+  // If collection history is unavailable, the fixed 1% / 3% split gives the same total from holder earnings.
+  const proto = protocolExact ? protocol : Object.fromEntries(Object.entries(holders).map(([q, w]) => [q, w / 3n]));
+  $("#tot-protocol").textContent = (protocolExact ? "" : "≈ ") + fmtUsd(toUsd(proto));
+  $("#tot-protocol-sub").textContent = `1% of every trade · ${parts(proto)}`;
+}
+
+/// All logs a launchpad emitted with `topic0`, via Blockscout's API (paginated).
+async function fetchPadLogs(P, topic0) {
+  const url = `${CONFIG.blockscoutApi}/addresses/${P.pad}/logs?topic=${topic0}`;
+  const items = [];
+  let next = null;
+  for (let page = 0; page < 20; page++) {
+    const r = await fetch(url + (next ? "&" + new URLSearchParams(next).toString() : ""), { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error("blockscout " + r.status);
+    const j = await r.json();
+    items.push(...j.items.filter((i) => i.topics[0] === topic0).map((i) => ({ topics: i.topics.filter(Boolean), data: i.data })));
+    if (!j.next_page_params) break;
+    next = j.next_page_params;
+  }
+  return items;
 }
 
 // ---------------------------------------------------------------- Admin
