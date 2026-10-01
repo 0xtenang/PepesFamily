@@ -406,6 +406,7 @@ async function renderHome() {
       </div>
     </div>
     <div class="stats" id="totals" style="margin:0 0 18px">
+      <div class="card"><div class="k">Trading volume</div><div class="v" id="tot-volume">…</div><div class="stat" id="tot-volume-sub">all time</div></div>
       <div class="card"><div class="k">Earned by holders</div><div class="v" id="tot-holders">…</div><div class="stat" id="tot-holders-sub">3% of every trade</div></div>
       <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
     </div>
@@ -475,6 +476,10 @@ async function loadTotals() {
   const proto = protocolExact ? protocol : Object.fromEntries(Object.entries(holders).map(([q, w]) => [q, w / 3n]));
   $("#tot-protocol").textContent = (protocolExact ? "" : "≈ ") + fmtUsd(toUsd(proto));
   $("#tot-protocol-sub").textContent = `1% of every trade · ${parts(proto)}`;
+  // The protocol fee is exactly 1% of each trade's quote amount, so volume = protocol fees × 100.
+  const volume = Object.fromEntries(Object.entries(proto).map(([q, w]) => [q, w * 100n]));
+  $("#tot-volume").textContent = (protocolExact ? "" : "≈ ") + fmtUsd(toUsd(volume));
+  $("#tot-volume-sub").textContent = `all time · ${parts(volume)}`;
 }
 
 /// All logs a launchpad emitted with `topic0`, via Blockscout's API (paginated).
