@@ -7,110 +7,166 @@
 <meta name="referrer" content="no-referrer" />
 <title>PepesFamily</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+  // theme before first paint: saved choice, else the system setting
+  try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
+</script>
 <style>
 :root {
-  --bg: #f6f7f5; --panel: #ffffff; --panel-2: #f0f2ee; --line: #e2e5df;
-  --text: #121512; --muted: #636b62; --accent: #1d9e3a; --accent-ink: #ffffff;
-  --down: #d23c3c; --imd: #6b4fd8; --radius: 14px;
+  --bg: #ffffff; --panel: #fafafa; --panel-2: #f1f1f1; --line: #dcdcdc; --strong: #000000;
+  --text: #000000; --muted: #666666; --dim: #9a9a9a; --inv: #ffffff;
+  --accent: #0a8f3c; --down: #d23c3c; --warn: #b8860b;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b0d0b; --panel: #141714; --panel-2: #1b1f1b; --line: #262b26;
-    --text: #eef2ec; --muted: #8d968b; --accent: #33d25a; --accent-ink: #06210d;
-    --down: #ff6464; --imd: #a590ff;
+    --bg: #000000; --panel: #070707; --panel-2: #111111; --line: #2a2a2a; --strong: #ffffff;
+    --text: #ffffff; --muted: #8c8c8c; --dim: #555555; --inv: #000000;
+    --accent: #3ddc84; --down: #ff5a4f; --warn: #f5c542;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0b0d0b; --panel: #141714; --panel-2: #1b1f1b; --line: #262b26;
-  --text: #eef2ec; --muted: #8d968b; --accent: #33d25a; --accent-ink: #06210d;
-  --down: #ff6464; --imd: #a590ff;
+  --bg: #000000; --panel: #070707; --panel-2: #111111; --line: #2a2a2a; --strong: #ffffff;
+  --text: #ffffff; --muted: #8c8c8c; --dim: #555555; --inv: #000000;
+  --accent: #3ddc84; --down: #ff5a4f; --warn: #f5c542;
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 Inter, system-ui, sans-serif; }
+* { box-sizing: border-box; border-radius: 0 !important; }
+html, body { background: var(--bg); }
+body { margin: 0; color: var(--text); font: 13px/1.6 "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; padding-bottom: 44px; }
 a { color: inherit; text-decoration: none; }
-.mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; }
+.mono { font-family: inherit; }
 .muted { color: var(--muted); }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
-header { border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5; }
-header .wrap { display: flex; align-items: center; gap: 12px; height: 64px; }
-.logo { font-weight: 700; font-size: 18px; display: flex; align-items: center; gap: 8px; }
-.logo i { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: inline-block; }
+
+/* header */
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); }
+header .wrap { display: flex; align-items: center; gap: 18px; height: 64px; }
+.logo { display: flex; border: 1.5px solid var(--strong); font-size: 13px; letter-spacing: .18em; height: 32px; }
+.logo .mk { display: grid; place-items: center; width: 32px; border-right: 1.5px solid var(--strong); font-weight: 600; letter-spacing: 0; }
+.logo .nm { display: grid; place-items: center; padding: 0 12px; background: var(--strong); color: var(--inv); font-weight: 500; }
+nav.top { display: flex; gap: 4px; }
+nav.top a { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 5px 9px; }
+nav.top a:hover { color: var(--muted); }
+nav.top a.on { background: var(--strong); color: var(--inv); }
 .spacer { flex: 1; }
+button.icon { border: 0; background: none; color: var(--text); font-size: 15px; padding: 6px; cursor: pointer; }
+@media (max-width: 600px) {
+  header .wrap { gap: 8px; }
+  .logo .nm { display: none; }
+  .logo .mk { border-right: 0; }
+  nav.top a { padding: 5px 6px; font-size: 11px; }
+  #connect { padding: 7px 10px; }
+  h1 { font-size: 24px; }
+  .stats:not(.q) { grid-template-columns: 1fr; }
+}
+
+/* controls */
 button, .btn {
-  font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--panel);
-  color: var(--text); padding: 9px 16px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  border: 1px solid var(--strong); background: var(--bg); color: var(--text); padding: 8px 14px; display: inline-block;
 }
-button.primary, .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-button:disabled { opacity: .5; cursor: not-allowed; }
+button:hover, .btn:hover { background: var(--panel-2); }
+button.primary, .btn.primary { background: var(--strong); color: var(--inv); }
+button.primary:hover, .btn.primary:hover { opacity: .85; }
+button:disabled { opacity: .35; cursor: not-allowed; }
 input, textarea {
-  font: inherit; width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--panel-2); color: var(--text);
+  font: inherit; width: 100%; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
 }
-textarea { min-height: 80px; resize: vertical; }
-label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
-main { padding: 28px 0 60px; }
-.hero { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-bottom: 24px; }
-.hero h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; }
-.hero p { margin: 4px 0 0; color: var(--muted); }
-.seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-.seg button { border: 0; background: transparent; padding: 6px 14px; color: var(--muted); }
-.seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
-.tcard { display: flex; gap: 12px; transition: border-color .15s; }
-.tcard:hover { border-color: var(--accent); }
-.avatar { width: 64px; height: 64px; border-radius: 12px; background: var(--panel-2); object-fit: cover; flex: none;
-  display: grid; place-items: center; font-weight: 700; color: var(--muted); overflow: hidden; }
+input:focus, textarea:focus { outline: none; border-color: var(--strong); }
+textarea { min-height: 90px; resize: vertical; }
+label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
+
+/* layout */
+main { padding: 30px 0 60px; }
+h1 { font-weight: 400; font-size: 30px; letter-spacing: -.01em; margin: 0; }
+h2 { font-weight: 500; font-size: 20px; margin: 0; }
+h3 { font-weight: 500; font-size: 14px; }
+.hero { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-bottom: 26px; }
+.hero p { margin: 8px 0 0; color: var(--muted); }
+.sec { display: flex; align-items: center; gap: 10px; margin: 26px 0 14px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+.sec .n { color: var(--muted); }
+.sec .t { font-weight: 600; }
+.sec .rule { flex: 1; height: 1px; background: var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; padding: 5px 12px; color: var(--muted); }
+.seg button.on { background: var(--strong); color: var(--inv); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.grid > .card { border-top: 0; border-left: 0; }
+.card { background: var(--bg); border: 1px solid var(--line); padding: 16px; }
+.tcard { display: flex; gap: 12px; transition: background .12s; }
+.tcard:hover { background: var(--panel-2); }
+.avatar { width: 60px; height: 60px; background: var(--panel-2); object-fit: cover; flex: none; border: 1px solid var(--line);
+  display: grid; place-items: center; font-weight: 600; color: var(--muted); overflow: hidden; }
 .avatar.lg { width: 88px; height: 88px; }
 .tcard .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
-.pill.eth { color: var(--accent); } .pill.imd { color: var(--imd); }
+.pill { font-size: 10px; letter-spacing: .08em; padding: 1px 6px; border: 1px solid currentColor; text-transform: uppercase; }
+.pill.eth { color: var(--text); } .pill.imd { color: var(--muted); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.stat { font-size: 13px; color: var(--muted); }
-.stat b { color: var(--text); font-weight: 600; }
+.stat { font-size: 12px; color: var(--muted); }
+.stat b { color: var(--text); font-weight: 500; }
 .two { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
 @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 16px; }
-.stats .card { padding: 12px 14px; }
-.stats .k { font-size: 12px; color: var(--muted); }
-.stats .v { font-weight: 600; font-size: 17px; }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
-.tabs button { border-radius: 10px; }
-.tabs button.on.buy { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.tabs button.on.sell { background: var(--down); color: #fff; border-color: transparent; }
-.quick { display: flex; gap: 6px; margin-top: 8px; }
-.quick button { padding: 4px 10px; font-size: 12px; }
-.preview { margin: 12px 0; font-size: 13px; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; margin-top: 16px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.stats .card { padding: 14px 16px; border-top: 0; border-left: 0; }
+.stats.q { grid-template-columns: repeat(2, 1fr); }
+.stats .k { font-size: 11px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.stats .v { font-weight: 500; font-size: 20px; margin-top: 2px; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-bottom: 14px; border: 1px solid var(--line); }
+.tabs button { border: 0; color: var(--muted); }
+.tabs button.on.buy { background: var(--accent); color: #000; }
+.tabs button.on.sell { background: var(--down); color: #fff; }
+.quick { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.quick button { padding: 3px 9px; font-size: 11px; border-color: var(--line); }
+.preview { margin: 12px 0; font-size: 12px; color: var(--muted); }
 .full { width: 100%; margin-top: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 500; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
 .b { color: var(--accent); } .s { color: var(--down); }
 .chart { width: 100%; height: 200px; display: block; }
-.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
-  padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: calc(100% - 32px); z-index: 20; display: none; }
+.toast { position: fixed; bottom: 56px; left: 50%; transform: translateX(-50%); background: var(--strong); color: var(--inv);
+  padding: 10px 16px; font-size: 12px; max-width: calc(100% - 32px); z-index: 20; display: none; }
 .empty { text-align: center; padding: 60px 16px; color: var(--muted); }
-.fees { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
-.desc { white-space: pre-wrap; word-break: break-word; }
-.links a { color: var(--accent); font-size: 13px; }
-.ext .btn { padding: 5px 12px; font-size: 13px; }
+.fees { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+.desc { white-space: pre-wrap; word-break: break-word; color: var(--muted); }
+.links a { text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
+.ext .btn { padding: 4px 10px; font-size: 11px; }
 .scroll-x { overflow-x: auto; }
+.h { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+
+/* bottom status bar */
+.status { position: fixed; left: 0; right: 0; bottom: 0; height: 40px; z-index: 6; background: var(--bg); border-top: 1px solid var(--line);
+  display: flex; align-items: center; font-size: 12px; color: var(--muted); overflow-x: auto; white-space: nowrap; }
+.status > span { padding: 0 16px; border-right: 1px solid var(--line); height: 100%; display: flex; align-items: center; gap: 6px; }
+.status > span:last-child { border-right: 0; border-left: 1px solid var(--line); margin-left: auto; }
+.status b { color: var(--text); font-weight: 500; }
+.status .dot { width: 7px; height: 7px; background: var(--accent); display: inline-block; }
 </style>
 </head>
 <body>
 <header>
   <div class="wrap">
-    <a class="logo" href="#/"><i></i>PepesFamily</a>
+    <a class="logo" href="#/" aria-label="PepesFamily home"><span class="mk">P</span><span class="nm">PEPESFAMILY</span></a>
+    <nav class="top">
+      <a href="#/" data-nav="/">Tokens</a>
+      <a href="#/create" data-nav="/create">Launch</a>
+      <a href="#/admin" data-nav="/admin" id="adminlink" style="display:none">Admin</a>
+    </nav>
     <span class="spacer"></span>
-    <a class="btn" href="#/admin" id="adminlink" style="display:none">Admin</a>
-    <a class="btn primary" href="#/create">Launch</a>
+    <button class="icon" id="theme" aria-label="Toggle light / dark">◐</button>
     <button id="connect">Connect</button>
   </div>
 </header>
 <main class="wrap" id="app"></main>
 <div class="toast" id="toast"></div>
+<footer class="status">
+  <span><b id="sb-vol">…</b> volume</span>
+  <span><b id="sb-hold">…</b> paid to holders</span>
+  <span>ETH <b id="sb-eth">…</b></span>
+  <span>IMD <b id="sb-imd">…</b></span>
+  <span><i class="dot"></i> Robinhood Chain</span>
+</footer>
 
 <script>
 // ---------------------------------------------------------------- Config
@@ -261,6 +317,8 @@ async function loadPrices() {
     const r1 = Number(a[0]) / 2 ** 96, r2 = Number(b[0]) / 2 ** 96;
     prices.ethUsd = r1 * r1 * 1e12; // USDG (6 dec) per ETH (18 dec)
     prices.imdEth = 1 / (r2 * r2);   // ETH per IMD
+    $("#sb-eth").textContent = fmtUsd(prices.ethUsd);
+    $("#sb-imd").textContent = fmtUsd(prices.imdEth * prices.ethUsd);
   } catch (e) { console.warn("price load failed", e); }
 }
 const quoteUsd = (q) => (q === ZERO ? prices.ethUsd : prices.imdEth * prices.ethUsd);
@@ -382,8 +440,21 @@ async function ensureImdAllowance(amount, spender) {
 
 // ---------------------------------------------------------------- Routing
 window.addEventListener("hashchange", route);
+/// Numbered section header: "01  TITLE ──────── [extra]".
+const sec = (n, title, extra = "") =>
+  `<div class="sec"><span class="n">${String(n).padStart(2, "0")}</span><span class="t">${esc(title)}</span><span class="rule"></span>${extra}</div>`;
+
+$("#theme").onclick = () => {
+  const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#000000";
+  const next = dark ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch {}
+};
+
 function route() {
   const h = location.hash.slice(1) || "/";
+  const navKey = h.startsWith("/t/") ? "/" : h;
+  document.querySelectorAll("nav.top a").forEach((a) => a.classList.toggle("on", a.dataset.nav === navKey));
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
@@ -403,18 +474,17 @@ async function renderHome() {
   app.innerHTML = `
     <div class="hero">
       <div><h1>Launch a token on Robinhood Chain</h1>
-      <p>1B fixed supply · locked liquidity from block one · pair with ETH or IMD · 3% of every trade paid to holders</p></div>
-      <span class="spacer"></span>
-      <div class="seg" id="filter">
-        <button data-f="all">All</button><button data-f="eth">ETH</button><button data-f="imd">IMD</button>
-      </div>
+      <p>1B fixed supply · liquidity locked forever · pair with ETH or IMD · 3% of every trade paid to holders</p>
+      <div class="row" style="margin-top:16px"><a class="btn primary" href="#/create">Launch a token</a><a class="btn" href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source ↗</a></div></div>
     </div>
-    <div class="stats" id="totals" style="margin:0 0 18px">
+    ${sec(1, "Platform")}
+    <div class="stats" id="totals" style="margin:0">
       <div class="card"><div class="k">Trading volume</div><div class="v" id="tot-volume">…</div><div class="stat" id="tot-volume-sub">all time</div></div>
       <div class="card"><div class="k">Earned by holders</div><div class="v" id="tot-holders">…</div><div class="stat" id="tot-holders-sub">3% of every trade</div></div>
       <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
     </div>
-    <div class="grid" id="list"><div class="muted">Loading…</div></div>`;
+    ${sec(2, "Tokens", `<div class="seg" id="filter"><button data-f="all">All</button><button data-f="eth">ETH</button><button data-f="imd">IMD</button></div>`)}
+    <div class="grid" id="list"><div class="card muted">Loading…</div></div>`;
   app.querySelectorAll("#filter button").forEach((b) => {
     b.classList.toggle("on", b.dataset.f === homeFilter);
     b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
@@ -473,16 +543,22 @@ async function loadTotals() {
 
   const toUsd = (m) => Object.entries(m).reduce((s, [q, wei]) => s + Number(ethers.formatUnits(wei, 18)) * quoteUsd(q), 0);
   const parts = (m) => Object.entries(m).filter(([, w]) => w > 0n).map(([q, w]) => `${fmt(w)} ${qsym(q)}`).join(" + ") || "nothing yet";
-  if (!$("#tot-holders")) return; // navigated away
-  $("#tot-holders").textContent = fmtUsd(toUsd(holders));
-  $("#tot-holders-sub").textContent = `3% of every trade · ${parts(holders)}`;
   // If collection history is unavailable, the fixed 1% / 3% split gives the same total from holder earnings.
   const proto = protocolExact ? protocol : Object.fromEntries(Object.entries(holders).map(([q, w]) => [q, w / 3n]));
-  $("#tot-protocol").textContent = (protocolExact ? "" : "≈ ") + fmtUsd(toUsd(proto));
-  $("#tot-protocol-sub").textContent = `1% of every trade · ${parts(proto)}`;
   // The protocol fee is exactly 1% of each trade's quote amount, so volume = protocol fees × 100.
   const volume = Object.fromEntries(Object.entries(proto).map(([q, w]) => [q, w * 100n]));
-  $("#tot-volume").textContent = (protocolExact ? "" : "≈ ") + fmtUsd(toUsd(volume));
+  const approx = protocolExact ? "" : "≈ ";
+
+  // bottom status bar (every page)
+  $("#sb-vol").textContent = approx + fmtUsd(toUsd(volume));
+  $("#sb-hold").textContent = fmtUsd(toUsd(holders));
+
+  if (!$("#tot-holders")) return; // not on the home page
+  $("#tot-holders").textContent = fmtUsd(toUsd(holders));
+  $("#tot-holders-sub").textContent = `3% of every trade · ${parts(holders)}`;
+  $("#tot-protocol").textContent = approx + fmtUsd(toUsd(proto));
+  $("#tot-protocol-sub").textContent = `1% of every trade · ${parts(proto)}`;
+  $("#tot-volume").textContent = approx + fmtUsd(toUsd(volume));
   $("#tot-volume-sub").textContent = `all time · ${parts(volume)}`;
 }
 
@@ -542,14 +618,14 @@ async function renderAdmin() {
   const unclaimedUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.unclaimed, x.t.quote), 0), 0);
   const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
-    <div class="hero"><div><h1>Admin</h1><p>Protocol fees: 1% of every trade, waiting to be collected.</p></div></div>
+    <div class="hero"><div><h1>Admin</h1><p>Your 1% protocol fees and the holders' 3% rewards, per launchpad version.</p></div></div>
     <div class="stats" style="margin:0 0 6px">
       <div class="card"><div class="k">Protocol fees to collect</div><div class="v">${fmtUsd(totalUsd)}</div><div class="stat">yours, all versions</div></div>
       <div class="card"><div class="k">Unclaimed by holders</div><div class="v">${fmtUsd(unclaimedUsd)}</div><div class="stat">paid out, holders haven't claimed yet</div></div>
       <div class="card"><div class="k">Holder fees not paid out yet</div><div class="v">${fmtUsd(waitingUsd)}</div><div class="stat">use "Pay out" below</div></div>
     </div>
     ${rows.map((r, ri) => `
-      <h3 style="margin:18px 0 8px">Launchpad v${r.P.version}</h3>
+      ${sec(ri + 1, `Launchpad v${r.P.version}`)}
       <div class="stats" style="margin-top:0">
         ${assets.map((q, i) => `
           <div class="card">
@@ -560,7 +636,7 @@ async function renderAdmin() {
           </div>`).join("")}
       </div>
       <div class="card" style="margin-top:10px">
-        <b>Holder rewards</b>
+        <span class="h">Holder rewards</span>
         <p class="stat" style="margin:4px 0 8px"><b>Unclaimed</b>: already paid out to holders, waiting for them to press Claim (safe, nothing to do). <b>Not paid out</b>: fees from trades through other routers (GMGN, aggregators) not yet sent to holders.${r.P.version < 3 ? ` On v${r.P.version} these can be partly captured by a flash-borrow trick, so pay them out regularly (costs only gas).` : ""}</p>
         ${r.tokens.length ? `<div class="scroll-x"><table>
           <thead><tr><th>Token</th><th>Unclaimed</th><th>Not paid out</th><th></th></tr></thead>
@@ -618,13 +694,14 @@ async function renderAdmin() {
 async function renderCreate() {
   let quote = ZERO;
   $("#app").innerHTML = `
+    <div class="hero"><div><h1>Launch a token</h1>
+      <p>1,000,000,000 supply, all placed in a locked pool. No creator allocation beyond what you buy.</p></div></div>
     <div class="two">
-      <form class="card" id="cf">
-        <h2 style="margin:0">Launch a token</h2>
-        <p class="muted" style="margin:4px 0 0">1,000,000,000 supply, all placed in a locked pool. No creator allocation beyond what you buy.</p>
-        <label>Pair</label>
+      <form id="cf">
+        ${sec(1, "Pair")}
         <div class="seg" id="pair"><button type="button" data-q="${ZERO}" class="on">ETH</button><button type="button" data-q="${CONFIG.imd}">IMD</button></div>
-        <label for="n">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
+        ${sec(2, "Describe")}
+        <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
         <label for="img">Image URL (https:// or ipfs://)</label><input id="img" placeholder="https://…/logo.png" />
         <label for="d">Description</label><textarea id="d" maxlength="500"></textarea>
@@ -633,13 +710,15 @@ async function renderCreate() {
           <div style="flex:1;min-width:140px"><label for="x">X</label><input id="x" placeholder="https://x.com/…" /></div>
           <div style="flex:1;min-width:140px"><label for="tg">Telegram</label><input id="tg" placeholder="https://t.me/…" /></div>
         </div>
-        <label for="ib">Initial buy (<span id="ibq">ETH</span>, optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
+        ${sec(3, "Initial buy")}
+        <label for="ib" style="margin-top:0">Amount (<span id="ibq">ETH</span>, optional): buy first, in the same transaction</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
         <div class="stat" id="ibnote" style="display:none">The launch-time buy is paid in IMD. After launch, anyone can buy with ETH too.</div>
+        ${sec(4, "Launch")}
         <button class="primary full" id="go" type="submit">Launch token</button>
       </form>
-      <div class="card">
-        <h3 style="margin-top:0">How it works</h3>
+      <div class="card" style="margin-top:26px">
+        <span class="h">How it works</span>
         <p class="muted">Your token gets a Uniswap v4 pool against ETH or IMD holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
         <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>1% protocol · 3% shared by all holders, pro rata to their balance, paid in the pair asset. Holders claim anytime.</div>
         <div class="fees" id="startmc"></div>
@@ -731,18 +810,18 @@ async function renderToken(addr) {
           </div>
           ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
         </div>
-        <div class="stats">
+        <div class="stats q">
           <div class="card"><div class="k">Market cap</div><div class="v">${usd(info.marketCap, q)}</div><div class="stat">${fmt(info.marketCap)} ${Q}</div></div>
           <div class="card"><div class="k">Price</div><div class="v">${quoteUsd(q) ? fmtUsd(priceOf(info.sqrtPriceX96, info.quoteIsCurrency0) * quoteUsd(q)) : priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4) + " " + Q}</div></div>
           <div class="card"><div class="k">Liquidity</div><div class="v">Locked forever</div></div>
           <div class="card"><div class="k">Earned by holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">paid in ${Q}</div></div>
         </div>
         <div class="card" style="margin-top:14px">
-          <div class="row"><b>Price</b><span class="spacer"></span><span class="stat">USD per token</span></div>
+          <div class="row"><span class="h" style="margin:0">Price</span><span class="spacer"></span><span class="stat">USD per token</span></div>
           <svg class="chart" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
         </div>
         <div class="card" style="margin-top:14px">
-          <b>Trades</b>
+          <span class="h">Trades</span>
           <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th>Value</th><th>Tokens</th><th>Tx</th></tr></thead>
           <tbody id="trades"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
         </div>
@@ -762,7 +841,7 @@ async function renderToken(addr) {
           <div class="fees">4% fee: 1% protocol, 3% to holders of $${esc(info.symbol)}.</div>
         </div>
         <div class="card" style="margin-top:14px">
-          <b>Your holder rewards</b>
+          <span class="h">Your holder rewards</span>
           <div id="pos" class="stat" style="margin-top:6px">Connect a wallet to see your balance and rewards.</div>
           <button class="full" id="claim" disabled>Claim</button>
         </div>
@@ -952,7 +1031,11 @@ function drawChart(pts) {
     <path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
 }
 
-Promise.all([loadPads(), loadPrices()]).finally(route);
+Promise.all([loadPads(), loadPrices()]).finally(() => {
+  route();
+  // status bar totals on every page (the home page also loads them for its cards)
+  if (location.hash.slice(1).replace(/^$/, "/") !== "/") loadTotals().catch(() => {});
+});
 setInterval(loadPrices, 60_000);
 </script>
 </body>
