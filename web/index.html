@@ -57,6 +57,7 @@ nav.top a { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; p
 nav.top a:hover { color: var(--muted); }
 nav.top a.on { background: var(--strong); color: var(--inv); }
 .spacer { flex: 1; }
+#connect { white-space: nowrap; }
 button.icon { border: 0; background: none; color: var(--text); font-size: 15px; padding: 6px; cursor: pointer; }
 @media (max-width: 600px) {
   header .wrap { gap: 8px; }
@@ -71,9 +72,10 @@ button.icon { border: 0; background: none; color: var(--text); font-size: 15px; 
 @media (max-width: 360px) {
   header .wrap { gap: 4px; }
   nav.top { gap: 0; }
-  nav.top a { padding: 4px 5px; font-size: 10px; }
+  nav.top a { padding: 4px 3px; font-size: 10px; }
   button.icon { padding: 4px; }
   #connect { padding: 6px 7px; font-size: 11px; }
+  #connect .a1 { display: none; }
 }
 
 /* controls */
@@ -148,6 +150,10 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .links a { text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .ext .btn { padding: 4px 10px; font-size: 11px; }
 .scroll-x { overflow-x: auto; }
+.share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border: 1px solid var(--line); background: #000; }
+#rf input { flex: 1; min-width: 0; }
+.sharegrid { grid-template-columns: minmax(0, 600px) 1fr; }
+@media (max-width: 860px) { .sharegrid { grid-template-columns: 1fr; } }
 .h { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
 
 /* bottom status bar */
@@ -204,6 +210,7 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
     <nav class="top">
       <a href="#/" data-nav="/">Tokens</a>
       <a href="#/create" data-nav="/create">Launch</a>
+      <a href="#/rewards" data-nav="/rewards">Rewards</a>
       <a href="#/admin" data-nav="/admin" id="adminlink" style="display:none">Admin</a>
     </nav>
     <span class="spacer"></span>
@@ -543,7 +550,8 @@ async function connect() {
   const provider = new ethers.BrowserProvider(eth);
   signer = await provider.getSigner();
   account = await signer.getAddress();
-  $("#connect").textContent = short(account);
+  // account is a checksummed hex address (safe as HTML); the first part is hidden on very narrow screens
+  $("#connect").innerHTML = `<span class="a1">${account.slice(0, 6)}</span>…${account.slice(-4)}`;
   $("#connect").classList.add("addr");
   showAdminLink().catch(() => {});
   route();
@@ -580,13 +588,14 @@ $("#theme").onclick = () => {
 
 function route() {
   const h = location.hash.slice(1) || "/";
-  const navKey = h.startsWith("/t/") ? "/" : h;
+  const navKey = h.startsWith("/t/") ? "/" : h.startsWith("/rewards") ? "/rewards" : h;
   document.querySelectorAll("nav.top a").forEach((a) => a.classList.toggle("on", a.dataset.nav === navKey));
   Scene.unmount(); Feed.stop(); // the home page restarts them
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
   if (h === "/admin") return renderAdmin();
+  if (h === "/rewards" || h.startsWith("/rewards/")) return renderRewards(h.slice(9) || null);
   return renderHome();
 }
 
@@ -1111,6 +1120,204 @@ async function renderAdmin() {
   });
 }
 
+// ---------------------------------------------------------------- My rewards
+/// Every token from every live launchpad version, with the launchpad that created it.
+async function allTokenInfos() {
+  const lists = await Promise.all(livePads().map(async (P) => {
+    const n = Number(await P.c.tokenCount()), out = [];
+    for (let off = 0; off < n; off += 100) out.push(...(await P.c.getTokens(off, 100)));
+    return out.map((t) => ({ t, P }));
+  }));
+  return lists.flat();
+}
+const toUsdNum = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
+/// Full-precision dollars for the share card ("$8,295.89"); tiny amounts keep 2 significant digits.
+const usdLong = (n) => (n >= 1 ? "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : fmtUsd(n));
+/// "973.67 IMD + 0.03 ETH" for a { quote: wei } map.
+const assetParts = (m) => Object.entries(m).filter(([, w]) => w > 0n).map(([q, w]) => `${fmt(w)} ${qsym(q)}`).join(" + ") || "0";
+
+let rewardsSeq = 0;
+/// Rewards of the connected wallet (#/rewards) or of any address (#/rewards/0x…, view only, shareable link).
+async function renderRewards(who) {
+  const seq = ++rewardsSeq;
+  const app = $("#app");
+  if (who && !ethers.isAddress(who)) return (app.innerHTML = `<div class="card empty">Invalid address</div>`);
+  const addr = who ? ethers.getAddress(who) : account;
+  const mine = !!account && !!addr && addr.toLowerCase() === account.toLowerCase();
+  app.innerHTML = `
+    <div class="hero"><div><h1>My rewards</h1>
+      <p>Your share of the 3% holder fee on every trade, across every PepesFamily token.</p></div></div>
+    <form class="row" id="rf" style="flex-wrap:nowrap">
+      <input id="ra" placeholder="Wallet address 0x…" value="${addr ? esc(addr) : ""}" spellcheck="false" autocomplete="off" aria-label="Wallet address" />
+      <button type="submit">View</button>
+    </form>
+    <div id="rw">${addr ? `<div class="muted" style="margin-top:16px">Loading…</div>`
+      : `<div class="card empty" style="margin-top:16px">Connect your wallet, or paste any address to see its rewards.
+           <div style="margin-top:14px"><button class="primary" id="rconn">Connect wallet</button></div></div>`}</div>`;
+  $("#rf").onsubmit = (e) => {
+    e.preventDefault();
+    const v = $("#ra").value.trim();
+    if (!ethers.isAddress(v)) return toast("Enter a valid 0x address");
+    location.hash = "#/rewards/" + ethers.getAddress(v);
+  };
+  $("#rconn")?.addEventListener("click", () => connect().catch((e) => toast(errMsg(e), 7000)));
+  if (!addr) return;
+
+  let rows;
+  try {
+    rows = await Promise.all((await allTokenInfos()).map(async ({ t, P }) => {
+      const tok = new ethers.Contract(t.token, TOKEN_ABI, reader);
+      const [bal, claimable, claimed] = await Promise.all([tok.balanceOf(addr), tok.withdrawableDividendOf(addr), tok.withdrawnDividends(addr)]);
+      return { t, P, bal, claimable, claimed, earned: claimable + claimed };
+    }));
+  } catch (e) {
+    if (seq === rewardsSeq && $("#rw")) $("#rw").innerHTML = `<div class="card" style="margin-top:16px">Couldn't load rewards: ${esc(errMsg(e))}</div>`;
+    return;
+  }
+  if (seq !== rewardsSeq || !$("#rw")) return; // navigated away meanwhile
+  rows = rows.filter((r) => r.bal > 0n || r.earned > 0n)
+    .sort((a, b) => toUsdNum(b.earned, b.t.quote) - toUsdNum(a.earned, a.t.quote) || (b.bal > a.bal ? 1 : -1));
+
+  const sum = (k) => rows.reduce((m, r) => ((m[r.t.quote] = (m[r.t.quote] ?? 0n) + r[k]), m), {});
+  const usdSum = (k) => rows.reduce((s, r) => s + toUsdNum(r[k], r.t.quote), 0);
+  const priced = prices.ethUsd > 0;
+  const big = (k) => (priced ? fmtUsd(usdSum(k)) : assetParts(sum(k)));
+  const claimables = rows.filter((r) => r.claimable > 0n);
+  const earnedAny = rows.some((r) => r.earned > 0n);
+
+  $("#rw").innerHTML = `
+    ${mine ? "" : `<p class="stat" style="margin:10px 0 0">Viewing <a class="mono" href="${CONFIG.explorer}/address/${addr}" target="_blank" rel="noopener">${short(addr)}</a>. ${account ? "Connect this wallet to claim." : `<a href="#/rewards" style="text-decoration:underline">Connect yours</a> to claim.`}</p>`}
+    <div class="stats" style="margin-top:16px">
+      <div class="card"><div class="k">Total earned</div><div class="v">${big("earned")}</div><div class="stat">${priced ? assetParts(sum("earned")) : "all time"}</div></div>
+      <div class="card"><div class="k">Claimed</div><div class="v">${big("claimed")}</div><div class="stat">${priced ? assetParts(sum("claimed")) : "sent to the wallet"}</div></div>
+      <div class="card"><div class="k">Ready to claim</div><div class="v">${big("claimable")}</div>
+        <div class="stat">${priced ? assetParts(sum("claimable")) : ""}</div>
+        ${mine && claimables.length ? `<button class="primary full" id="claimall">Claim all${claimables.length > 1 ? ` (${claimables.length} transactions)` : ""}</button>` : ""}</div>
+    </div>
+    ${sec(1, "By token")}
+    ${rows.length ? `<div class="card scroll-x"><table>
+      <thead><tr><th>Token</th><th>Holding</th><th>Earned</th><th>Claimed</th><th>Ready</th>${mine ? "<th></th>" : ""}</tr></thead>
+      <tbody>${rows.map((r, i) => `
+        <tr>
+          <td><a href="#/t/${r.t.token}">$${esc(r.t.symbol)}</a> ${pill(r.t.quote)}</td>
+          <td>${fmt(r.bal)}<div class="stat">${Number((r.bal * 1000000n) / SUPPLY) / 10000}%</div></td>
+          <td>${usd(r.earned, r.t.quote)}<div class="stat">${fmt(r.earned, 6)} ${qsym(r.t.quote)}</div></td>
+          <td>${usd(r.claimed, r.t.quote)}</td>
+          <td>${usd(r.claimable, r.t.quote)}</td>
+          ${mine ? `<td>${r.claimable > 0n ? `<button data-claim="${i}">Claim</button>` : ""}</td>` : ""}
+        </tr>`).join("")}</tbody></table>
+      <p class="stat" style="margin:10px 0 0">Claiming also pays out any fees still waiting for that token, so you may receive slightly more than shown.</p></div>`
+      : `<div class="card empty">No PepesFamily tokens in this wallet yet. Holders of any token launched here earn 3% of every trade. <a href="#/" style="color:var(--accent)">Browse tokens →</a></div>`}
+    ${earnedAny ? `${sec(2, "Share")}
+    <div class="two sharegrid">
+      <div><img class="share-img" id="card" alt="Share card: holder rewards earned on PepesFamily" /></div>
+      <div class="card">
+        <span class="h">Show your rewards</span>
+        <p class="stat" style="margin:4px 0 12px">The card shows totals and tokens only, never your address.</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="primary" id="sx">Post on X</button>
+          <button id="sdl">Download image</button>
+          ${navigator.clipboard && window.ClipboardItem ? `<button id="scp">Copy image</button>` : ""}
+          <button id="ssh" style="display:none">Share…</button>
+        </div>
+        <p class="stat" style="margin:12px 0 0">X doesn't let websites attach images to a post: download or copy the card first, then add it to your post.</p>
+      </div>
+    </div>` : ""}`;
+
+  async function claimOne(r) {
+    toast(`Confirm the $${r.t.symbol} claim in your wallet…`, 8000);
+    const tx = await new ethers.Contract(r.t.token, TOKEN_ABI, signer).claim();
+    toast(`Claiming $${r.t.symbol} rewards…`, 15000);
+    await tx.wait();
+  }
+  $("#rw").querySelectorAll("button[data-claim]").forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await requireWallet(); await claimOne(rows[Number(b.dataset.claim)]); toast("Rewards claimed"); renderRewards(who); }
+    catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
+  });
+  if ($("#claimall")) $("#claimall").onclick = async () => {
+    $("#claimall").disabled = true;
+    let done = 0;
+    try { await requireWallet(); for (const r of claimables) { await claimOne(r); done++; } toast("All rewards claimed"); }
+    catch (e) { toast((done ? `Claimed ${done} of ${claimables.length}. ` : "") + errMsg(e), 7000); }
+    renderRewards(who);
+  };
+
+  if (!earnedAny) return;
+  const total = priced ? usdLong(usdSum("earned")) : assetParts(sum("earned"));
+  const top = rows.filter((r) => r.earned > 0n).slice(0, 3).map((r) => ({
+    sym: "$" + r.t.symbol,
+    amt: priced ? usdLong(toUsdNum(r.earned, r.t.quote)) : `${fmt(r.earned)} ${qsym(r.t.quote)}`,
+  }));
+  const url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
+  if (seq !== rewardsSeq || !$("#card")) return;
+  $("#card").src = url;
+  const blob = () => fetch(url).then((x) => x.blob());
+  const tags = [...new Set(top.map((t) => t.sym))].join(" ");
+  const text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays 3% to holders, in ETH or IMD.\n\n${tags}\nhttps://pepesfamily.fun`;
+  $("#sx").onclick = () => window.open("https://x.com/intent/tweet?text=" + encodeURIComponent(text), "_blank", "noopener,noreferrer");
+  $("#sdl").onclick = () => { const a = document.createElement("a"); a.href = url; a.download = "pepesfamily-rewards.png"; a.click(); };
+  if ($("#scp")) $("#scp").onclick = async () => {
+    try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob() })]); toast("Image copied: paste it into your post"); }
+    catch { toast("Your browser blocked copying: use Download image instead"); }
+  };
+  try {
+    const file = new File([await blob()], "pepesfamily-rewards.png", { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) {
+      $("#ssh").style.display = "";
+      $("#ssh").onclick = () => navigator.share({ files: [file], text }).catch(() => {});
+    }
+  } catch {}
+}
+
+/// 1200×675 PNG (X's large-image size) as a data: URL: big total, top tokens, and the frog crowd from behind.
+async function shareCard(total, sub, top) {
+  const W = 1200, H = 675, c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  try { await Promise.all([400, 500, 600].map((w) => document.fonts.load(`${w} 24px "IBM Plex Mono"`))); } catch {}
+  const F = (w, s) => `${w} ${s}px "IBM Plex Mono", ui-monospace, Menlo, monospace`;
+  const fit = (txt, w, size, max) => { g.font = F(w, size); while (g.measureText(txt).width > max && size > 14) g.font = F(w, (size -= 2)); };
+  g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
+  g.strokeStyle = "#0d170d"; g.lineWidth = 1;
+  for (let x = 40; x < W; x += 40) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); }
+  for (let y = 40; y < H; y += 40) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); g.stroke(); }
+  // floor and the crowd, bottom right
+  const floor = H - 70;
+  g.fillStyle = "#0b0f0b"; g.fillRect(0, floor, W, H - floor);
+  g.fillStyle = "#3ddc84"; g.fillRect(0, floor, W, 2);
+  const frog = await new Promise((res) => {
+    const im = new Image();
+    im.onload = () => res(im); im.onerror = () => res(null);
+    im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(FROG_SVG.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="122" '));
+  });
+  if (frog) {
+    for (const [x, w, lift] of [[800, 92, 34], [905, 98, 38], [1012, 90, 32], [1100, 84, 36], [745, 118, 0], [858, 128, 4], [985, 122, 0], [1095, 112, 2]]) {
+      g.drawImage(frog, x, floor + 22 - lift - w * 1.22, w, w * 1.22);
+    }
+  }
+  g.textBaseline = "middle";
+  // logo
+  g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(60, 56, 44, 44);
+  g.fillStyle = "#fff"; g.fillRect(104, 56, 214, 44);
+  g.font = F(600, 22); g.textAlign = "center"; g.fillText("P", 82, 79);
+  g.fillStyle = "#000"; g.font = F(500, 18); g.fillText("PEPESFAMILY", 211, 79);
+  g.textAlign = "left";
+  g.fillStyle = "#8c8c8c"; g.font = F(500, 22); g.fillText("HOLDER REWARDS EARNED", 60, 172);
+  g.fillStyle = "#3ddc84"; fit(total, 600, 128, W - 120); g.fillText(total, 54, 252);
+  g.fillStyle = "#fff"; fit(sub, 400, 26, W - 120); g.fillText(sub, 60, 336);
+  top.forEach((t, i) => {
+    const y = 404 + i * 42;
+    g.font = F(500, 26);
+    g.fillStyle = "#3ddc84"; g.fillText(">", 60, y);
+    g.fillStyle = "#fff"; fit(t.sym, 500, 26, 250); g.fillText(t.sym, 92, y);
+    g.fillStyle = "#8c8c8c"; g.font = F(400, 26); g.fillText(t.amt, 360, y);
+  });
+  g.fillStyle = "#8c8c8c"; g.font = F(400, 20); g.fillText("3% of every trade goes to holders", 60, floor + 36);
+  g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesfamily.fun", W - 60, floor + 36);
+  return c.toDataURL("image/png");
+}
+
 // ---------------------------------------------------------------- Create
 async function renderCreate() {
   let quote = ZERO;
@@ -1266,6 +1473,7 @@ async function renderToken(addr) {
           <span class="h">Your holder rewards</span>
           <div id="pos" class="stat" style="margin-top:6px">Connect a wallet to see your balance and rewards.</div>
           <button class="full" id="claim" disabled>Claim</button>
+          <a class="stat" href="#/rewards" style="display:block;margin-top:10px;text-decoration:underline;text-underline-offset:3px">All my rewards →</a>
         </div>
       </div>
     </div>`;
