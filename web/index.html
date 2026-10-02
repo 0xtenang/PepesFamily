@@ -447,19 +447,39 @@ const ago = (ts) => {
 function meta(json) { try { const m = JSON.parse(json); return typeof m === "object" && m ? m : {}; } catch { return {}; } }
 function safeUrl(u) {
   if (typeof u !== "string") return "";
-  if (u.startsWith("ipfs://")) return "https://ipfs.io/ipfs/" + u.slice(7);
+  if (u.startsWith("ipfs://")) return IPFS_GATEWAYS[0] + u.slice(7);
   return /^https:\/\//i.test(u) ? u : "";
 }
+// ipfs.io no longer serves files to other websites, so IPFS images load through these public gateways in order.
+const IPFS_GATEWAYS = ["https://ipfs.filebase.io/ipfs/", "https://gateway.pinata.cloud/ipfs/", "https://ipfs.io/ipfs/"];
+/// "<cid>[/path]" from ipfs://… or any https gateway link (…/ipfs/<cid> or <cid>.ipfs.host), else "".
+function ipfsPath(u) {
+  let p = "";
+  if (u.startsWith("ipfs://")) p = u.slice(7).replace(/^ipfs\//, "");
+  else {
+    try {
+      const x = new URL(u);
+      const sub = x.hostname.match(/^([a-z0-9]{46,})\.ipfs\./i);
+      p = x.pathname.startsWith("/ipfs/") ? x.pathname.slice(6) : sub ? sub[1] + x.pathname.replace(/^\/$/, "") : "";
+    } catch {}
+  }
+  return /^[A-Za-z0-9]{46,}(\/[A-Za-z0-9._~%-]+)*$/.test(p) ? p : "";
+}
 function avatar(info, cls = "") {
-  const img = safeUrl(meta(info.metadata).image);
+  const raw = meta(info.metadata).image;
+  const ipfs = typeof raw === "string" ? ipfsPath(raw.trim()) : "";
+  const img = ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw);
   const letter = esc((info.symbol || "?").slice(0, 2));
-  return img ? `<img class="avatar ${cls}" src="${esc(img)}" alt="${letter}" loading="lazy" referrerpolicy="no-referrer">`
+  return img ? `<img class="avatar ${cls}" src="${esc(img)}" alt="${letter}" loading="lazy" referrerpolicy="no-referrer"${ipfs ? ` data-ipfs="${esc(ipfs)}" data-gw="0"` : ""}>`
              : `<div class="avatar ${cls}">${letter}</div>`;
 }
-// Broken images fall back to the ticker letters (no inline handlers: names and tickers are user input).
+// Broken images try the next IPFS gateway, then fall back to the ticker letters (no inline handlers: names and
+// tickers are user input).
 document.addEventListener("error", (e) => {
   const img = e.target;
   if (!(img instanceof HTMLImageElement) || !img.classList.contains("avatar")) return;
+  const gw = Number(img.dataset.gw) + 1;
+  if (img.dataset.ipfs && gw < IPFS_GATEWAYS.length) { img.dataset.gw = String(gw); img.src = IPFS_GATEWAYS[gw] + img.dataset.ipfs; return; }
   const div = document.createElement("div");
   div.className = img.className;
   div.textContent = img.alt;
