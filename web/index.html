@@ -342,6 +342,9 @@ async function loadPads() {
   padR = LAUNCH?.c || null;
 }
 const livePads = () => PADS.filter((P) => P.live);
+/// Tokens shown on the home page and live feed: IMD pairs only. ETH-pair tokens launched earlier still have their
+/// own pages (#/t/<address>) and appear on the Rewards and Admin pages, so holders can always trade and claim.
+const isListed = (t) => t.quote.toLowerCase() === CONFIG.imd.toLowerCase();
 
 const quoteExact = async (key, zeroForOne, amount) =>
   (await quoterR.quoteExactInputSingle.staticCall([key, zeroForOne, amount, "0x"]))[0];
@@ -838,7 +841,7 @@ const Feed = (() => {
       for (let off = 0; off < n; off += 100) out.push(...(await P.c.getTokens(off, 100)));
       return out;
     }));
-    for (const t of lists.flat()) tokens.set(t.token.toLowerCase(), t);
+    for (const t of lists.flat().filter(isListed)) tokens.set(t.token.toLowerCase(), t);
     const n = $("#scr-n"); if (n) n.textContent = String(tokens.size);
   }
 
@@ -896,7 +899,6 @@ const Feed = (() => {
   return { start, stop };
 })();
 
-let homeFilter = "all";
 async function renderHome() {
   const app = $("#app");
   app.innerHTML = `
@@ -911,7 +913,7 @@ async function renderHome() {
     </div>
     <div class="hero">
       <div><h1>Launch a token on Robinhood Chain</h1>
-      <p>1B fixed supply · liquidity locked forever · pair with ETH or IMD · 3% of every trade paid to holders</p>
+      <p>1B fixed supply · liquidity locked forever · paired with $IMD · 3% of every trade paid to holders in IMD</p>
       <div class="row" style="margin-top:16px"><a class="btn primary" href="#/create">Launch a token</a><a class="btn" href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source ↗</a></div></div>
     </div>
     ${sec(1, "Platform")}
@@ -920,7 +922,7 @@ async function renderHome() {
       <div class="card"><div class="k">Earned by holders</div><div class="v" id="tot-holders">…</div><div class="stat" id="tot-holders-sub">3% of every trade</div></div>
       <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
     </div>
-    ${sec(2, "Tokens", `<div class="seg" id="filter"><button data-f="all">All</button><button data-f="eth">ETH</button><button data-f="imd">IMD</button></div>`)}
+    ${sec(2, "Tokens")}
     <div class="grid" id="list"><div class="card muted">Loading…</div></div>
     ${sec(3, "Audits")}
     <div class="grid audits">
@@ -932,10 +934,6 @@ async function renderHome() {
           <div class="stat">${esc(a.note)}</div>
         </a>`).join("")}
     </div>`;
-  app.querySelectorAll("#filter button").forEach((b) => {
-    b.classList.toggle("on", b.dataset.f === homeFilter);
-    b.onclick = () => { homeFilter = b.dataset.f; renderHome(); };
-  });
   Scene.mount($("#scene"));
   Feed.start();
   loadTotals().catch((e) => console.warn("totals", e));
@@ -947,7 +945,7 @@ async function renderHome() {
       return n ? [...(await P.c.getTokens(offset, limit))] : [];
     }));
     const infos = lists.flat().sort((a, b) => Number(b.createdAt) - Number(a.createdAt)).slice(0, 60);
-    const shown = infos.filter((i) => homeFilter === "all" || (homeFilter === "eth") === (i.quote === ZERO));
+    const shown = infos.filter(isListed);
     $("#list").innerHTML = shown.length ? shown.map((i) => {
       const m = meta(i.metadata);
       return `<a class="card tcard" href="#/t/${i.token}">
@@ -1340,14 +1338,15 @@ async function shareCard(total, sub, top) {
 
 // ---------------------------------------------------------------- Create
 async function renderCreate() {
-  let quote = ZERO;
+  // New tokens on this site are always paired with IMD (ETH buyers still trade them through the ETH router).
+  const quote = CONFIG.imd;
   $("#app").innerHTML = `
     <div class="hero"><div><h1>Launch a token</h1>
       <p>1,000,000,000 supply, all placed in a locked pool. No creator allocation beyond what you buy.</p></div></div>
     <div class="two">
       <form id="cf">
         ${sec(1, "Pair")}
-        <div class="seg" id="pair"><button type="button" data-q="${ZERO}" class="on">ETH</button><button type="button" data-q="${CONFIG.imd}">IMD</button></div>
+        <div class="row"><span class="pill imd">IMD</span><span class="stat">Every token is paired with $IMD. Holders earn their 3% in IMD; buyers can pay with ETH or IMD.</span></div>
         ${sec(2, "Describe")}
         <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
@@ -1359,16 +1358,16 @@ async function renderCreate() {
           <div style="flex:1;min-width:140px"><label for="tg">Telegram</label><input id="tg" placeholder="https://t.me/…" /></div>
         </div>
         ${sec(3, "Initial buy")}
-        <label for="ib" style="margin-top:0">Amount (<span id="ibq">ETH</span>, optional): buy first, in the same transaction</label><input id="ib" inputmode="decimal" placeholder="0" />
+        <label for="ib" style="margin-top:0">Amount (IMD, optional): buy first, in the same transaction</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
-        <div class="stat" id="ibnote" style="display:none">The launch-time buy is paid in IMD. After launch, anyone can buy with ETH too.</div>
+        <div class="stat">The launch-time buy is paid in IMD. After launch, anyone can buy with ETH too.</div>
         ${sec(4, "Launch")}
         <button class="primary full" id="go" type="submit">Launch token</button>
       </form>
       <div class="card" style="margin-top:26px">
         <span class="h">How it works</span>
-        <p class="muted">Your token gets a Uniswap v4 pool against ETH or IMD holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
-        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>1% protocol · 3% shared by all holders, pro rata to their balance, paid in the pair asset. Holders claim anytime.</div>
+        <p class="muted">Your token gets a Uniswap v4 pool against IMD holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
+        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>1% protocol · 3% shared by all holders, pro rata to their balance, paid in IMD. Holders claim anytime.</div>
         <div class="fees" id="startmc"></div>
       </div>
     </div>`;
@@ -1389,12 +1388,6 @@ async function renderCreate() {
       $("#ibp").textContent = `≈ ${fmt(out)} tokens (${(Number((out * 10000n) / SUPPLY) / 100).toFixed(2)}% of supply)`;
     }).catch(() => {});
   };
-  $("#pair").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    quote = b.dataset.q;
-    $("#pair").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
-    $("#ibq").textContent = qsym(quote); updStart(); updPreview();
-    $("#ibnote").style.display = quote === ZERO ? "none" : "";
-  });
   $("#ib").oninput = updPreview;
   updStart();
 
