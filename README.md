@@ -131,6 +131,8 @@ Every launch deploys a new `PadToken` contract, and scanners such as DexScreener
 
 Copy `pad`, `router` and `block` from `contracts/deployments/robinhood.json` into `CONFIG` at the top of `web/index.html`, then host the file on any static host. For production, point `CONFIG.rpc` at a paid RPC; the public endpoint is rate-limited.
 
+Image upload on the launch form uses the Vercel function `web/api/upload.js`, which pins images to IPFS through Pinata. Set the environment variable `PINATA_JWT` (a Pinata API key JWT with permission to upload files) in the Vercel project; the key never reaches the browser. Without it the Upload button stays hidden and creators paste image links instead.
+
 ## Owner powers
 
 - `setFeeRecipient`: changes where the 1% protocol fee goes.
