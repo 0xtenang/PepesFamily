@@ -59,6 +59,31 @@ contract MockPepesRouter {
     }
 }
 
+/// @dev Final check, low 1: moves 1 wei of $EARN out of the PoolManager to `victim` and repays the pool with its own.
+contract DustTaker is IUnlockCallback {
+    IPoolManager immutable pm;
+    PepesEarnToken immutable t;
+    address victim;
+
+    constructor(IPoolManager pm_, PepesEarnToken t_) {
+        pm = pm_;
+        t = t_;
+    }
+
+    function poke(address v) external {
+        victim = v;
+        pm.unlock("");
+    }
+
+    function unlockCallback(bytes calldata) external returns (bytes memory) {
+        pm.take(Currency.wrap(address(t)), victim, 1);
+        pm.sync(Currency.wrap(address(t)));
+        t.transfer(address(pm), 1);
+        pm.settle();
+        return "";
+    }
+}
+
 /// @dev A token that copies the real one's wiring but points its buyback at another router (audit finding 6).
 contract FakeEarn {
     PepesEarnIMD immutable h;
@@ -510,8 +535,6 @@ contract PepesEarnTest is Test {
         earn.buybackAndBurnPepes(reserve * 1000 + 1, vm.getBlockTimestamp());
     }
 
-    // ------------------------------------------------------------ royalties
-
     // re-check finding 2: a gift of dust must not keep someone's rewards from expiring
     function test_expiry_dustGiftDoesNotResetTimer() public {
         _buy(alice, 100e18);
@@ -529,6 +552,43 @@ contract PepesEarnTest is Test {
         // and a wallet that buys is active
         _buy(dan, 10e18);
         assertEq(earn.lastActive(dan), vm.getBlockTimestamp());
+    }
+
+    // final check, low 1: dust delivered out of the PoolManager by a third party is not the victim's activity
+    function test_expiry_dustThroughThePoolDoesNotResetTimer() public {
+        _buy(alice, 100e18);
+        _buy(bob, 100e18);
+        vm.warp(vm.getBlockTimestamp() + 31 days);
+        uint256 expired = earn.expiredRewardsOf(alice);
+        assertGt(expired, 0);
+        DustTaker d = new DustTaker(pm, earn);
+        vm.prank(bob);
+        earn.transfer(address(d), 1);
+        d.poke(alice);
+        assertGe(earn.expiredRewardsOf(alice), expired - 1, "a third party's dust reset alice's timer");
+    }
+
+    // final check, low 2: receiving a whole $EARN (an NFT) counts, e.g. a marketplace purchase; a whole-token gift
+    // counts too, so resetting someone's timer costs a full $EARN, not dust
+    function test_expiry_receivingAWholeTokenCounts_marketplacePurchase() public {
+        _buy(alice, 100e18);
+        _buy(bob, 100e18);
+        vm.warp(vm.getBlockTimestamp() + 20 days);
+        address market = makeAddr("market");
+        vm.prank(bob);
+        mirror.setApprovalForAll(market, true);
+        uint256 id = _anyIdOf(bob);
+        vm.prank(market); // bob's approved operator moves one of his NFTs to alice
+        mirror.transferFrom(bob, alice, id);
+        assertEq(earn.lastActive(alice), vm.getBlockTimestamp(), "buying an NFT on a marketplace is activity");
+        vm.warp(vm.getBlockTimestamp() + 11 days); // 31 days after alice's first buy, 11 after the purchase
+        assertEq(earn.expiredRewardsOf(alice), 0);
+
+        vm.warp(vm.getBlockTimestamp() + 31 days);
+        assertGt(earn.expiredRewardsOf(alice), 0);
+        vm.prank(bob);
+        earn.transfer(alice, 1e18);
+        assertEq(earn.expiredRewardsOf(alice), 0);
     }
 
     // ------------------------------------------------------------ royalties

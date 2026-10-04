@@ -294,9 +294,10 @@ const CONFIG = {
     nft: {
       url: "https://explorer.imd.fun/jobs/e6eda4d8-f50d-47cd-9464-9a272283ccd3",
       title: "Pepes Earn IMD NFT",
-      result: "Audit: 10 findings (3 medium) · re-check: 5 findings (1 high)",
-      note: "Audited twice before deployment. All findings of both reports are fixed in the code: royalties now go straight to the protocol (nothing is swapped, so nothing can be sandwiched), the $Pepes buyback is capped and hourly, the 30-day expiry can't be gamed with dust, and deployment is one step. Final check before the collection opens.",
+      result: "3 rounds: 10 findings → 5 → 3 (no high or medium in the final check)",
+      note: "Audited twice before deployment. All findings of both reports are fixed in the code: royalties now go straight to the protocol (nothing is swapped, so nothing can be sandwiched), the $Pepes buyback is capped and hourly, the 30-day expiry can't be gamed with dust, and deployment is one step. The final check found only low and info items about the 30-day activity rule, now fixed: claiming, sending, or receiving at least one whole $EARN (one NFT) counts as activity; dust doesn't.",
       recheck: "https://explorer.imd.fun/jobs/f6d3cd0e-8371-417b-80d6-7b99fc9efa0c",
+      final: "https://explorer.imd.fun/jobs/a58eb2c6-bfc3-441e-86d8-432c2ab15114",
     },
     tokens: {
       "0xe2c46c7068566740a33a4c93f5445b07bcfe5644": {
@@ -1558,7 +1559,7 @@ function nftAuditCard(style = "") {
     <span class="h">Audited by IMD Swarm</span>
     <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
     <div class="stat">${esc(a.note)}</div>
-    <div class="links" style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noopener noreferrer">Audit report ↗</a>${a.recheck ? ` · <a href="${a.recheck}" target="_blank" rel="noopener noreferrer">Re-check report ↗</a>` : ""}</div></div>`;
+    <div class="links" style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noopener noreferrer">Audit report ↗</a>${a.recheck ? ` · <a href="${a.recheck}" target="_blank" rel="noopener noreferrer">Re-check ↗</a>` : ""}${a.final ? ` · <a href="${a.final}" target="_blank" rel="noopener noreferrer">Final check ↗</a>` : ""}</div></div>`;
 }
 
 function nftHowItWorks(n) {
@@ -1567,7 +1568,7 @@ function nftHowItWorks(n) {
       <div class="card"><span class="h">1 token = 1 NFT</span><p class="stat" style="margin:0">Each NFT is backed by 1 $EARN. Buy 3 $EARN and 3 NFTs appear in your wallet; sell one and one disappears.</p></div>
       <div class="card"><span class="h">Always tradeable</span><p class="stat" style="margin:0">Buy or sell any time in the $EARN / IMD pool, pay with IMD or ETH. NFTs can also be traded on marketplaces (1% royalty to the protocol) and sold back to the pool later.</p></div>
       <div class="card"><span class="h">3% to holders, in IMD</span><p class="stat" style="margin:0">Every pool trade pays 4%: 3% to holders by balance, 1% protocol. Claim your IMD here anytime.</p></div>
-      <div class="card"><span class="h">Claim within 30 days</span><p class="stat" style="margin:0">If a wallet doesn't claim or move any $EARN for 30 days, its older unclaimed rewards buy back and burn $Pepes. What you earned in the last 30 days is always safe.</p></div>
+      <div class="card"><span class="h">Claim within 30 days</span><p class="stat" style="margin:0">If a wallet doesn't claim, send $EARN or receive a whole $EARN (an NFT) for 30 days, its older unclaimed rewards buy back and burn $Pepes. What you earned in the last 30 days is always safe.</p></div>
       <div class="card"><span class="h">Fully on-chain</span><p class="stat" style="margin:0">2,000 back-facing Pepes drawn by the contract itself. No IPFS, no server. #1 The King, #777 Gold Pepe.</p></div>
       <div class="card"><span class="h">Locked forever</span><p class="stat" style="margin:0">All $EARN starts in the pool, liquidity locked forever. No team allocation: everyone mints by buying.</p></div>
     </div>`;
@@ -1782,7 +1783,7 @@ async function renderNft() {
     if (w > 0n && last > 0n) {
       clock = expired > 0n
         ? `<div class="warn-box">${fmt(expired, 6)} IMD (≈ ${usd(expired, q)}) of your rewards expired after 30 days without activity. You can still claim it until someone recycles it into the $Pepes buyback: claim now.</div>`
-        : `<div class="stat" style="margin-top:6px">Claim within <b>${daysLeft} day${daysLeft === 1 ? "" : "s"}</b> (or move any $EARN) to keep all of it. After 30 days without activity, older unclaimed rewards buy back and burn $Pepes.</div>`;
+        : `<div class="stat" style="margin-top:6px">Claim within <b>${daysLeft} day${daysLeft === 1 ? "" : "s"}</b> (or send $EARN, or buy a whole NFT) to keep all of it. After 30 days without activity, older unclaimed rewards buy back and burn $Pepes.</div>`;
     }
     $("#nrew").innerHTML = `<div style="margin-top:6px">Ready to claim: <b>${fmt(w, 6)} IMD</b>${quoteUsd(q) ? ` (≈ ${usd(w, q)})` : ""}<br>Claimed so far: ${fmt(done, 6)} IMD</div>${clock}
       <button class="full" id="nclaim" ${w === 0n ? "disabled" : ""} style="margin-top:10px">Claim IMD</button>`;

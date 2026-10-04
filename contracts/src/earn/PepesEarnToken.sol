@@ -49,8 +49,10 @@ interface IPepesPad {
 ///         protocol, 3% to $EARN holders pro rata (same magnified-dividend accounting as PepesFamily v3, including
 ///         its guard against flash-borrowed pool tokens).
 ///
-///         Rewards are claimed manually. Rewards of a wallet that has neither claimed nor moved any $EARN for more
-///         than 30 days expire, except what it earned during those last 30 days: anyone may move expired rewards
+///         Rewards are claimed manually. A wallet is active when it claims, sends $EARN, pulls $EARN itself, or
+///         receives at least one whole $EARN (one NFT: pool buys of a whole token, marketplace purchases). Rewards
+///         of a wallet inactive for more than 30 days expire, except what it earned during those last 30 days:
+///         anyone may move expired rewards
 ///         into the buyback reserve, which can only be spent buying $Pepes and sending them to the burn address,
 ///         by anyone, in capped steps.
 /// @dev No owner (owner() is the zero address) and no privileged function: nothing sends the reserve, rewards or
@@ -104,7 +106,8 @@ contract PepesEarnToken is DN404 {
     uint256 public accountedBalance;
     uint256 public totalDividendsDistributed;
 
-    /// @notice Last claim or $EARN balance change of each holder (unix seconds).
+    /// @notice Last activity of each holder (unix seconds): a claim, a send, an own pull, receiving at least one
+    ///         whole $EARN, or the first receipt. Smaller receipts it didn't initiate don't count.
     mapping(address => uint256) public lastActive;
     /// @notice IMD from expired rewards, reserved for $Pepes buyback-and-burn.
     uint256 public buybackReserve;
@@ -209,12 +212,13 @@ contract PepesEarnToken is DN404 {
         }
         if (!toExcluded) {
             magnifiedDividendCorrections[to] -= magCorrection;
-            // Receiving counts as activity only when the recipient acted: a buy from the pool (tokens come from an
-            // excluded address) or a transfer it initiated. A gift of dust can't keep someone's rewards from
-            // expiring (re-check finding 2); a new holder still gets a start time. Expiry stays correct: an
-            // unrecorded incoming transfer only raises the balance, which over-estimates "recent" rewards in the
-            // holder's favour.
-            if (fromExcluded || actor == to || lastActive[to] == 0) lastActive[to] = block.timestamp;
+            // Receiving counts as activity when the recipient initiated it, when it is at least one whole $EARN
+            // (one NFT: a pool buy of a whole token or a marketplace purchase), or for a first-time holder. The
+            // chain can't tell a purchase from a gift, so a gift that resets someone's timer must cost a whole
+            // $EARN rather than dust, whichever path delivers it (final check, lows 1 and 2). Expiry stays correct
+            // either way: an unrecorded incoming transfer only raises the balance, which over-estimates "recent"
+            // rewards in the holder's favour.
+            if (actor == to || amount >= _unit() || lastActive[to] == 0) lastActive[to] = block.timestamp;
         }
         if (fromExcluded && !toExcluded) eligibleSupply += amount;
         else if (!fromExcluded && toExcluded) eligibleSupply -= amount;
@@ -272,7 +276,7 @@ contract PepesEarnToken is DN404 {
     // ------------------------------------------------------------ expiry
 
     /// @notice Rewards of `holder` that have expired: everything unclaimed except what it earned in the last
-    ///         30 days, once it has neither claimed nor moved $EARN for more than 30 days. Zero while it is active.
+    ///         30 days, once it has been inactive for more than 30 days. Zero while it is active.
     /// @dev Both boundaries are exclusive on the holder's side (audit finding 4): a wallet is inactive only after
     ///      more than 30 days, and a reward distributed exactly 30 days ago still counts as recent.
     function expiredRewardsOf(address holder) public view returns (uint256) {
@@ -281,8 +285,9 @@ contract PepesEarnToken is DN404 {
         if (last == 0 || block.timestamp <= last + INACTIVITY_PERIOD) return 0;
         uint256 w = withdrawableDividendOf(holder);
         if (w == 0) return 0;
-        // The balance cannot have changed since `last` (any change marks the holder active), so what it earned
-        // since the cutoff is balance x (per-share growth since the cutoff). Rounded up in the holder's favour.
+        // Since `last` the balance can only have grown (every send records activity), so balance x (per-share
+        // growth since the cutoff) is at least what it earned since the cutoff: "recent" can only be
+        // over-estimated, in the holder's favour. Rounded up as well.
         uint256 magCut = magAt(block.timestamp - INACTIVITY_PERIOD - 1);
         uint256 recent = FullMath.mulDivRoundingUp(magnifiedDividendPerShare - magCut, balanceOf(holder), MAGNITUDE);
         return w > recent ? w - recent : 0;
