@@ -1004,13 +1004,20 @@ async function renderHome() {
     <div class="grid" id="list"><div class="card muted">Loading…</div></div>
     ${sec(3, "Audits")}
     <div class="grid audits">
-      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens), CONFIG.audits.nft].map((a) => `
+      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens)].map((a) => `
         <a class="card" href="${a.url}" target="_blank" rel="noopener noreferrer">
           <span class="h">Audited by IMD Swarm ↗</span>
           <div style="font-weight:600">${esc(a.title)}</div>
           <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
           <div class="stat">${esc(a.note)}</div>
         </a>`).join("")}
+      ${((a) => `<div class="card">
+          <span class="h">Audited by IMD Swarm</span>
+          <div style="font-weight:600">${esc(a.title)}</div>
+          <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
+          <div class="stat">${esc(a.note)}</div>
+          <div class="links" style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noopener noreferrer">Audit ↗</a> · <a href="${a.recheck}" target="_blank" rel="noopener noreferrer">Re-check ↗</a> · <a href="${a.final}" target="_blank" rel="noopener noreferrer">Final check ↗</a></div>
+        </div>`)(CONFIG.audits.nft)}
     </div>`;
   loadKing().catch((e) => console.warn("king of the hill", e));
   Scene.mount($("#scene"));
