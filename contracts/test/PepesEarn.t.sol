@@ -13,7 +13,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 
-import {PepesEarnPad} from "../src/earn/PepesEarnPad.sol";
+import {PepesEarnIMD} from "../src/earn/PepesEarnIMD.sol";
 import {PepesEarnToken} from "../src/earn/PepesEarnToken.sol";
 import {PepesEarnMirror} from "../src/earn/PepesEarnMirror.sol";
 import {PepesEarnRenderer} from "../src/earn/PepesEarnRenderer.sol";
@@ -84,7 +84,7 @@ contract PepesEarnTest is Test {
     MockIMD imd;
     MockPepes pepes;
     MockPepesRouter pepesRouter;
-    PepesEarnPad pad;
+    PepesEarnIMD hook;
     PepesEarnToken earn;
     PepesEarnMirror mirror;
     PepesEarnRenderer renderer;
@@ -118,14 +118,14 @@ contract PepesEarnTest is Test {
         lp.modifyLiquidity{value: 20_000 ether}(imdEth, ModifyLiquidityParams(-887200, 887200, 10_000e18, 0), "");
 
         bytes memory initCode = abi.encodePacked(
-            type(PepesEarnPad).creationCode,
+            type(PepesEarnIMD).creationCode,
             abi.encode(
                 pm,
                 address(imd),
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(START_MCAP, SUPPLY),
-                PepesEarnPad.ImdEthPool(10_000, 100, address(0))
+                PepesEarnIMD.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt, address expected) = DeployLib.mineSalt(address(this), _flags(), initCode, 0);
@@ -134,14 +134,14 @@ contract PepesEarnTest is Test {
             deployed := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
         require(deployed == expected, "hook address");
-        pad = PepesEarnPad(payable(deployed));
-        router = PepesFamilyRouter(payable(pad.router()));
-        ethRouter = PepesFamilyEthRouter(payable(pad.ethRouter()));
+        hook = PepesEarnIMD(payable(deployed));
+        router = PepesFamilyRouter(payable(hook.router()));
+        ethRouter = PepesFamilyEthRouter(payable(hook.ethRouter()));
 
-        mirror = new PepesEarnMirror(address(pad));
-        earn = new PepesEarnToken(address(pad), address(mirror), address(renderer), address(pepes), address(pepesRouter));
+        mirror = new PepesEarnMirror(address(hook));
+        earn = new PepesEarnToken(address(hook), address(mirror), address(renderer), address(pepes), address(pepesRouter));
         vm.prank(owner);
-        pad.launch(address(earn));
+        hook.openPool(address(earn));
 
         address[5] memory users = [alice, bob, carol, dan, address(this)];
         for (uint256 i; i < users.length; i++) {
@@ -179,27 +179,27 @@ contract PepesEarnTest is Test {
         revert("no nft");
     }
 
-    // ------------------------------------------------------------ launch
+    // ------------------------------------------------------------ opening the pool
 
-    function test_launch_locksWholeSupplyInPool() public view {
+    function test_openPool_locksWholeSupplyInPool() public view {
         assertEq(earn.totalSupply(), SUPPLY);
         assertApproxEqAbs(earn.balanceOf(address(pm)), SUPPLY, 1e9);
-        assertEq(earn.balanceOf(address(pad)), 0);
+        assertEq(earn.balanceOf(address(hook)), 0);
         assertEq(mirror.totalSupply(), 0, "no NFTs before anyone buys");
         assertEq(earn.eligibleSupply(), 0);
-        assertEq(pad.token(), address(earn));
+        assertEq(hook.token(), address(earn));
         // starting market cap ~2,000 IMD (start tick is rounded down to the tick spacing)
-        assertApproxEqRel(pad.marketCap(address(earn)), START_MCAP, 0.03e18);
+        assertApproxEqRel(hook.marketCap(address(earn)), START_MCAP, 0.03e18);
     }
 
-    function test_launch_onlyOnceAndOnlyOwner() public {
+    function test_openPool_onlyOnceAndOnlyOwner() public {
         vm.prank(owner);
-        vm.expectRevert(PepesEarnPad.AlreadyLaunched.selector);
-        pad.launch(address(earn));
+        vm.expectRevert(PepesEarnIMD.AlreadyLaunched.selector);
+        hook.openPool(address(earn));
         vm.prank(bob);
-        vm.expectRevert(PepesEarnPad.NotOwner.selector);
-        pad.launch(address(earn));
-        vm.expectRevert(PepesEarnPad.NotSupported.selector);
+        vm.expectRevert(PepesEarnIMD.NotOwner.selector);
+        hook.openPool(address(earn));
+        vm.expectRevert(PepesEarnIMD.NotSupported.selector);
         router.launch("x", "x", "", address(imd), 0, 0);
     }
 
@@ -212,7 +212,7 @@ contract PepesEarnTest is Test {
         assertEq(mirror.balanceOf(alice), got / 1e18);
         assertEq(mirror.ownerOf(1), alice, "first buyer gets #1");
         // 1% protocol, 3% holders (nobody held before, so it waits in the token)
-        assertEq(pad.pendingProtocolFees(address(imd)), 0.1e18);
+        assertEq(hook.pendingProtocolFees(address(imd)), 0.1e18);
         assertEq(imd.balanceOf(address(earn)), 0.3e18);
     }
 
@@ -354,7 +354,7 @@ contract PepesEarnTest is Test {
         vm.expectRevert(PepesEarnToken.NotEligible.selector);
         earn.recycle(address(pm));
         vm.expectRevert(PepesEarnToken.NotEligible.selector);
-        earn.recycle(address(pad));
+        earn.recycle(address(hook));
     }
 
     // ------------------------------------------------------------ $Pepes buyback and burn
@@ -400,35 +400,35 @@ contract PepesEarnTest is Test {
     // ------------------------------------------------------------ royalties
 
     function test_royalties_convertedToImdAndSplit() public {
-        assertEq(mirror.royaltyReceiver(), address(pad));
+        assertEq(mirror.royaltyReceiver(), address(hook));
         (address recv, uint256 amt) = mirror.royaltyInfo(1, 1 ether);
-        assertEq(recv, address(pad));
+        assertEq(recv, address(hook));
         assertEq(amt, 0.04 ether);
         assertTrue(mirror.supportsInterface(0x2a55205a));
 
         _buy(alice, 100e18); // a holder to receive the 3%
         _buy(bob, 10e18); // releases the first buy's waiting fee, so only the royalty is measured below
-        (bool ok,) = address(pad).call{value: 1 ether}(""); // a marketplace pays a royalty
+        (bool ok,) = address(hook).call{value: 1 ether}(""); // a marketplace pays a royalty
         assertTrue(ok);
 
         vm.prank(bob);
-        vm.expectRevert(PepesEarnPad.NotOwner.selector);
-        pad.convertRoyalties(0);
+        vm.expectRevert(PepesEarnIMD.NotOwner.selector);
+        hook.convertRoyalties(0);
 
         uint256 feeBefore = imd.balanceOf(FEE_RECIPIENT);
         uint256 holdersBefore = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
         vm.prank(owner);
-        uint256 out = pad.convertRoyalties(0.9e18);
+        uint256 out = hook.convertRoyalties(0.9e18);
         assertGt(out, 0.9e18);
-        assertEq(address(pad).balance, 0);
+        assertEq(address(hook).balance, 0);
         assertEq(imd.balanceOf(FEE_RECIPIENT) - feeBefore, out / 4);
         uint256 holdersAfter = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
         assertApproxEqAbs(holdersAfter - holdersBefore, out - out / 4, 10, "3% of the sale to holders");
 
-        (ok,) = address(pad).call{value: 1 ether}("");
+        (ok,) = address(hook).call{value: 1 ether}("");
         vm.prank(owner);
-        vm.expectRevert(PepesEarnPad.Slippage.selector);
-        pad.convertRoyalties(100e18);
+        vm.expectRevert(PepesEarnIMD.Slippage.selector);
+        hook.convertRoyalties(100e18);
     }
 
     // ------------------------------------------------------------ audit regressions (v3 guards)
@@ -436,11 +436,11 @@ contract PepesEarnTest is Test {
     function test_audit_flashHolderCannotClaimPendingFees() public {
         _buy(bob, 10e18);
         _buy(bob, 10e18);
-        PoolKey memory key = pad.poolKey(address(earn));
-        (,,,, bool quoteIs0) = pad.launches(address(earn));
-        vm.prank(carol); // third-party router trade: fees stay pending in the pad
+        PoolKey memory key = hook.poolKey(address(earn));
+        (,,,, bool quoteIs0) = hook.launches(address(earn));
+        vm.prank(carol); // third-party router trade: fees stay pending in the hook
         extRouter.swap(key, SwapParams(quoteIs0, -100e18, quoteIs0 ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1), settings, "");
-        assertEq(pad.pendingHolderFees(address(earn)), 3e18);
+        assertEq(hook.pendingHolderFees(address(earn)), 3e18);
 
         EarnFlashHolder attacker = new EarnFlashHolder(pm, earn);
         attacker.run(0);
@@ -450,12 +450,12 @@ contract PepesEarnTest is Test {
         earn.claim();
         assertEq(imd.balanceOf(address(attacker)), 0, "flash holder captured via distribute");
 
-        pad.flush(address(earn));
+        hook.flush(address(earn));
         assertApproxEqAbs(earn.withdrawableDividendOf(bob) + earn.withdrawableDividendOf(carol), 3e18 + 0.6e18, 10);
     }
 
     function test_hookRejectsOtherPoolsAndLiquidity() public {
-        PoolKey memory key = pad.poolKey(address(earn));
+        PoolKey memory key = hook.poolKey(address(earn));
         PoolKey memory other = key;
         other.tickSpacing = 60;
         vm.expectRevert();

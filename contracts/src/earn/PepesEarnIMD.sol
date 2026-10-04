@@ -22,8 +22,9 @@ import {PepesFamilyRouter} from "../PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../PepesFamilyEthRouter.sol";
 import {SafeTransfer} from "../lib/SafeTransfer.sol";
 
-/// @title PepesEarnPad
-/// @notice Launcher and Uniswap v4 hook for Pepes Earn IMD ($EARN). Same fee hook as PepesFamily v3, for a single
+/// @title PepesEarnIMD
+/// @notice Pool owner and Uniswap v4 hook for the Pepes Earn IMD NFT collection ($EARN). Not a launchpad: it opens
+///         one pool, once. Same fee hook as PepesFamily v3, for a single
 ///         collection paired with IMD: the 2,000 $EARN supply is added as single-sided liquidity owned by this
 ///         contract, which has no way to remove it (locked forever), and every swap pays 4% of its IMD side:
 ///           - 1% protocol fee -> `feeRecipient`
@@ -31,7 +32,7 @@ import {SafeTransfer} from "../lib/SafeTransfer.sol";
 ///         Marketplace royalties (ERC-2981, paid here in ETH) are converted to IMD and split the same way.
 ///         Exposes the PepesFamily interface (`launches`, `poolKey`, `flush`) so the PepesFamily routers work as-is.
 /// @dev Must be deployed at an address whose low 14 bits equal `HOOK_FLAGS` (mine a CREATE2 salt).
-contract PepesEarnPad is IHooks, IUnlockCallback {
+contract PepesEarnIMD is IHooks, IUnlockCallback {
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
     using SafeTransfer for address;
@@ -48,16 +49,7 @@ contract PepesEarnPad is IHooks, IUnlockCallback {
     error HookNotAllowed();
     error Slippage();
 
-    event TokenLaunched(
-        address indexed token,
-        address indexed creator,
-        address indexed quote,
-        string name,
-        string symbol,
-        string metadata,
-        PoolId poolId,
-        int24 startTick
-    );
+    event PoolOpened(address indexed token, PoolId poolId, int24 startTick);
     /// @param quoteAmount IMD paid by the buyer / received by the seller, fee included
     event Trade(
         address indexed token,
@@ -210,12 +202,12 @@ contract PepesEarnPad is IHooks, IUnlockCallback {
 
     // --------------------------------------------------------------- Launch
 
-    /// @notice One-time: locks the whole supply of `token_` (a PepesEarnToken deployed for this pad) in its pool.
-    function launch(address token_) external onlyOwner {
+    /// @notice One-time: locks the whole supply of `token_` (a PepesEarnToken deployed for this contract) in its pool.
+    function openPool(address token_) external onlyOwner {
         if (token != address(0)) revert AlreadyLaunched();
         PepesEarnToken t = PepesEarnToken(payable(token_));
         if (
-            t.pad() != address(this) || t.router() != router || t.ethRouter() != ethRouter
+            t.hook() != address(this) || t.router() != router || t.ethRouter() != ethRouter
                 || t.poolManager() != address(poolManager) || t.quote() != IMD
                 || t.balanceOf(address(this)) != TOTAL_SUPPLY || t.totalSupply() != TOTAL_SUPPLY
         ) revert BadToken();
@@ -240,7 +232,7 @@ contract PepesEarnPad is IHooks, IUnlockCallback {
         poolManager.initialize(key, TickMath.getSqrtPriceAtTick(tick));
         poolManager.unlock(abi.encode(ACTION_ADD_LIQUIDITY, abi.encode(key, token_, tick, quoteIs0)));
 
-        emit TokenLaunched(token_, msg.sender, IMD, t.name(), t.symbol(), metadata(), id, tick);
+        emit PoolOpened(token_, id, tick);
     }
 
     /// @dev PepesFamilyRouter.launch is not available here: there is exactly one collection.

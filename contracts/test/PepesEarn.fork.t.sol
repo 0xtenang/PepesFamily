@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 
-import {PepesEarnPad} from "../src/earn/PepesEarnPad.sol";
+import {PepesEarnIMD} from "../src/earn/PepesEarnIMD.sol";
 import {PepesEarnToken} from "../src/earn/PepesEarnToken.sol";
 import {PepesEarnMirror} from "../src/earn/PepesEarnMirror.sol";
 import {PepesEarnRenderer} from "../src/earn/PepesEarnRenderer.sol";
@@ -33,7 +33,7 @@ contract PepesEarnForkTest is Test {
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    PepesEarnPad pad;
+    PepesEarnIMD hook;
     PepesEarnToken earn;
     PepesEarnMirror mirror;
     PepesFamilyRouter router;
@@ -51,14 +51,14 @@ contract PepesEarnForkTest is Test {
         vm.createSelectFork(rpc);
         PepesEarnRenderer renderer = new PepesEarnRenderer();
         bytes memory initCode = abi.encodePacked(
-            type(PepesEarnPad).creationCode,
+            type(PepesEarnIMD).creationCode,
             abi.encode(
                 PM,
                 IMD,
                 address(this),
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(2_000e18, 2_000e18),
-                PepesEarnPad.ImdEthPool(10_000, 100, address(0))
+                PepesEarnIMD.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), uint160(0x28CC), initCode, 0);
@@ -66,12 +66,12 @@ contract PepesEarnForkTest is Test {
         assembly {
             deployed := create2(0, add(initCode, 0x20), mload(initCode), salt)
         }
-        pad = PepesEarnPad(payable(deployed));
-        router = PepesFamilyRouter(payable(pad.router()));
-        ethRouter = PepesFamilyEthRouter(payable(pad.ethRouter()));
-        mirror = new PepesEarnMirror(address(pad));
-        earn = new PepesEarnToken(address(pad), address(mirror), address(renderer), PEPES, V1_ROUTER);
-        pad.launch(address(earn));
+        hook = PepesEarnIMD(payable(deployed));
+        router = PepesFamilyRouter(payable(hook.router()));
+        ethRouter = PepesFamilyEthRouter(payable(hook.ethRouter()));
+        mirror = new PepesEarnMirror(address(hook));
+        earn = new PepesEarnToken(address(hook), address(mirror), address(renderer), PEPES, V1_ROUTER);
+        hook.openPool(address(earn));
 
         address[3] memory users = [alice, bob, carol];
         for (uint256 i; i < users.length; i++) {
@@ -136,11 +136,11 @@ contract PepesEarnForkTest is Test {
         assertEq(IERC20(IMD).balanceOf(address(earn)), earn.accountedBalance() + earn.buybackReserve());
 
         // a marketplace royalty in ETH becomes IMD: 1% protocol, 3% holders
-        (bool ok,) = address(pad).call{value: 0.02 ether}("");
+        (bool ok,) = address(hook).call{value: 0.02 ether}("");
         assertTrue(ok);
         uint256 feeBefore = IERC20(IMD).balanceOf(FEE_RECIPIENT);
         uint256 distributedBefore = earn.totalDividendsDistributed();
-        uint256 out = pad.convertRoyalties(1);
+        uint256 out = hook.convertRoyalties(1);
         assertGt(out, 0);
         assertEq(IERC20(IMD).balanceOf(FEE_RECIPIENT) - feeBefore, out / 4);
         assertEq(earn.totalDividendsDistributed() - distributedBefore, out - out / 4);

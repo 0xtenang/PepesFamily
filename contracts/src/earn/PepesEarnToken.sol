@@ -7,12 +7,12 @@ import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 import {SafeTransfer} from "../lib/SafeTransfer.sol";
 
-interface IEarnPad {
+interface IEarnHook {
     function flush(address token) external;
     function owner() external view returns (address);
 }
 
-interface IEarnPadInfo {
+interface IEarnHookInfo {
     function router() external view returns (address);
     function ethRouter() external view returns (address);
     function poolManager() external view returns (address);
@@ -33,14 +33,14 @@ interface IPepesRouter {
 
 /// @title PepesEarnToken ($EARN)
 /// @notice Pepes Earn IMD: 2,000 $EARN tokens, each whole token shown as one on-chain NFT (DN404). $EARN trades in a
-///         Uniswap v4 pool against IMD through the PepesEarnPad hook, which charges 4% of every swap: 1% protocol,
+///         Uniswap v4 pool against IMD through the PepesEarnIMD hook, which charges 4% of every swap: 1% protocol,
 ///         3% to $EARN holders pro rata (same magnified-dividend accounting as PepesFamily v3, including its guard
 ///         against flash-borrowed pool tokens).
 ///
 ///         Rewards are claimed manually. Rewards of a wallet that has neither claimed nor moved any $EARN for
 ///         30 days expire, except what it earned during those last 30 days: anyone may move expired rewards into
 ///         the buyback reserve, which can only be spent buying $Pepes and sending them to the burn address.
-/// @dev The token has no owner (owner() is the zero address). The launchpad owner may only time buybacks; there
+/// @dev The token has no owner (owner() is the zero address). The PepesEarnIMD owner may only time buybacks; there
 ///      is no function that sends reserve, rewards or holders' tokens anywhere else.
 contract PepesEarnToken is DN404 {
     using SafeTransfer for address;
@@ -66,7 +66,7 @@ contract PepesEarnToken is DN404 {
     uint256 internal constant MAGNITUDE = 2 ** 128;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    address public immutable pad;
+    address public immutable hook;
     address public immutable router;
     address public immutable ethRouter;
     address public immutable poolManager;
@@ -112,16 +112,16 @@ contract PepesEarnToken is DN404 {
     }
 
     /// @dev Deployed by the same account that deployed `mirror` (DN404 links them by deployer). The whole supply
-    ///      goes to the pad (without NFTs), whose one-time `launch` locks it in the pool.
+    ///      goes to the hook (without NFTs), whose one-time `openPool` locks it in the pool.
     constructor(
-        address pad_,
+        address hook_,
         address mirror,
         address renderer_,
         address pepes_,
         address pepesRouter_
     ) {
-        IEarnPadInfo p = IEarnPadInfo(pad_);
-        pad = pad_;
+        IEarnHookInfo p = IEarnHookInfo(hook_);
+        hook = hook_;
         router = p.router();
         ethRouter = p.ethRouter();
         poolManager = address(p.poolManager());
@@ -129,7 +129,7 @@ contract PepesEarnToken is DN404 {
         renderer = renderer_;
         pepes = pepes_;
         pepesRouter = pepesRouter_;
-        _initializeDN404(SUPPLY, pad_, mirror);
+        _initializeDN404(SUPPLY, hook_, mirror);
     }
 
     // ------------------------------------------------------------ metadata
@@ -153,7 +153,7 @@ contract PepesEarnToken is DN404 {
 
     // ------------------------------------------------------------ DN404 configuration
 
-    /// @dev Wallets get NFTs; contracts don't (the pool, routers and pad hold tokens only). EIP-7702 delegated
+    /// @dev Wallets get NFTs; contracts don't (the pool, routers and hook hold tokens only). EIP-7702 delegated
     ///      EOAs (code = 0xef0100 ‖ address) count as wallets, so smart-account users receive their NFTs too.
     function _skipNFTDefault(address account) internal view override returns (bool) {
         uint256 size = account.code.length;
@@ -200,14 +200,14 @@ contract PepesEarnToken is DN404 {
     // ------------------------------------------------------------ rewards
 
     function isExcluded(address account) public view returns (bool) {
-        return account == poolManager || account == pad || account == router || account == ethRouter
+        return account == poolManager || account == hook || account == router || account == ethRouter
             || account == address(this) || account == address(0) || account == DEAD;
     }
 
     /// @notice Spreads IMD received since the last call (holder fees) across current holders, pro rata.
-    /// @dev Never reverts: trades and claims call it. Mid-unlock only the pad may distribute (see PadToken v3).
+    /// @dev Never reverts: trades and claims call it. Mid-unlock only the hook may distribute (see PadToken v3).
     function distribute() public returns (uint256 amount) {
-        if (msg.sender != pad && IPoolManager(poolManager).isUnlocked()) return 0;
+        if (msg.sender != hook && IPoolManager(poolManager).isUnlocked()) return 0;
         uint256 bal = quote.balanceOf(address(this));
         uint256 tracked = accountedBalance + buybackReserve;
         uint256 eligible = eligibleSupply;
@@ -235,7 +235,7 @@ contract PepesEarnToken is DN404 {
 
     /// @notice Pulls in pending fees, pays out the caller's rewards, and resets their 30-day timer.
     function claim() external nonReentrant returns (uint256 amount) {
-        IEarnPad(pad).flush(address(this));
+        IEarnHook(hook).flush(address(this));
         if (!isExcluded(msg.sender)) lastActive[msg.sender] = block.timestamp;
         amount = withdrawableDividendOf(msg.sender);
         if (amount != 0) {
@@ -283,14 +283,14 @@ contract PepesEarnToken is DN404 {
     }
 
     /// @notice Spends `imdIn` of the buyback reserve on $Pepes and sends all of it to the burn address.
-    /// @dev Only the launchpad owner, who picks the timing and the minimum output (so the swap can't be
+    /// @dev Only the PepesEarnIMD owner, who picks the timing and the minimum output (so the swap can't be
     ///      sandwiched). The reserve can't go anywhere but this swap.
     function buybackAndBurnPepes(uint256 imdIn, uint256 minPepesOut, uint256 deadline)
         external
         nonReentrant
         returns (uint256 burned)
     {
-        if (msg.sender != IEarnPad(pad).owner()) revert NotOwner();
+        if (msg.sender != IEarnHook(hook).owner()) revert NotOwner();
         if (imdIn == 0 || imdIn > buybackReserve) revert BadAmount();
         buybackReserve -= imdIn;
         _approveToken(quote, pepesRouter, imdIn);
