@@ -32,7 +32,6 @@ contract PepesEarnForkTest is Test {
     address constant V1_ROUTER = 0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
-    address constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
 
     PepesEarnIMD hook;
     PepesEarnToken earn;
@@ -60,7 +59,6 @@ contract PepesEarnForkTest is Test {
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(2_000e18, 2_000e18),
                 PepesEarnIMD.ImdEthPool(10_000, 100, address(0)),
-                WETH,
                 PEPES,
                 V1_ROUTER
             )
@@ -140,15 +138,12 @@ contract PepesEarnForkTest is Test {
         );
         assertEq(IERC20(IMD).balanceOf(address(earn)), earn.accountedBalance() + earn.buybackReserve());
 
-        // a marketplace royalty in ETH becomes IMD: 1% protocol, 3% holders
-        (bool ok,) = address(hook).call{value: 0.02 ether}("");
-        assertTrue(ok);
-        uint256 feeBefore = IERC20(IMD).balanceOf(FEE_RECIPIENT);
-        uint256 distributedBefore = earn.totalDividendsDistributed();
-        uint256 out = hook.convertRoyalties(1);
-        assertGt(out, 0);
-        assertEq(IERC20(IMD).balanceOf(FEE_RECIPIENT) - feeBefore, out / 4);
-        assertEq(earn.totalDividendsDistributed() - distributedBefore, out - out / 4);
+        // marketplace royalties: 1%, paid by the marketplace straight to the protocol fee recipient
+        (address recv, uint256 royalty) = mirror.royaltyInfo(1, 1 ether);
+        assertEq(recv, FEE_RECIPIENT);
+        assertEq(royalty, 0.01 ether);
+        (bool ok,) = address(hook).call{value: 1 wei}("");
+        assertFalse(ok, "the hook holds no royalties");
 
         // holders claim
         uint256 bobImd = IERC20(IMD).balanceOf(bob);
@@ -157,7 +152,6 @@ contract PepesEarnForkTest is Test {
         assertEq(IERC20(IMD).balanceOf(bob) - bobImd, paid);
         emit log_named_uint("expired IMD recycled", expired);
         emit log_named_uint("$Pepes burned", burned);
-        emit log_named_uint("royalty IMD", out);
     }
 
     /// Audit finding 2, reproduced on the real $Pepes pool: buy $Pepes, trigger the buyback, sell the $Pepes.

@@ -22,10 +22,6 @@ import {PepesFamilyRouter} from "../PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../PepesFamilyEthRouter.sol";
 import {SafeTransfer} from "../lib/SafeTransfer.sol";
 
-interface IWETH {
-    function withdraw(uint256 amount) external;
-}
-
 /// @title PepesEarnIMD
 /// @notice Pool owner and Uniswap v4 hook for the Pepes Earn IMD NFT collection ($EARN). Not a launchpad: it opens
 ///         one pool, once. Same fee hook as PepesFamily v3, for a single
@@ -33,8 +29,8 @@ interface IWETH {
 ///         contract, which has no way to remove it (locked forever), and every swap pays 4% of its IMD side:
 ///           - 1% protocol fee -> `feeRecipient`
 ///           - 3% holder fee   -> $EARN holders, pro rata (see PepesEarnToken)
-///         Marketplace royalties (ERC-2981, paid here in ETH, WETH or IMD) are converted to IMD and split the same way,
-///         by anyone, in capped steps so the conversion can't be profitably sandwiched.
+///         Marketplace royalties (ERC-2981) are paid straight to `feeRecipient` by marketplaces (see
+///         PepesEarnMirror): nothing is held or swapped here.
 ///         Exposes the PepesFamily interface (`launches`, `poolKey`, `flush`) so the PepesFamily routers work as-is.
 /// @dev Must be deployed at an address whose low 14 bits equal `HOOK_FLAGS` (mine a CREATE2 salt).
 contract PepesEarnIMD is IHooks, IUnlockCallback {
@@ -52,9 +48,6 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
     error BadTick();
     error ZeroAddress();
     error HookNotAllowed();
-    error Slippage();
-    error TooSoon();
-    error Unlocked();
 
     event PoolOpened(address indexed token, PoolId poolId, int24 startTick);
     /// @param quoteAmount IMD paid by the buyer / received by the seller, fee included
@@ -69,8 +62,6 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
     );
     event HolderFeesFlushed(address indexed token, uint256 amount);
     event ProtocolFeesCollected(address indexed quote, address indexed to, uint256 amount);
-    event RoyaltiesConverted(uint256 ethIn, uint256 imdOut, uint256 toProtocol, uint256 toHolders);
-    event ImdRoyaltiesSplit(uint256 amount, uint256 toProtocol, uint256 toHolders);
     event FeeRecipientUpdated(address feeRecipient);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
@@ -95,33 +86,22 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
     uint8 internal constant ACTION_ADD_LIQUIDITY = 0;
     uint8 internal constant ACTION_FLUSH = 1;
     uint8 internal constant ACTION_COLLECT = 2;
-    uint8 internal constant ACTION_ROYALTIES = 3;
-    /// @notice Royalty ETH swapped per call: at most 0.5% of the IMD/ETH pool's ETH depth, at most once an hour.
-    ///         A sandwich then costs more in the pool's 1% fees than it can move the price (audit finding 1).
-    uint256 public constant MAX_ROYALTY_SWAP_BPS = 50;
-    uint256 public constant ROYALTY_INTERVAL = 1 hours;
 
     IPoolManager public immutable poolManager;
     address public immutable IMD;
     address public immutable router;
     address public immutable ethRouter;
-    /// @notice Robinhood Chain WETH: royalties paid in WETH (accepted offers, bids) are unwrapped before conversion.
-    address public immutable weth;
     /// @notice $Pepes and the PepesFamily v1 router: `openPool` only accepts a token whose buyback targets these.
     address public immutable pepes;
     address public immutable pepesRouter;
     /// @notice Launch tick, expressed as the tick of ($EARN per IMD). Sets the starting price.
     int24 public immutable startTick;
-    uint24 internal immutable imdEthFee;
-    int24 internal immutable imdEthTickSpacing;
-    address internal immutable imdEthHooks;
 
     address public owner;
     address public pendingOwner;
     address public feeRecipient;
     /// @notice The $EARN token, once launched.
     address public token;
-    uint256 public lastRoyaltyConversion;
 
     struct ImdEthPool {
         uint24 fee;
@@ -179,13 +159,12 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
         address feeRecipient_,
         int24 startTick_,
         ImdEthPool memory imdEthPool,
-        address weth_,
         address pepes_,
         address pepesRouter_
     ) {
         if (
-            imd == address(0) || owner_ == address(0) || feeRecipient_ == address(0) || weth_ == address(0)
-                || pepes_ == address(0) || pepesRouter_ == address(0)
+            imd == address(0) || owner_ == address(0) || feeRecipient_ == address(0) || pepes_ == address(0)
+                || pepesRouter_ == address(0)
         ) revert ZeroAddress();
         int24 limit = TickMath.maxUsableTick(TICK_SPACING) - TICK_SPACING;
         if (startTick_ % TICK_SPACING != 0 || startTick_ > limit || startTick_ < -limit) revert BadTick();
@@ -213,8 +192,7 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
         owner = owner_;
         feeRecipient = feeRecipient_;
         startTick = startTick_;
-        (imdEthFee, imdEthTickSpacing, imdEthHooks) = (imdEthPool.fee, imdEthPool.tickSpacing, imdEthPool.hooks);
-        (weth, pepes, pepesRouter) = (weth_, pepes_, pepesRouter_);
+        (pepes, pepesRouter) = (pepes_, pepesRouter_);
         router = address(new PepesFamilyRouter(poolManager_, address(this)));
         ethRouter = address(
             new PepesFamilyEthRouter(
@@ -382,62 +360,6 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
         else poolManager.unlock(abi.encode(ACTION_COLLECT, abi.encode(quote)));
     }
 
-    /// @notice Royalties from marketplace sales arrive here in ETH (and WETH unwraps send ETH here).
-    receive() external payable {}
-
-    /// @notice Turns royalties held here into holder rewards, split like a trade fee: a quarter (1% of the sale) to
-    ///         `feeRecipient`, the rest (3%) to $EARN holders. Callable by anyone, at most once an hour:
-    ///           - WETH is unwrapped to ETH, IMD is split as it is;
-    ///           - ETH is swapped to IMD on the IMD/ETH pool, at most `maxRoyaltySwap()` per call (larger balances
-    ///             convert over several calls), so sandwiching it can't pay for the pool fees it costs.
-    /// @param minImdOut minimum IMD from this call's ETH swap (0 accepts the capped market price)
-    function convertRoyalties(uint256 minImdOut) external returns (uint256 imdOut) {
-        if (token == address(0)) return 0;
-        // Holders are credited below, which must never happen while someone else holds the PoolManager unlocked
-        // (pool tokens can be flash-borrowed there). Outside an unlock, the swap runs in this contract's own unlock.
-        if (poolManager.isUnlocked()) revert Unlocked();
-        if (block.timestamp < lastRoyaltyConversion + ROYALTY_INTERVAL) revert TooSoon();
-        lastRoyaltyConversion = block.timestamp;
-
-        uint256 wethBal = weth.balanceOf(address(this));
-        if (wethBal != 0) IWETH(weth).withdraw(wethBal);
-        uint256 imdBal = IMD.balanceOf(address(this));
-        if (imdBal != 0) {
-            uint256 toProtocol = (imdBal * PROTOCOL_FEE_BPS) / FEE_BPS;
-            IMD.transferOut(feeRecipient, toProtocol);
-            IMD.transferOut(token, imdBal - toProtocol);
-            PepesEarnToken(payable(token)).distribute();
-            emit ImdRoyaltiesSplit(imdBal, toProtocol, imdBal - toProtocol);
-        }
-        uint256 ethIn = address(this).balance;
-        uint256 cap = maxRoyaltySwap();
-        if (ethIn > cap) ethIn = cap;
-        if (ethIn != 0) {
-            imdOut = abi.decode(poolManager.unlock(abi.encode(ACTION_ROYALTIES, abi.encode(ethIn))), (uint256));
-        }
-        if (imdOut < minImdOut) revert Slippage();
-    }
-
-    /// @notice Most royalty ETH one `convertRoyalties` call swaps: 0.5% of the IMD/ETH pool's (virtual) ETH reserve
-    ///         at the current price.
-    function maxRoyaltySwap() public view returns (uint256) {
-        PoolId id = _imdEthKey().toId();
-        (uint160 sqrtP,,,) = poolManager.getSlot0(id);
-        if (sqrtP == 0) return 0;
-        uint256 ethDepth = FullMath.mulDiv(poolManager.getLiquidity(id), Q96, sqrtP);
-        return (ethDepth * MAX_ROYALTY_SWAP_BPS) / BPS;
-    }
-
-    function _imdEthKey() internal view returns (PoolKey memory) {
-        return PoolKey({
-            currency0: Currency.wrap(address(0)),
-            currency1: Currency.wrap(IMD),
-            fee: imdEthFee,
-            tickSpacing: imdEthTickSpacing,
-            hooks: IHooks(imdEthHooks)
-        });
-    }
-
     function _flush(address t) internal {
         uint256 amount = pendingHolderFees[t];
         if (amount == 0) return;
@@ -457,27 +379,6 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
         emit ProtocolFeesCollected(quote, feeRecipient, amount);
     }
 
-    function _convertRoyalties(uint256 ethIn) internal returns (uint256 imdOut) {
-        BalanceDelta delta = poolManager.swap(
-            _imdEthKey(),
-            SwapParams({
-                zeroForOne: true,
-                amountSpecified: -int256(ethIn),
-                sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
-            }),
-            ""
-        );
-        uint256 ethPaid = uint256(-int256(delta.amount0()));
-        imdOut = uint256(int256(delta.amount1()));
-        poolManager.settle{value: ethPaid}();
-        uint256 toProtocol = (imdOut * PROTOCOL_FEE_BPS) / FEE_BPS;
-        poolManager.take(Currency.wrap(IMD), feeRecipient, toProtocol);
-        // Inside our own unlock nobody else can hold borrowed $EARN, so distributing here is safe.
-        poolManager.take(Currency.wrap(IMD), token, imdOut - toProtocol);
-        PepesEarnToken(payable(token)).distribute();
-        emit RoyaltiesConverted(ethPaid, imdOut, toProtocol, imdOut - toProtocol);
-    }
-
     function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
         (uint8 action, bytes memory payload) = abi.decode(data, (uint8, bytes));
         if (action == ACTION_ADD_LIQUIDITY) {
@@ -486,10 +387,8 @@ contract PepesEarnIMD is IHooks, IUnlockCallback {
             _addLaunchLiquidity(key, t, tick, tokenIs1);
         } else if (action == ACTION_FLUSH) {
             _flush(abi.decode(payload, (address)));
-        } else if (action == ACTION_COLLECT) {
-            _collect(abi.decode(payload, (address)));
         } else {
-            return abi.encode(_convertRoyalties(abi.decode(payload, (uint256))));
+            _collect(abi.decode(payload, (address)));
         }
         return "";
     }

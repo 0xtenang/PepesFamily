@@ -59,19 +59,6 @@ contract MockPepesRouter {
     }
 }
 
-/// @dev Minimal WETH: deposit / withdraw / transfer.
-contract MockWETH is MockIMD {
-    function deposit() external payable {
-        balanceOf[msg.sender] += msg.value;
-    }
-
-    function withdraw(uint256 amt) external {
-        balanceOf[msg.sender] -= amt;
-        (bool ok,) = msg.sender.call{value: amt}("");
-        require(ok, "eth");
-    }
-}
-
 /// @dev A token that copies the real one's wiring but points its buyback at another router (audit finding 6).
 contract FakeEarn {
     PepesEarnIMD immutable h;
@@ -91,26 +78,6 @@ contract FakeEarn {
     function pepesRouter() external view returns (address) { return badRouter; }
     function balanceOf(address) external pure returns (uint256) { return 2_000e18; }
     function totalSupply() external pure returns (uint256) { return 2_000e18; }
-}
-
-/// @dev Calls convertRoyalties from inside its own PoolManager unlock (where pool tokens could be borrowed).
-contract UnlockedCaller is IUnlockCallback {
-    IPoolManager immutable pm;
-    PepesEarnIMD immutable hook;
-
-    constructor(IPoolManager pm_, PepesEarnIMD hook_) {
-        pm = pm_;
-        hook = hook_;
-    }
-
-    function run() external {
-        pm.unlock("");
-    }
-
-    function unlockCallback(bytes calldata) external returns (bytes memory) {
-        hook.convertRoyalties(0);
-        return "";
-    }
 }
 
 /// @notice The v3 audit attack against $EARN: borrow the pool's $EARN inside an unlock, then claim/distribute.
@@ -151,7 +118,6 @@ contract PepesEarnTest is Test {
     PoolManager pm;
     MockIMD imd;
     MockPepes pepes;
-    MockWETH weth;
     MockPepesRouter pepesRouter;
     PoolKey imdEthKey;
     PepesEarnIMD hook;
@@ -174,7 +140,6 @@ contract PepesEarnTest is Test {
         pm = new PoolManager(address(this));
         imd = new MockIMD();
         pepes = new MockPepes();
-        weth = new MockWETH();
         pepesRouter = new MockPepesRouter(imd, pepes);
         extRouter = new PoolSwapTest(pm);
         renderer = new PepesEarnRenderer();
@@ -208,7 +173,6 @@ contract PepesEarnTest is Test {
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(START_MCAP, SUPPLY),
                 PepesEarnIMD.ImdEthPool(10_000, 100, address(0)),
-                address(weth),
                 address(pepes),
                 address(pepesRouter)
             )
@@ -548,94 +512,40 @@ contract PepesEarnTest is Test {
 
     // ------------------------------------------------------------ royalties
 
-    function test_royalties_anyoneConvertsAndSplits() public {
-        assertEq(mirror.royaltyReceiver(), address(hook));
+    // re-check finding 2: a gift of dust must not keep someone's rewards from expiring
+    function test_expiry_dustGiftDoesNotResetTimer() public {
+        _buy(alice, 100e18);
+        _buy(bob, 100e18);
+        vm.warp(vm.getBlockTimestamp() + 31 days);
+        uint256 expired = earn.expiredRewardsOf(alice);
+        assertGt(expired, 0);
+        vm.prank(bob);
+        earn.transfer(alice, 1); // bob gifts alice 1 wei
+        assertGe(earn.expiredRewardsOf(alice), expired - 1, "a gift is not alice's activity");
+        // ...but alice acting herself (a transfer she initiates) still counts
+        vm.prank(alice);
+        earn.transfer(carol, 1);
+        assertEq(earn.expiredRewardsOf(alice), 0);
+        // and a wallet that buys is active
+        _buy(dan, 10e18);
+        assertEq(earn.lastActive(dan), vm.getBlockTimestamp());
+    }
+
+    // ------------------------------------------------------------ royalties
+
+    // re-check finding 1: royalties are 1%, paid by marketplaces straight to the protocol fee recipient; the hook
+    // holds and swaps nothing, so there is nothing to sandwich or snipe
+    function test_royalties_onePercentToFeeRecipient_followsChanges() public {
         (address recv, uint256 amt) = mirror.royaltyInfo(1, 1 ether);
-        assertEq(recv, address(hook));
-        assertEq(amt, 0.04 ether);
+        assertEq(recv, FEE_RECIPIENT);
+        assertEq(amt, 0.01 ether);
         assertTrue(mirror.supportsInterface(0x2a55205a));
-
-        _buy(alice, 100e18); // a holder to receive the 3%
-        _buy(bob, 10e18); // releases the first buy's waiting fee, so only the royalty is measured below
-        (bool ok,) = address(hook).call{value: 1 ether}(""); // a marketplace pays a royalty
-        assertTrue(ok);
-
-        uint256 feeBefore = imd.balanceOf(FEE_RECIPIENT);
-        uint256 holdersBefore = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
-        vm.prank(carol); // anyone
-        uint256 out = hook.convertRoyalties(0.9e18);
-        assertGt(out, 0.9e18);
-        assertEq(address(hook).balance, 0);
-        assertEq(imd.balanceOf(FEE_RECIPIENT) - feeBefore, out / 4);
-        uint256 holdersAfter = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
-        assertApproxEqAbs(holdersAfter - holdersBefore, out - out / 4, 10, "3% of the sale to holders");
-
-        vm.warp(vm.getBlockTimestamp() + 1 hours);
-        (ok,) = address(hook).call{value: 1 ether}("");
-        vm.expectRevert(PepesEarnIMD.Slippage.selector);
-        hook.convertRoyalties(100e18);
-    }
-
-    // audit finding 1: at most 0.5% of the IMD/ETH pool's ETH depth per call, at most once an hour
-    function test_royalties_cappedPerCallAndHourly() public {
-        _buy(alice, 100e18);
-        vm.deal(address(hook), 500 ether);
-        uint256 cap = hook.maxRoyaltySwap();
-        assertApproxEqRel(cap, 50 ether, 0.001e18, "0.5% of the 10,000 ETH depth");
-        hook.convertRoyalties(0);
-        assertEq(address(hook).balance, 500 ether - cap);
-        vm.expectRevert(PepesEarnIMD.TooSoon.selector);
-        hook.convertRoyalties(0);
-        vm.warp(vm.getBlockTimestamp() + 1 hours);
-        hook.convertRoyalties(0);
-        assertLt(address(hook).balance, 500 ether - cap);
-    }
-
-    // audit finding 1, reproduced: buy IMD with ETH, convert, sell back. With the cap the attacker loses.
-    function test_royalties_sandwichDoesNotPay() public {
-        _buy(alice, 100e18);
-        _buy(bob, 10e18);
-        vm.deal(address(hook), 500 ether);
-        vm.deal(dan, 8_000 ether);
-        uint256 eth0 = dan.balance;
-        uint256 imd0 = imd.balanceOf(dan);
-        vm.startPrank(dan);
-        extRouter.swap{value: 7_000 ether}(imdEthKey, SwapParams(true, -7_000 ether, TickMath.MIN_SQRT_PRICE + 1), settings, "");
-        uint256 got = imd.balanceOf(dan) - imd0;
-        hook.convertRoyalties(0);
-        extRouter.swap(imdEthKey, SwapParams(false, -int256(got), TickMath.MAX_SQRT_PRICE - 1), settings, "");
-        vm.stopPrank();
-        assertEq(imd.balanceOf(dan), imd0);
-        assertLt(dan.balance, eth0, "sandwiching the royalty conversion must lose money");
-        emit log_named_decimal_uint("attacker ETH lost", eth0 - dan.balance, 18);
-    }
-
-    // audit finding 3: royalties paid in WETH (offers, bids) or IMD are no longer stuck
-    function test_royalties_wethUnwrappedAndImdSplit() public {
-        _buy(alice, 100e18);
-        _buy(bob, 10e18);
-        weth.deposit{value: 2 ether}();
-        weth.transfer(address(hook), 2 ether); // royalty on an accepted WETH offer
-        imd.transfer(address(hook), 4e18); // royalty on an IMD sale
-        uint256 feeBefore = imd.balanceOf(FEE_RECIPIENT);
-        uint256 holdersBefore = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
-        uint256 out = hook.convertRoyalties(0);
-        assertGt(out, 1.9e18); // the 2 unwrapped ETH were swapped
-        assertEq(weth.balanceOf(address(hook)), 0);
-        assertEq(imd.balanceOf(address(hook)), 0);
-        assertEq(address(hook).balance, 0);
-        assertEq(imd.balanceOf(FEE_RECIPIENT) - feeBefore, 1e18 + out / 4);
-        uint256 holdersAfter = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
-        assertApproxEqAbs(holdersAfter - holdersBefore, 3e18 + out - out / 4, 20);
-    }
-
-    function test_royalties_refusedInsideSomeoneElsesUnlock() public {
-        _buy(alice, 100e18);
-        vm.deal(address(hook), 1 ether);
-        UnlockedCaller c = new UnlockedCaller(pm, hook);
-        vm.expectRevert();
-        c.run();
-        assertEq(address(hook).balance, 1 ether);
+        vm.prank(owner);
+        hook.setFeeRecipient(carol);
+        (recv,) = mirror.royaltyInfo(7, 1 ether);
+        assertEq(recv, carol);
+        (bool ok,) = address(hook).call{value: 1 ether}("");
+        assertFalse(ok, "the hook accepts no ETH");
     }
 
     // ------------------------------------------------------------ deployment guards
@@ -662,7 +572,7 @@ contract PepesEarnTest is Test {
             type(PepesEarnIMD).creationCode,
             abi.encode(
                 pm, address(imd), carol, FEE_RECIPIENT, DeployLib.startTickForMarketCap(START_MCAP, SUPPLY),
-                PepesEarnIMD.ImdEthPool(10_000, 100, address(0)), address(weth), address(pepes), address(pepesRouter)
+                PepesEarnIMD.ImdEthPool(10_000, 100, address(0)), address(pepes), address(pepesRouter)
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), _flags(), initCode, 0);

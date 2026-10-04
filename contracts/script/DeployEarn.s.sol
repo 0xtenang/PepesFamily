@@ -19,8 +19,6 @@ contract DeployEarn is Script {
     address constant PEPES = 0xE2C46c7068566740A33A4C93f5445B07BCfE5644;
     address constant V1_ROUTER = 0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
-    // Robinhood Chain WETH (Arbitrum bridged aeWETH): marketplace royalties paid in WETH are unwrapped.
-    address constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
     uint256 constant SUPPLY = 2_000e18;
 
     function run() external {
@@ -36,7 +34,6 @@ contract DeployEarn is Script {
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(startMcap, SUPPLY),
                 PepesEarnIMD.ImdEthPool({fee: 10_000, tickSpacing: 100, hooks: address(0)}),
-                WETH,
                 PEPES,
                 V1_ROUTER
             )

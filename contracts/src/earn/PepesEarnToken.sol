@@ -185,30 +185,36 @@ contract PepesEarnToken is DN404 {
     /// @dev Token transfers (ERC20 side, including pool trades) ...
     function _transfer(address from, address to, uint256 amount) internal override {
         super._transfer(from, to, amount);
-        _moved(from, to, amount);
+        _moved(from, to, amount, msg.sender);
     }
 
     /// @dev ... and NFT transfers on the mirror (marketplaces, wallet sends), which move one unit directly.
     function _transferFromNFT(address from, address to, uint256 id, address msgSender) internal override {
         super._transferFromNFT(from, to, id, msgSender);
-        _moved(from, to, _unit());
+        _moved(from, to, _unit(), msgSender);
     }
 
     /// @dev Reward bookkeeping for every balance change: keeps rewards with whoever held the tokens when they
-    ///      were earned, tracks the eligible supply, and marks both sides active.
-    function _moved(address from, address to, uint256 amount) internal {
+    ///      were earned, tracks the eligible supply, and records activity. `actor` is who initiated the move.
+    function _moved(address from, address to, uint256 amount, address actor) internal {
         // A zero-amount transferFrom needs no allowance, so it must not count as activity (audit finding 8).
         if (amount == 0) return;
         bool fromExcluded = isExcluded(from);
         bool toExcluded = isExcluded(to);
         int256 magCorrection = _toInt(magnifiedDividendPerShare * amount);
         if (!fromExcluded) {
+            // Sending (directly or through an allowance the holder gave) is the holder's own activity.
             magnifiedDividendCorrections[from] += magCorrection;
             lastActive[from] = block.timestamp;
         }
         if (!toExcluded) {
             magnifiedDividendCorrections[to] -= magCorrection;
-            lastActive[to] = block.timestamp;
+            // Receiving counts as activity only when the recipient acted: a buy from the pool (tokens come from an
+            // excluded address) or a transfer it initiated. A gift of dust can't keep someone's rewards from
+            // expiring (re-check finding 2); a new holder still gets a start time. Expiry stays correct: an
+            // unrecorded incoming transfer only raises the balance, which over-estimates "recent" rewards in the
+            // holder's favour.
+            if (fromExcluded || actor == to || lastActive[to] == 0) lastActive[to] = block.timestamp;
         }
         if (fromExcluded && !toExcluded) eligibleSupply += amount;
         else if (!fromExcluded && toExcluded) eligibleSupply -= amount;
