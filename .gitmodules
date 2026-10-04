@@ -4,3 +4,6 @@
 [submodule "contracts/lib/v4-core"]
 	path = contracts/lib/v4-core
 	url = https://github.com/Uniswap/v4-core
+[submodule "contracts/lib/dn404"]
+	path = contracts/lib/dn404
+	url = https://github.com/Vectorized/dn404

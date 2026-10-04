@@ -12,7 +12,12 @@ library DeployLib {
     /// @notice PepesFamily start tick (tick of tokens-per-quote) for a starting market cap of `marketCap` quote wei.
     ///         Rounded down to the tick spacing, so the real start is at most ~2% above the target.
     function startTickForMarketCap(uint256 marketCap) internal pure returns (int24 tick) {
-        uint256 sqrtPriceX96 = sqrt(FullMath.mulDiv(TOTAL_SUPPLY, 1 << 192, marketCap));
+        return startTickForMarketCap(marketCap, TOTAL_SUPPLY);
+    }
+
+    /// @notice Same for a token with `supply` (e.g. 2,000e18 for Pepes Earn IMD).
+    function startTickForMarketCap(uint256 marketCap, uint256 supply) internal pure returns (int24 tick) {
+        uint256 sqrtPriceX96 = sqrt(FullMath.mulDiv(supply, 1 << 192, marketCap));
         tick = TickMath.getTickAtSqrtPrice(uint160(sqrtPriceX96));
         int24 rem = tick % TICK_SPACING;
         tick -= rem < 0 ? rem + TICK_SPACING : rem;

@@ -73,11 +73,24 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PepesFamilyEthRouter.sol` | Buy or sell IMD-paired tokens with ETH in one transaction (ETH ⇄ IMD ⇄ token through the Uniswap v4 IMD/ETH pool). No owner, holds no funds. |
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards. |
 
+### Pepes Earn IMD (NFT collection, in development, not deployed yet)
+
+2,000 on-chain Pepes. Each NFT is backed by 1 `$EARN` token ([DN404](https://github.com/Vectorized/dn404)), which trades in a Uniswap v4 pool against IMD with the same 4% hook as PepesFamily v3 (1% protocol, 3% to `$EARN` holders in IMD, claimed manually). NFTs can also be traded on marketplaces (4% ERC-2981 royalty, converted to IMD and split the same way) and sold back to the pool at any time.
+
+| Contract | Role |
+| --- | --- |
+| `src/earn/PepesEarnPad.sol` | Launcher and v4 hook for the collection (one-time `launch`, liquidity locked forever). Exposes the PepesFamily interface, so `PepesFamilyRouter` and `PepesFamilyEthRouter` are reused unchanged. Converts royalties with `convertRoyalties`. |
+| `src/earn/PepesEarnToken.sol` | `$EARN` (DN404 base): holder rewards as in v3, no owner, no default Permit2 allowance, EIP-7702 wallets receive NFTs. Unclaimed rewards of a wallet inactive for 30 days (no claim and no `$EARN` movement), except what it earned in those 30 days, can be recycled by anyone into a reserve that can only buy `$Pepes` and send it to the burn address (`buybackAndBurnPepes`, timed by the launchpad owner). |
+| `src/earn/PepesEarnMirror.sol` | The ERC-721 side (DN404 mirror) with the ERC-2981 royalty. |
+| `src/earn/PepesEarnRenderer.sol` | Draws each NFT as SVG on-chain; traits from `keccak256(id)`. #1 "The King", #777 "Gold Pepe". |
+
+Deployment order (all from one account): `PepesEarnRenderer`, `PepesEarnPad` (CREATE2, hook flags `0x28CC`), `PepesEarnMirror(pad)`, `PepesEarnToken(pad, mirror, renderer, $Pepes, PepesFamily v1 router)`, then `pad.launch(token)` from the owner. Tests: `test/PepesEarn.t.sol`, and on a mainnet fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesEarnForkTest`.
+
 Uniswap v4 on Robinhood Chain: PoolManager `0x8366a39CC670B4001A1121B8F6A443A643e40951`, V4Quoter `0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94`.
 
 ## Setup
 
-Needs [Foundry](https://book.getfoundry.sh/getting-started/installation). Dependencies (forge-std, Uniswap v4-core) are git submodules:
+Needs [Foundry](https://book.getfoundry.sh/getting-started/installation). Dependencies (forge-std, Uniswap v4-core, DN404) are git submodules:
 
 ```bash
 git clone --recursive https://github.com/0xtenang/PepesFamily.git
