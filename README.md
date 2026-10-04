@@ -84,7 +84,7 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/earn/PepesEarnMirror.sol` | The ERC-721 side (DN404 mirror) with the ERC-2981 royalty. |
 | `src/earn/PepesEarnRenderer.sol` | Draws each NFT as SVG on-chain; traits from `keccak256(id)`. #1 "The King", #777 "Gold Pepe". |
 
-Deployment order (all from one account): `PepesEarnRenderer`, `PepesEarnIMD` (CREATE2, hook flags `0x28CC`), `PepesEarnMirror(earnIMD)`, `PepesEarnToken(earnIMD, mirror, renderer, $Pepes, PepesFamily v1 router)`, then `earnIMD.openPool(token)` from the owner. Tests: `test/PepesEarn.t.sol`, and on a mainnet fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesEarnForkTest`.
+Deployment order (all from one account): `PepesEarnRenderer`, `PepesEarnIMD` (CREATE2, hook flags `0x28CC`), `PepesEarnMirror(earnIMD)`, `PepesEarnToken(earnIMD, mirror, renderer, $Pepes, PepesFamily v1 router)`, then `earnIMD.openPool(token)` from the owner. `script/DeployEarn.s.sol` does all of it and writes `deployments/robinhood-earn.json`; copy those addresses into `CONFIG.earn` in `web/index.html` to switch the site's NFT tab from preview to live. Tests: `test/PepesEarn.t.sol`, and on a mainnet fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesEarnForkTest`.
 
 Uniswap v4 on Robinhood Chain: PoolManager `0x8366a39CC670B4001A1121B8F6A443A643e40951`, V4Quoter `0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94`.
 

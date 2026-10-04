@@ -303,6 +303,21 @@ contract PepesEarnToken is DN404 {
         emit PepesBoughtAndBurned(imdIn, burned);
     }
 
+    // ------------------------------------------------------------ views
+
+    /// @notice NFT ids owned by `holder`, positions [begin, end) of its owned list (end is capped to the count).
+    ///         Read-only helper for wallets and the website; `mirror.balanceOf(holder)` gives the count.
+    function ownedIds(address holder, uint256 begin, uint256 end) external view returns (uint256[] memory ids) {
+        DN404Storage storage $ = _getDN404Storage();
+        uint256 n = $.addressData[holder].ownedLength;
+        if (end > n) end = n;
+        if (begin >= end) return ids;
+        ids = new uint256[](end - begin);
+        for (uint256 i = begin; i < end; i++) {
+            ids[i - begin] = _get($.owned[holder], i);
+        }
+    }
+
     // ------------------------------------------------------------ checkpoints
 
     function checkpointCount() external view returns (uint256) {

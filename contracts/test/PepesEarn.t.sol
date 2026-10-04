@@ -216,6 +216,20 @@ contract PepesEarnTest is Test {
         assertEq(imd.balanceOf(address(earn)), 0.3e18);
     }
 
+    function test_ownedIds_listsExactlyTheHoldersNfts() public {
+        _buy(alice, 10e18);
+        _buy(bob, 5e18);
+        uint256 n = mirror.balanceOf(alice);
+        uint256[] memory ids = earn.ownedIds(alice, 0, type(uint256).max);
+        assertEq(ids.length, n);
+        for (uint256 i; i < ids.length; i++) assertEq(mirror.ownerOf(ids[i]), alice);
+        uint256[] memory page = earn.ownedIds(alice, 2, 4);
+        assertEq(page.length, 2);
+        assertEq(page[0], ids[2]);
+        assertEq(earn.ownedIds(alice, n, n + 5).length, 0);
+        assertEq(earn.ownedIds(carol, 0, 10).length, 0);
+    }
+
     function test_sell_burnsNfts() public {
         uint256 got = _buy(alice, 10e18);
         uint256 nfts = mirror.balanceOf(alice);
