@@ -278,9 +278,16 @@ const CONFIG = {
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
   // King of the hill spotlights launches, so the house token (Pepes) is left out. Remove an address to include it.
   kingExclude: ["0xe2c46c7068566740a33a4c93f5445b07bcfe5644"],
-  // Pepes Earn IMD NFT collection (#/nft). Filled in from contracts/deployments/robinhood-earn.json after deployment;
-  // while `hook` is empty the tab shows a preview.
-  earn: { hook: "", token: "", mirror: "", renderer: "", router: "", ethRouter: "" },
+  // Pepes Earn IMD NFT collection (#/nft), from contracts/deployments/robinhood-earn.json.
+  // With `hook` empty the tab shows a preview instead.
+  earn: {
+    hook: "0x41Edd4c96a25e9aC6e4CF80C40EB6B85c77aA8CC",
+    token: "0xf2363c208B1772C3c9dB7a3fe84d75Bf2881fc20",
+    mirror: "0x0e4bf5b83740F9E93ED739b2064165561CE75489",
+    renderer: "0xdb42735B94b45195cD175aE74C0AE5B40D9351cB",
+    router: "0x3a6ce89cc881aa054d289C7a9456AF4bc3217bcC",
+    ethRouter: "0xB5f81908d652332850dFFCcd898d7e0e0d70467F",
+  },
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
   // Independent audits by the IMD Swarm (reports are public on explorer.imd.fun).
@@ -295,7 +302,7 @@ const CONFIG = {
       url: "https://explorer.imd.fun/jobs/e6eda4d8-f50d-47cd-9464-9a272283ccd3",
       title: "Pepes Earn IMD NFT",
       result: "3 rounds: 10 findings → 5 → 3 (no high or medium in the final check)",
-      note: "Audited twice before deployment. All findings of both reports are fixed in the code: royalties now go straight to the protocol (nothing is swapped, so nothing can be sandwiched), the $Pepes buyback is capped and hourly, the 30-day expiry can't be gamed with dust, and deployment is one step. The final check found only low and info items about the 30-day activity rule, now fixed: claiming, sending, or receiving at least one whole $EARN (one NFT) counts as activity; dust doesn't.",
+      note: "Audited three times before deployment (audit, re-check, final check); every finding is fixed in the deployed code: royalties now go straight to the protocol (nothing is swapped, so nothing can be sandwiched), the $Pepes buyback is capped and hourly, the 30-day expiry can't be gamed with dust, deployment was one step, and only claiming, sending, or receiving at least one whole $EARN (one NFT) counts as activity for the 30-day rule; dust doesn't. Source verified on Sourcify.",
       recheck: "https://explorer.imd.fun/jobs/f6d3cd0e-8371-417b-80d6-7b99fc9efa0c",
       final: "https://explorer.imd.fun/jobs/a58eb2c6-bfc3-441e-86d8-432c2ab15114",
     },

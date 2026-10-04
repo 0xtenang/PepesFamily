@@ -73,7 +73,19 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PepesFamilyEthRouter.sol` | Buy or sell IMD-paired tokens with ETH in one transaction (ETH ⇄ IMD ⇄ token through the Uniswap v4 IMD/ETH pool). No owner, holds no funds. |
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards. |
 
-### Pepes Earn IMD (NFT collection, in development, not deployed yet)
+### Pepes Earn IMD (NFT collection)
+
+Live since 2026-10-05 (block 80291676), all contracts source-verified:
+
+| Contract | Address |
+| --- | --- |
+| PepesEarnIMD (hook, pool owner) | [`0x41Edd4c96a25e9aC6e4CF80C40EB6B85c77aA8CC`](https://robinhoodchain.blockscout.com/address/0x41Edd4c96a25e9aC6e4CF80C40EB6B85c77aA8CC) |
+| $EARN token | [`0xf2363c208B1772C3c9dB7a3fe84d75Bf2881fc20`](https://robinhoodchain.blockscout.com/address/0xf2363c208B1772C3c9dB7a3fe84d75Bf2881fc20) |
+| NFT (ERC-721 mirror) | [`0x0e4bf5b83740F9E93ED739b2064165561CE75489`](https://robinhoodchain.blockscout.com/address/0x0e4bf5b83740F9E93ED739b2064165561CE75489) |
+| Renderer | [`0xdb42735B94b45195cD175aE74C0AE5B40D9351cB`](https://robinhoodchain.blockscout.com/address/0xdb42735B94b45195cD175aE74C0AE5B40D9351cB) |
+| Router / ETH router | [`0x3a6ce89cc881aa054d289C7a9456AF4bc3217bcC`](https://robinhoodchain.blockscout.com/address/0x3a6ce89cc881aa054d289C7a9456AF4bc3217bcC) / [`0xB5f81908d652332850dFFCcd898d7e0e0d70467F`](https://robinhoodchain.blockscout.com/address/0xB5f81908d652332850dFFCcd898d7e0e0d70467F) |
+
+Audits (IMD Swarm): [audit](https://explorer.imd.fun/jobs/e6eda4d8-f50d-47cd-9464-9a272283ccd3), [re-check](https://explorer.imd.fun/jobs/f6d3cd0e-8371-417b-80d6-7b99fc9efa0c), [final check](https://explorer.imd.fun/jobs/a58eb2c6-bfc3-441e-86d8-432c2ab15114); deployed from commit `36c2614`.
 
 On-chain Pepes backed by 2,000 `$EARN` tokens ([DN404](https://github.com/Vectorized/dn404)): each whole `$EARN` held is one NFT (at most 1,999 can be in wallets, since a dust buffer stays burned). `$EARN` trades in a Uniswap v4 pool against IMD with the same 4% hook as PepesFamily v3 (1% protocol, 3% to `$EARN` holders in IMD, claimed manually). NFTs can also be traded on marketplaces (1% ERC-2981 royalty, paid by marketplaces straight to the protocol fee recipient) and sold back to the pool at any time.
 
