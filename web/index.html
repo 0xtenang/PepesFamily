@@ -291,6 +291,12 @@ const CONFIG = {
       result: "7 findings: 1 medium, 3 low, 3 info",
       note: "Medium: a third-party swap with a tight price limit that only partly fills pays 4% of the requested amount. Our routers always fill fully and are not affected.",
     },
+    nft: {
+      url: "https://explorer.imd.fun/jobs/e6eda4d8-f50d-47cd-9464-9a272283ccd3",
+      title: "Pepes Earn IMD NFT",
+      result: "10 findings: 3 medium, 2 low, 5 info",
+      note: "Audited before deployment. Nothing is live yet: the findings are being fixed and re-audited before the collection opens. Main fixes: limits on royalty conversion and $Pepes buybacks so they can't be sandwiched, WETH royalties, and the exact 30-day boundary.",
+    },
     tokens: {
       "0xe2c46c7068566740a33a4c93f5445b07bcfe5644": {
         url: "https://explorer.imd.fun/jobs/46a0c47b-d3ad-4c50-973e-369203a488ce",
@@ -995,7 +1001,7 @@ async function renderHome() {
     <div class="grid" id="list"><div class="card muted">Loading…</div></div>
     ${sec(3, "Audits")}
     <div class="grid audits">
-      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens)].map((a) => `
+      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens), CONFIG.audits.nft].map((a) => `
         <a class="card" href="${a.url}" target="_blank" rel="noopener noreferrer">
           <span class="h">Audited by IMD Swarm ↗</span>
           <div style="font-weight:600">${esc(a.title)}</div>
@@ -1537,9 +1543,19 @@ function renderNftPreview() {
     <div class="hero"><div><h1>Pepes Earn IMD NFT</h1>
       <p>2,000 on-chain Pepes. 1 $EARN = 1 NFT. Every trade pays 3% to holders in IMD.</p></div></div>
     <div class="card" style="margin-bottom:14px"><span class="h">Coming soon</span>
-      <p class="stat" style="margin:0">Opening after the independent IMD Swarm audit. Here's what the collection looks like: every image is drawn on-chain.</p></div>
+      <p class="stat" style="margin:0">Audited by IMD Swarm; opening once the audit fixes are done and re-checked. Here's what the collection looks like: every image is drawn on-chain.</p></div>
+    ${nftAuditCard("margin-bottom:14px")}
     <img class="share-img" src="/earn-preview.jpg" alt="Sample Pepes Earn IMD NFTs" style="aspect-ratio:auto;max-width:900px">
     ${nftHowItWorks(1)}`;
+}
+
+/// The collection's IMD Swarm audit (CONFIG.audits.nft).
+function nftAuditCard(style = "") {
+  const a = CONFIG.audits.nft;
+  return `<a class="card" href="${a.url}" target="_blank" rel="noopener noreferrer" style="display:block;${style}">
+    <span class="h">Audited by IMD Swarm ↗</span>
+    <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
+    <div class="stat">${esc(a.note)}</div></a>`;
 }
 
 function nftHowItWorks(n) {
@@ -1604,6 +1620,7 @@ async function renderNft() {
           <div class="fees">4% fee: 1% protocol, 3% to $EARN holders. Each whole $EARN you hold is one NFT.</div>
         </div>
         <div class="card" style="margin-top:14px"><span class="h">Your IMD rewards</span><div id="nrew" class="stat">${account ? "Loading…" : "Connect a wallet to see your rewards."}</div></div>
+        ${nftAuditCard("margin-top:14px")}
         ${isOwner ? `<div class="card" style="margin-top:14px" id="nadmin"><span class="h">Owner tools</span><div class="stat">Loading…</div></div>` : ""}
       </div>
     </div>
