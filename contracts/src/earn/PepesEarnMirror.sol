@@ -11,8 +11,9 @@ contract PepesEarnMirror is DN404Mirror {
     uint256 public constant ROYALTY_BPS = 400;
     address public immutable royaltyReceiver;
 
-    /// @dev Only the account deploying this mirror can link it, so it must also deploy the token right after.
-    constructor(address hook) DN404Mirror(msg.sender) {
+    /// @dev Deployed by PepesEarnToken's constructor, which links it in the same transaction. `deployer` is the
+    ///      account deploying the token: DN404 checks the link against it, and no one can step in between.
+    constructor(address hook, address deployer) DN404Mirror(deployer) {
         royaltyReceiver = hook;
     }
 

@@ -26,14 +26,28 @@ import {MockIMD} from "./PepesFamily.t.sol";
 /// @dev Stands in for $Pepes: any ERC20 the buyback router can mint.
 contract MockPepes is MockIMD {}
 
-/// @dev Stands in for the PepesFamily v1 router: buys "Pepes" with IMD at 1,000 Pepes per IMD for msg.sender.
+/// @dev Stands in for the PepesFamily v1 router and pad: buys "Pepes" with IMD at 1,000 Pepes per IMD for
+///      msg.sender, and reports a real (plain) $Pepes/IMD pool so the buyback cap can read its depth.
 contract MockPepesRouter {
     MockIMD immutable imd;
     MockPepes immutable pepes;
+    PoolKey key;
 
     constructor(MockIMD imd_, MockPepes pepes_) {
         imd = imd_;
         pepes = pepes_;
+    }
+
+    function setKey(PoolKey memory k) external {
+        key = k;
+    }
+
+    function pad() external view returns (address) {
+        return address(this);
+    }
+
+    function poolKey(address) external view returns (PoolKey memory) {
+        return key;
     }
 
     function buy(address token, uint256 amountIn, uint256 minOut, uint256 deadline) external payable returns (uint256 out) {
@@ -42,6 +56,60 @@ contract MockPepesRouter {
         out = amountIn * 1000;
         require(out >= minOut, "slippage");
         pepes.mint(msg.sender, out);
+    }
+}
+
+/// @dev Minimal WETH: deposit / withdraw / transfer.
+contract MockWETH is MockIMD {
+    function deposit() external payable {
+        balanceOf[msg.sender] += msg.value;
+    }
+
+    function withdraw(uint256 amt) external {
+        balanceOf[msg.sender] -= amt;
+        (bool ok,) = msg.sender.call{value: amt}("");
+        require(ok, "eth");
+    }
+}
+
+/// @dev A token that copies the real one's wiring but points its buyback at another router (audit finding 6).
+contract FakeEarn {
+    PepesEarnIMD immutable h;
+    address immutable badRouter;
+
+    constructor(PepesEarnIMD h_, address badRouter_) {
+        h = h_;
+        badRouter = badRouter_;
+    }
+
+    function hook() external view returns (address) { return address(h); }
+    function router() external view returns (address) { return h.router(); }
+    function ethRouter() external view returns (address) { return h.ethRouter(); }
+    function poolManager() external view returns (address) { return address(h.poolManager()); }
+    function quote() external view returns (address) { return h.IMD(); }
+    function pepes() external view returns (address) { return h.pepes(); }
+    function pepesRouter() external view returns (address) { return badRouter; }
+    function balanceOf(address) external pure returns (uint256) { return 2_000e18; }
+    function totalSupply() external pure returns (uint256) { return 2_000e18; }
+}
+
+/// @dev Calls convertRoyalties from inside its own PoolManager unlock (where pool tokens could be borrowed).
+contract UnlockedCaller is IUnlockCallback {
+    IPoolManager immutable pm;
+    PepesEarnIMD immutable hook;
+
+    constructor(IPoolManager pm_, PepesEarnIMD hook_) {
+        pm = pm_;
+        hook = hook_;
+    }
+
+    function run() external {
+        pm.unlock("");
+    }
+
+    function unlockCallback(bytes calldata) external returns (bytes memory) {
+        hook.convertRoyalties(0);
+        return "";
     }
 }
 
@@ -83,7 +151,9 @@ contract PepesEarnTest is Test {
     PoolManager pm;
     MockIMD imd;
     MockPepes pepes;
+    MockWETH weth;
     MockPepesRouter pepesRouter;
+    PoolKey imdEthKey;
     PepesEarnIMD hook;
     PepesEarnToken earn;
     PepesEarnMirror mirror;
@@ -104,18 +174,30 @@ contract PepesEarnTest is Test {
         pm = new PoolManager(address(this));
         imd = new MockIMD();
         pepes = new MockPepes();
+        weth = new MockWETH();
         pepesRouter = new MockPepesRouter(imd, pepes);
         extRouter = new PoolSwapTest(pm);
         renderer = new PepesEarnRenderer();
 
-        // IMD/ETH pool for the ETH router and royalty conversion: 1 ETH = 1 IMD, deep full-range liquidity.
+        // IMD/ETH pool for the ETH router and royalty conversion: 1 ETH = 1 IMD, deep full-range liquidity
+        // (10,000 ETH of virtual depth, so a royalty swap is capped at 50 ETH).
         PoolKey memory imdEth = PoolKey(Currency.wrap(address(0)), Currency.wrap(address(imd)), 10_000, 100, IHooks(address(0)));
+        imdEthKey = imdEth;
         pm.initialize(imdEth, TickMath.getSqrtPriceAtTick(0));
         PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(pm);
         vm.deal(address(this), 100_000 ether);
         imd.mint(address(this), 100_000e18);
         imd.approve(address(lp), type(uint256).max);
         lp.modifyLiquidity{value: 20_000 ether}(imdEth, ModifyLiquidityParams(-887200, 887200, 10_000e18, 0), "");
+
+        // A plain $Pepes/IMD pool at 1:1 with 1,000 of virtual depth: the buyback cap reads it (2% = 20 IMD).
+        pepes.mint(address(this), 100_000e18);
+        pepes.approve(address(lp), type(uint256).max);
+        (address c0, address c1) = address(pepes) < address(imd) ? (address(pepes), address(imd)) : (address(imd), address(pepes));
+        PoolKey memory pepesKey = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
+        pm.initialize(pepesKey, TickMath.getSqrtPriceAtTick(0));
+        lp.modifyLiquidity(pepesKey, ModifyLiquidityParams(-887220, 887220, 1_000e18, 0), "");
+        pepesRouter.setKey(pepesKey);
 
         bytes memory initCode = abi.encodePacked(
             type(PepesEarnIMD).creationCode,
@@ -125,7 +207,10 @@ contract PepesEarnTest is Test {
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(START_MCAP, SUPPLY),
-                PepesEarnIMD.ImdEthPool(10_000, 100, address(0))
+                PepesEarnIMD.ImdEthPool(10_000, 100, address(0)),
+                address(weth),
+                address(pepes),
+                address(pepesRouter)
             )
         );
         (bytes32 salt, address expected) = DeployLib.mineSalt(address(this), _flags(), initCode, 0);
@@ -138,8 +223,8 @@ contract PepesEarnTest is Test {
         router = PepesFamilyRouter(payable(hook.router()));
         ethRouter = PepesFamilyEthRouter(payable(hook.ethRouter()));
 
-        mirror = new PepesEarnMirror(address(hook));
-        earn = new PepesEarnToken(address(hook), address(mirror), address(renderer), address(pepes), address(pepesRouter));
+        earn = new PepesEarnToken(address(hook), address(renderer));
+        mirror = PepesEarnMirror(payable(earn.mirrorERC721()));
         vm.prank(owner);
         hook.openPool(address(earn));
 
@@ -371,29 +456,58 @@ contract PepesEarnTest is Test {
         earn.recycle(address(hook));
     }
 
-    // ------------------------------------------------------------ $Pepes buyback and burn
+    // audit finding 4: a wallet is inactive only after MORE than 30 days, and a reward distributed exactly 30 days
+    // ago still counts as recent
+    function test_expiry_exactly30DaysIsStillSafe() public {
+        uint256 t0 = vm.getBlockTimestamp();
+        _buy(alice, 100e18);
+        _buy(bob, 100e18); // alice earns in the same second as her own activity
+        vm.warp(t0 + 30 days);
+        assertEq(earn.expiredRewardsOf(alice), 0, "exactly 30 days: still active");
+        vm.warp(t0 + 30 days + 1);
+        assertEq(earn.expiredRewardsOf(alice), earn.withdrawableDividendOf(alice));
 
-    function _makeReserve() internal returns (uint256 reserve) {
+        // a reward that is exactly 30 days old stays claimable
+        _buy(carol, 100e18); // t1: carol active
+        uint256 t1 = vm.getBlockTimestamp();
+        vm.warp(t1 + 1 days);
+        _buy(dan, 100e18); // carol earns at t1 + 1 day
+        uint256 earned = earn.withdrawableDividendOf(carol);
+        assertGt(earned, 0);
+        vm.warp(t1 + 31 days); // that reward is exactly 30 days old
+        assertEq(earn.expiredRewardsOf(carol), 0);
+        vm.warp(t1 + 31 days + 1);
+        assertApproxEqAbs(earn.expiredRewardsOf(carol), earned, 2);
+    }
+
+    // audit finding 8: a zero-amount transferFrom (no allowance needed) must not reset anyone's timer
+    function test_expiry_zeroTransferDoesNotCountAsActivity() public {
         _buy(alice, 100e18);
         _buy(bob, 100e18);
-        vm.warp(block.timestamp + 31 days);
+        vm.warp(vm.getBlockTimestamp() + 31 days);
+        uint256 expired = earn.expiredRewardsOf(alice);
+        assertGt(expired, 0);
+        vm.prank(dan);
+        earn.transferFrom(alice, dan, 0);
+        assertEq(earn.expiredRewardsOf(alice), expired);
+    }
+
+    // ------------------------------------------------------------ $Pepes buyback and burn
+
+    function _makeReserve(uint256 bobBuy) internal returns (uint256 reserve) {
+        _buy(alice, 100e18);
+        _buy(bob, bobBuy);
+        vm.warp(vm.getBlockTimestamp() + 31 days);
         reserve = earn.recycle(alice);
         assertGt(reserve, 0);
     }
 
-    function test_buyback_burnsPepesWithReserveOnly() public {
-        uint256 reserve = _makeReserve();
-        vm.prank(bob);
-        vm.expectRevert(PepesEarnToken.NotOwner.selector);
-        earn.buybackAndBurnPepes(reserve, 0, block.timestamp);
-
-        vm.prank(owner);
-        vm.expectRevert(PepesEarnToken.BadAmount.selector);
-        earn.buybackAndBurnPepes(reserve + 1, 0, block.timestamp);
-
+    function test_buyback_anyoneBurnsPepesWithTheReserveOnly() public {
+        uint256 reserve = _makeReserve(100e18); // ~3 IMD, under the 20 IMD cap
+        assertGt(earn.maxBuyback(), reserve);
         uint256 owedToHolders = earn.accountedBalance();
-        vm.prank(owner);
-        uint256 burned = earn.buybackAndBurnPepes(reserve, reserve * 1000, block.timestamp);
+        vm.prank(carol); // anyone
+        uint256 burned = earn.buybackAndBurnPepes(reserve * 1000, vm.getBlockTimestamp());
         assertEq(burned, reserve * 1000);
         assertEq(pepes.balanceOf(DEAD), burned);
         assertEq(pepes.balanceOf(address(earn)), 0);
@@ -404,16 +518,37 @@ contract PepesEarnTest is Test {
         assertEq(imd.allowance(address(earn), address(pepesRouter)), 0);
     }
 
+    // audit finding 2: at most 2% of the $Pepes pool's IMD depth per call, at most once an hour
+    function test_buyback_cappedPerCallAndHourly() public {
+        uint256 reserve = _makeReserve(1_000e18); // ~30 IMD expired
+        uint256 cap = earn.maxBuyback();
+        assertApproxEqRel(cap, 20e18, 0.001e18, "2% of the 1,000 IMD depth");
+        assertGt(reserve, cap);
+        uint256 burned = earn.buybackAndBurnPepes(0, vm.getBlockTimestamp());
+        assertEq(burned, cap * 1000);
+        assertEq(earn.buybackReserve(), reserve - cap);
+
+        vm.expectRevert(PepesEarnToken.TooSoon.selector);
+        earn.buybackAndBurnPepes(0, vm.getBlockTimestamp());
+
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
+        earn.buybackAndBurnPepes(0, vm.getBlockTimestamp());
+        assertEq(earn.buybackReserve(), 0);
+
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
+        vm.expectRevert(PepesEarnToken.BadAmount.selector); // nothing left
+        earn.buybackAndBurnPepes(0, vm.getBlockTimestamp());
+    }
+
     function test_buyback_respectsMinOut() public {
-        uint256 reserve = _makeReserve();
-        vm.prank(owner);
+        uint256 reserve = _makeReserve(100e18);
         vm.expectRevert();
-        earn.buybackAndBurnPepes(reserve, reserve * 1000 + 1, block.timestamp);
+        earn.buybackAndBurnPepes(reserve * 1000 + 1, vm.getBlockTimestamp());
     }
 
     // ------------------------------------------------------------ royalties
 
-    function test_royalties_convertedToImdAndSplit() public {
+    function test_royalties_anyoneConvertsAndSplits() public {
         assertEq(mirror.royaltyReceiver(), address(hook));
         (address recv, uint256 amt) = mirror.royaltyInfo(1, 1 ether);
         assertEq(recv, address(hook));
@@ -425,13 +560,9 @@ contract PepesEarnTest is Test {
         (bool ok,) = address(hook).call{value: 1 ether}(""); // a marketplace pays a royalty
         assertTrue(ok);
 
-        vm.prank(bob);
-        vm.expectRevert(PepesEarnIMD.NotOwner.selector);
-        hook.convertRoyalties(0);
-
         uint256 feeBefore = imd.balanceOf(FEE_RECIPIENT);
         uint256 holdersBefore = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
-        vm.prank(owner);
+        vm.prank(carol); // anyone
         uint256 out = hook.convertRoyalties(0.9e18);
         assertGt(out, 0.9e18);
         assertEq(address(hook).balance, 0);
@@ -439,10 +570,110 @@ contract PepesEarnTest is Test {
         uint256 holdersAfter = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
         assertApproxEqAbs(holdersAfter - holdersBefore, out - out / 4, 10, "3% of the sale to holders");
 
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
         (ok,) = address(hook).call{value: 1 ether}("");
-        vm.prank(owner);
         vm.expectRevert(PepesEarnIMD.Slippage.selector);
         hook.convertRoyalties(100e18);
+    }
+
+    // audit finding 1: at most 0.5% of the IMD/ETH pool's ETH depth per call, at most once an hour
+    function test_royalties_cappedPerCallAndHourly() public {
+        _buy(alice, 100e18);
+        vm.deal(address(hook), 500 ether);
+        uint256 cap = hook.maxRoyaltySwap();
+        assertApproxEqRel(cap, 50 ether, 0.001e18, "0.5% of the 10,000 ETH depth");
+        hook.convertRoyalties(0);
+        assertEq(address(hook).balance, 500 ether - cap);
+        vm.expectRevert(PepesEarnIMD.TooSoon.selector);
+        hook.convertRoyalties(0);
+        vm.warp(vm.getBlockTimestamp() + 1 hours);
+        hook.convertRoyalties(0);
+        assertLt(address(hook).balance, 500 ether - cap);
+    }
+
+    // audit finding 1, reproduced: buy IMD with ETH, convert, sell back. With the cap the attacker loses.
+    function test_royalties_sandwichDoesNotPay() public {
+        _buy(alice, 100e18);
+        _buy(bob, 10e18);
+        vm.deal(address(hook), 500 ether);
+        vm.deal(dan, 8_000 ether);
+        uint256 eth0 = dan.balance;
+        uint256 imd0 = imd.balanceOf(dan);
+        vm.startPrank(dan);
+        extRouter.swap{value: 7_000 ether}(imdEthKey, SwapParams(true, -7_000 ether, TickMath.MIN_SQRT_PRICE + 1), settings, "");
+        uint256 got = imd.balanceOf(dan) - imd0;
+        hook.convertRoyalties(0);
+        extRouter.swap(imdEthKey, SwapParams(false, -int256(got), TickMath.MAX_SQRT_PRICE - 1), settings, "");
+        vm.stopPrank();
+        assertEq(imd.balanceOf(dan), imd0);
+        assertLt(dan.balance, eth0, "sandwiching the royalty conversion must lose money");
+        emit log_named_decimal_uint("attacker ETH lost", eth0 - dan.balance, 18);
+    }
+
+    // audit finding 3: royalties paid in WETH (offers, bids) or IMD are no longer stuck
+    function test_royalties_wethUnwrappedAndImdSplit() public {
+        _buy(alice, 100e18);
+        _buy(bob, 10e18);
+        weth.deposit{value: 2 ether}();
+        weth.transfer(address(hook), 2 ether); // royalty on an accepted WETH offer
+        imd.transfer(address(hook), 4e18); // royalty on an IMD sale
+        uint256 feeBefore = imd.balanceOf(FEE_RECIPIENT);
+        uint256 holdersBefore = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
+        uint256 out = hook.convertRoyalties(0);
+        assertGt(out, 1.9e18); // the 2 unwrapped ETH were swapped
+        assertEq(weth.balanceOf(address(hook)), 0);
+        assertEq(imd.balanceOf(address(hook)), 0);
+        assertEq(address(hook).balance, 0);
+        assertEq(imd.balanceOf(FEE_RECIPIENT) - feeBefore, 1e18 + out / 4);
+        uint256 holdersAfter = earn.withdrawableDividendOf(alice) + earn.withdrawableDividendOf(bob);
+        assertApproxEqAbs(holdersAfter - holdersBefore, 3e18 + out - out / 4, 20);
+    }
+
+    function test_royalties_refusedInsideSomeoneElsesUnlock() public {
+        _buy(alice, 100e18);
+        vm.deal(address(hook), 1 ether);
+        UnlockedCaller c = new UnlockedCaller(pm, hook);
+        vm.expectRevert();
+        c.run();
+        assertEq(address(hook).balance, 1 ether);
+    }
+
+    // ------------------------------------------------------------ deployment guards
+
+    // audit finding 5: the token deploys and links its mirror itself; nobody can link it to anything else
+    function test_mirror_linkedAtDeployAndCannotBeRelinked() public {
+        assertEq(mirror.baseERC20(), address(earn));
+        (bool ok,) = address(mirror).call(abi.encodeWithSelector(bytes4(0x0f4599e5), address(this)));
+        assertFalse(ok, "relink must fail");
+        assertEq(mirror.baseERC20(), address(earn));
+    }
+
+    // audit finding 6: the token's buyback targets come from the hook, and openPool checks them
+    function test_openPool_buybackTargetsMatchTheHook() public view {
+        assertEq(earn.pepes(), hook.pepes());
+        assertEq(earn.pepesRouter(), hook.pepesRouter());
+        assertEq(hook.pepes(), address(pepes));
+        assertEq(hook.pepesRouter(), address(pepesRouter));
+    }
+
+    function test_openPool_rejectsTokenWithAnotherBuybackRouter() public {
+        // a second, unopened hook (different owner, so a different CREATE2 address)
+        bytes memory initCode = abi.encodePacked(
+            type(PepesEarnIMD).creationCode,
+            abi.encode(
+                pm, address(imd), carol, FEE_RECIPIENT, DeployLib.startTickForMarketCap(START_MCAP, SUPPLY),
+                PepesEarnIMD.ImdEthPool(10_000, 100, address(0)), address(weth), address(pepes), address(pepesRouter)
+            )
+        );
+        (bytes32 salt,) = DeployLib.mineSalt(address(this), _flags(), initCode, 0);
+        address h2;
+        assembly {
+            h2 := create2(0, add(initCode, 0x20), mload(initCode), salt)
+        }
+        FakeEarn fake = new FakeEarn(PepesEarnIMD(payable(h2)), address(0xBAD));
+        vm.prank(carol);
+        vm.expectRevert(PepesEarnIMD.BadToken.selector);
+        PepesEarnIMD(payable(h2)).openPool(address(fake));
     }
 
     // ------------------------------------------------------------ audit regressions (v3 guards)

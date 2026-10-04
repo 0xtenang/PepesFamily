@@ -32,6 +32,7 @@ contract PepesEarnForkTest is Test {
     address constant V1_ROUTER = 0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
+    address constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
 
     PepesEarnIMD hook;
     PepesEarnToken earn;
@@ -58,7 +59,10 @@ contract PepesEarnForkTest is Test {
                 address(this),
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(2_000e18, 2_000e18),
-                PepesEarnIMD.ImdEthPool(10_000, 100, address(0))
+                PepesEarnIMD.ImdEthPool(10_000, 100, address(0)),
+                WETH,
+                PEPES,
+                V1_ROUTER
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), uint160(0x28CC), initCode, 0);
@@ -69,8 +73,8 @@ contract PepesEarnForkTest is Test {
         hook = PepesEarnIMD(payable(deployed));
         router = PepesFamilyRouter(payable(hook.router()));
         ethRouter = PepesFamilyEthRouter(payable(hook.ethRouter()));
-        mirror = new PepesEarnMirror(address(hook));
-        earn = new PepesEarnToken(address(hook), address(mirror), address(renderer), PEPES, V1_ROUTER);
+        earn = new PepesEarnToken(address(hook), address(renderer));
+        mirror = PepesEarnMirror(payable(earn.mirrorERC721()));
         hook.openPool(address(earn));
 
         address[3] memory users = [alice, bob, carol];
@@ -124,7 +128,8 @@ contract PepesEarnForkTest is Test {
         uint256 deadBefore = IERC20(PEPES).balanceOf(DEAD);
         uint256 pepesHolderFeesBefore =
             IV1Pad(V1_PAD).pendingHolderFees(PEPES) + IPepesToken(PEPES).totalDividendsDistributed();
-        uint256 burned = earn.buybackAndBurnPepes(expired, 1, block.timestamp);
+        assertLe(expired, earn.maxBuyback(), "small reserve: one buyback burns it all");
+        uint256 burned = earn.buybackAndBurnPepes(1, block.timestamp);
         assertGt(burned, 0);
         assertEq(IERC20(PEPES).balanceOf(DEAD) - deadBefore, burned, "bought $Pepes went to the burn address");
         assertEq(IERC20(PEPES).balanceOf(address(earn)), 0);
@@ -154,4 +159,43 @@ contract PepesEarnForkTest is Test {
         emit log_named_uint("$Pepes burned", burned);
         emit log_named_uint("royalty IMD", out);
     }
+
+    /// Audit finding 2, reproduced on the real $Pepes pool: buy $Pepes, trigger the buyback, sell the $Pepes.
+    /// With the per-call cap (2% of the pool's IMD depth) and the v1 hook's 4% per leg, the attacker loses.
+    function test_fork_buybackSandwichDoesNotPay() public {
+        // a large reserve: big trades, then everyone goes inactive for 31 days
+        vm.startPrank(address(PM));
+        IERC20(IMD).transfer(alice, 8_000e18);
+        IERC20(IMD).transfer(bob, 8_000e18);
+        IERC20(IMD).transfer(carol, 3_000e18);
+        vm.stopPrank();
+        _buy(alice, 8_000e18);
+        _buy(bob, 8_000e18);
+        vm.warp(block.timestamp + 31 days);
+        earn.recycle(alice);
+        earn.recycle(bob);
+        uint256 reserve = earn.buybackReserve();
+        uint256 cap = earn.maxBuyback();
+        emit log_named_decimal_uint("buyback reserve (IMD)", reserve, 18);
+        emit log_named_decimal_uint("cap per call (IMD)", cap, 18);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 imd0 = IERC20(IMD).balanceOf(carol);
+        vm.startPrank(carol);
+        IERC20(IMD).approve(V1_ROUTER, type(uint256).max);
+        uint256 bought = IV1Router(V1_ROUTER).buy(PEPES, 3_000e18, 0, deadline);
+        uint256 burned = earn.buybackAndBurnPepes(0, deadline);
+        IERC20(PEPES).approve(V1_ROUTER, bought);
+        IV1Router(V1_ROUTER).sell(PEPES, bought, 0, deadline);
+        vm.stopPrank();
+        assertGt(burned, 0);
+        uint256 imd1 = IERC20(IMD).balanceOf(carol);
+        emit log_named_decimal_uint("attacker IMD lost", imd0 > imd1 ? imd0 - imd1 : 0, 18);
+        assertLt(imd1, imd0, "sandwiching the buyback must lose money");
+    }
+}
+
+interface IV1Router {
+    function buy(address token, uint256 amountIn, uint256 minTokensOut, uint256 deadline) external payable returns (uint256);
+    function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline) external returns (uint256);
 }

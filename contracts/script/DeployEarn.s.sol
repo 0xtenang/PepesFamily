@@ -10,9 +10,8 @@ import {PepesEarnMirror} from "../src/earn/PepesEarnMirror.sol";
 import {PepesEarnRenderer} from "../src/earn/PepesEarnRenderer.sol";
 import {DeployLib} from "./DeployLib.sol";
 
-/// @notice Deploys Pepes Earn IMD: renderer, PepesEarnIMD (hook, at a mined CREATE2 address), mirror and $EARN, then
-///         opens the pool when the broadcasting account is the owner. All from one account (DN404 links mirror and
-///         token by deployer).
+/// @notice Deploys Pepes Earn IMD: renderer, PepesEarnIMD (hook, at a mined CREATE2 address) and $EARN (which deploys
+///         its NFT mirror itself), then opens the pool when the broadcasting account is the owner.
 ///   forge script script/DeployEarn.s.sol --rpc-url robinhood --broadcast --interactive
 contract DeployEarn is Script {
     IPoolManager constant POOL_MANAGER = IPoolManager(0x8366a39CC670B4001A1121B8F6A443A643e40951);
@@ -20,6 +19,8 @@ contract DeployEarn is Script {
     address constant PEPES = 0xE2C46c7068566740A33A4C93f5445B07BCfE5644;
     address constant V1_ROUTER = 0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
+    // Robinhood Chain WETH (Arbitrum bridged aeWETH): marketplace royalties paid in WETH are unwrapped.
+    address constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
     uint256 constant SUPPLY = 2_000e18;
 
     function run() external {
@@ -34,7 +35,10 @@ contract DeployEarn is Script {
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(startMcap, SUPPLY),
-                PepesEarnIMD.ImdEthPool({fee: 10_000, tickSpacing: 100, hooks: address(0)})
+                PepesEarnIMD.ImdEthPool({fee: 10_000, tickSpacing: 100, hooks: address(0)}),
+                WETH,
+                PEPES,
+                V1_ROUTER
             )
         );
         (bytes32 salt, address expected) =
@@ -46,9 +50,9 @@ contract DeployEarn is Script {
         (bool ok,) = CREATE2_FACTORY.call(abi.encodePacked(salt, initCode));
         require(ok && expected.code.length > 0, "hook deploy failed");
         PepesEarnIMD earnIMD = PepesEarnIMD(payable(expected));
-        PepesEarnMirror mirror = new PepesEarnMirror(address(earnIMD));
-        PepesEarnToken token =
-            new PepesEarnToken(address(earnIMD), address(mirror), address(renderer), PEPES, V1_ROUTER);
+        // the token deploys and links its NFT mirror in the same transaction
+        PepesEarnToken token = new PepesEarnToken(address(earnIMD), address(renderer));
+        PepesEarnMirror mirror = PepesEarnMirror(payable(token.mirrorERC721()));
         bool opened = msg.sender == owner;
         if (opened) earnIMD.openPool(address(token));
         vm.stopBroadcast();

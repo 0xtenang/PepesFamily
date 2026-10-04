@@ -5,11 +5,15 @@ import {DN404} from "dn404/DN404.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
 import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId} from "v4-core/src/types/PoolId.sol";
+import {Currency} from "v4-core/src/types/Currency.sol";
 import {SafeTransfer} from "../lib/SafeTransfer.sol";
+import {PepesEarnMirror} from "./PepesEarnMirror.sol";
 
 interface IEarnHook {
     function flush(address token) external;
-    function owner() external view returns (address);
 }
 
 interface IEarnHookInfo {
@@ -17,6 +21,8 @@ interface IEarnHookInfo {
     function ethRouter() external view returns (address);
     function poolManager() external view returns (address);
     function IMD() external view returns (address);
+    function pepes() external view returns (address);
+    function pepesRouter() external view returns (address);
 }
 
 interface IEarnRenderer {
@@ -29,29 +35,36 @@ interface IPepesRouter {
         external
         payable
         returns (uint256);
+    function pad() external view returns (address);
+}
+
+/// @dev PepesFamily v1 launchpad: gives the $Pepes pool key.
+interface IPepesPad {
+    function poolKey(address token) external view returns (PoolKey memory);
 }
 
 /// @title PepesEarnToken ($EARN)
-/// @notice Pepes Earn IMD: 2,000 $EARN tokens, each whole token shown as one on-chain NFT (DN404). $EARN trades in a
-///         Uniswap v4 pool against IMD through the PepesEarnIMD hook, which charges 4% of every swap: 1% protocol,
-///         3% to $EARN holders pro rata (same magnified-dividend accounting as PepesFamily v3, including its guard
-///         against flash-borrowed pool tokens).
+/// @notice Pepes Earn IMD: 2,000 $EARN tokens, each whole token held shown as one on-chain NFT (DN404). $EARN trades
+///         in a Uniswap v4 pool against IMD through the PepesEarnIMD hook, which charges 4% of every swap: 1%
+///         protocol, 3% to $EARN holders pro rata (same magnified-dividend accounting as PepesFamily v3, including
+///         its guard against flash-borrowed pool tokens).
 ///
-///         Rewards are claimed manually. Rewards of a wallet that has neither claimed nor moved any $EARN for
-///         30 days expire, except what it earned during those last 30 days: anyone may move expired rewards into
-///         the buyback reserve, which can only be spent buying $Pepes and sending them to the burn address.
-/// @dev The token has no owner (owner() is the zero address). The PepesEarnIMD owner may only time buybacks; there
-///      is no function that sends reserve, rewards or holders' tokens anywhere else.
+///         Rewards are claimed manually. Rewards of a wallet that has neither claimed nor moved any $EARN for more
+///         than 30 days expire, except what it earned during those last 30 days: anyone may move expired rewards
+///         into the buyback reserve, which can only be spent buying $Pepes and sending them to the burn address,
+///         by anyone, in capped steps.
+/// @dev No owner (owner() is the zero address) and no privileged function: nothing sends the reserve, rewards or
+///      holders' tokens anywhere but the burn swap and the holders themselves.
 contract PepesEarnToken is DN404 {
     using SafeTransfer for address;
     using TransientStateLibrary for IPoolManager;
+    using StateLibrary for IPoolManager;
 
     error Overflow();
     error Reentrancy();
-    error NotOwner();
     error NotEligible();
-    error StillActive();
     error BadAmount();
+    error TooSoon();
     error ApproveFailed();
 
     event DividendsDistributed(uint256 amount, uint256 eligibleSupply);
@@ -63,7 +76,12 @@ contract PepesEarnToken is DN404 {
     /// @dev Distributions wait until at least 1 whole token is held outside the pool. Bounds per-share growth.
     uint256 public constant MIN_ELIGIBLE_SUPPLY = 1e18;
     uint256 public constant INACTIVITY_PERIOD = 30 days;
+    /// @notice Reserve spent per buyback: at most 2% of the $Pepes pool's IMD depth, at most once an hour. A
+    ///         sandwich then costs more in the $Pepes pool's 4% fees than it can move the price (audit finding 2).
+    uint256 public constant MAX_BUYBACK_BPS = 200;
+    uint256 public constant BUYBACK_INTERVAL = 1 hours;
     uint256 internal constant MAGNITUDE = 2 ** 128;
+    uint256 internal constant Q96 = 2 ** 96;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     address public immutable hook;
@@ -92,6 +110,7 @@ contract PepesEarnToken is DN404 {
     uint256 public buybackReserve;
     uint256 public totalRecycled;
     uint256 public totalPepesBurned;
+    uint256 public lastBuyback;
 
     /// @dev magnifiedDividendPerShare after each distribution, by time: lets expiry compute what a holder earned
     ///      in the last 30 days (those rewards never expire).
@@ -111,25 +130,21 @@ contract PepesEarnToken is DN404 {
         _locked = 1;
     }
 
-    /// @dev Deployed by the same account that deployed `mirror` (DN404 links them by deployer). The whole supply
-    ///      goes to the hook (without NFTs), whose one-time `openPool` locks it in the pool.
-    constructor(
-        address hook_,
-        address mirror,
-        address renderer_,
-        address pepes_,
-        address pepesRouter_
-    ) {
+    /// @dev Deploys its own NFT mirror and links it in this same transaction, so nobody can link the mirror to
+    ///      something else first (audit finding 5). Routers, PoolManager, IMD and the buyback targets come from the
+    ///      hook. The whole supply goes to the hook (without NFTs), whose one-time `openPool` locks it in the pool.
+    constructor(address hook_, address renderer_) {
         IEarnHookInfo p = IEarnHookInfo(hook_);
         hook = hook_;
         router = p.router();
         ethRouter = p.ethRouter();
         poolManager = address(p.poolManager());
         quote = p.IMD();
+        pepes = p.pepes();
+        pepesRouter = p.pepesRouter();
         renderer = renderer_;
-        pepes = pepes_;
-        pepesRouter = pepesRouter_;
-        _initializeDN404(SUPPLY, hook_, mirror);
+        // DN404 lets only the mirror's recorded deployer link it; that is this constructor's caller.
+        _initializeDN404(SUPPLY, hook_, address(new PepesEarnMirror(hook_, msg.sender)));
     }
 
     // ------------------------------------------------------------ metadata
@@ -182,6 +197,8 @@ contract PepesEarnToken is DN404 {
     /// @dev Reward bookkeeping for every balance change: keeps rewards with whoever held the tokens when they
     ///      were earned, tracks the eligible supply, and marks both sides active.
     function _moved(address from, address to, uint256 amount) internal {
+        // A zero-amount transferFrom needs no allowance, so it must not count as activity (audit finding 8).
+        if (amount == 0) return;
         bool fromExcluded = isExcluded(from);
         bool toExcluded = isExcluded(to);
         int256 magCorrection = _toInt(magnifiedDividendPerShare * amount);
@@ -249,16 +266,18 @@ contract PepesEarnToken is DN404 {
     // ------------------------------------------------------------ expiry
 
     /// @notice Rewards of `holder` that have expired: everything unclaimed except what it earned in the last
-    ///         30 days, once it has neither claimed nor moved $EARN for 30 days. Zero while it is active.
+    ///         30 days, once it has neither claimed nor moved $EARN for more than 30 days. Zero while it is active.
+    /// @dev Both boundaries are exclusive on the holder's side (audit finding 4): a wallet is inactive only after
+    ///      more than 30 days, and a reward distributed exactly 30 days ago still counts as recent.
     function expiredRewardsOf(address holder) public view returns (uint256) {
         if (isExcluded(holder)) return 0;
         uint256 last = lastActive[holder];
-        if (last == 0 || block.timestamp < last + INACTIVITY_PERIOD) return 0;
+        if (last == 0 || block.timestamp <= last + INACTIVITY_PERIOD) return 0;
         uint256 w = withdrawableDividendOf(holder);
         if (w == 0) return 0;
         // The balance cannot have changed since `last` (any change marks the holder active), so what it earned
         // since the cutoff is balance x (per-share growth since the cutoff). Rounded up in the holder's favour.
-        uint256 magCut = magAt(block.timestamp - INACTIVITY_PERIOD);
+        uint256 magCut = magAt(block.timestamp - INACTIVITY_PERIOD - 1);
         uint256 recent = FullMath.mulDivRoundingUp(magnifiedDividendPerShare - magCut, balanceOf(holder), MAGNITUDE);
         return w > recent ? w - recent : 0;
     }
@@ -282,16 +301,21 @@ contract PepesEarnToken is DN404 {
         }
     }
 
-    /// @notice Spends `imdIn` of the buyback reserve on $Pepes and sends all of it to the burn address.
-    /// @dev Only the PepesEarnIMD owner, who picks the timing and the minimum output (so the swap can't be
-    ///      sandwiched). The reserve can't go anywhere but this swap.
-    function buybackAndBurnPepes(uint256 imdIn, uint256 minPepesOut, uint256 deadline)
+    /// @notice Spends part of the buyback reserve on $Pepes and sends all of it to the burn address. Callable by
+    ///         anyone, at most once an hour, for at most `maxBuyback()` (larger reserves burn over several calls),
+    ///         so no one can profit from sandwiching it. The reserve can't go anywhere but this swap.
+    /// @param minPepesOut minimum $Pepes bought (0 accepts the capped market price)
+    function buybackAndBurnPepes(uint256 minPepesOut, uint256 deadline)
         external
         nonReentrant
         returns (uint256 burned)
     {
-        if (msg.sender != IEarnHook(hook).owner()) revert NotOwner();
-        if (imdIn == 0 || imdIn > buybackReserve) revert BadAmount();
+        if (block.timestamp < lastBuyback + BUYBACK_INTERVAL) revert TooSoon();
+        uint256 imdIn = buybackReserve;
+        uint256 cap = maxBuyback();
+        if (imdIn > cap) imdIn = cap;
+        if (imdIn == 0) revert BadAmount();
+        lastBuyback = block.timestamp;
         buybackReserve -= imdIn;
         _approveToken(quote, pepesRouter, imdIn);
         uint256 before = pepes.balanceOf(address(this));
@@ -301,6 +325,20 @@ contract PepesEarnToken is DN404 {
         pepes.transferOut(DEAD, burned);
         totalPepesBurned += burned;
         emit PepesBoughtAndBurned(imdIn, burned);
+    }
+
+    /// @notice Most reserve IMD one buyback spends: 2% of the $Pepes pool's (virtual) IMD reserve at the current
+    ///         price, read from the PepesFamily v1 pool through the PoolManager.
+    function maxBuyback() public view returns (uint256) {
+        PoolKey memory key = IPepesPad(IPepesRouter(pepesRouter).pad()).poolKey(pepes);
+        PoolId id = key.toId();
+        (uint160 sqrtP,,,) = IPoolManager(poolManager).getSlot0(id);
+        if (sqrtP == 0) return 0;
+        uint256 liquidity = IPoolManager(poolManager).getLiquidity(id);
+        uint256 imdDepth = Currency.unwrap(key.currency0) == quote
+            ? FullMath.mulDiv(liquidity, Q96, sqrtP) // IMD is currency0: x = L / sqrtP
+            : FullMath.mulDiv(liquidity, sqrtP, Q96); // IMD is currency1: y = L * sqrtP
+        return (imdDepth * MAX_BUYBACK_BPS) / 10_000;
     }
 
     // ------------------------------------------------------------ views

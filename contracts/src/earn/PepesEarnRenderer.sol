@@ -32,7 +32,7 @@ contract PepesEarnRenderer {
         string memory json = string.concat(
             '{"name":"Pepes Earn IMD #',
             S.toString(id),
-            '","description":"Pepes Earn IMD: 2,000 on-chain Pepes. Every $EARN pool trade pays 3% to holders in IMD. Claim on pepesfamily.fun.","image":"data:image/svg+xml;base64,',
+            '","description":"Pepes Earn IMD: on-chain Pepes backed by 2,000 $EARN, one NFT for each whole $EARN held. Every $EARN pool trade pays 3% to holders in IMD. Claim on pepesfamily.fun.","image":"data:image/svg+xml;base64,',
             S.base64(bytes(svg)),
             '","attributes":',
             _attributes(t),

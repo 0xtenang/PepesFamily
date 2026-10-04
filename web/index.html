@@ -283,6 +283,8 @@ const CONFIG = {
   earn: { hook: "", token: "", mirror: "", renderer: "", router: "", ethRouter: "" },
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
+  // Robinhood Chain WETH (bridged aeWETH): royalties paid in WETH wait in the NFT hook until converted.
+  weth: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73",
   // Independent audits by the IMD Swarm (reports are public on explorer.imd.fun).
   audits: {
     launchpad: {
@@ -295,7 +297,7 @@ const CONFIG = {
       url: "https://explorer.imd.fun/jobs/e6eda4d8-f50d-47cd-9464-9a272283ccd3",
       title: "Pepes Earn IMD NFT",
       result: "10 findings: 3 medium, 2 low, 5 info",
-      note: "Audited before deployment. Nothing is live yet: the findings are being fixed and re-audited before the collection opens. Main fixes: limits on royalty conversion and $Pepes buybacks so they can't be sandwiched, WETH royalties, and the exact 30-day boundary.",
+      note: "Audited before deployment. All 10 findings are addressed in the code (capped, hourly royalty conversion and $Pepes buybacks that anyone can run and nobody can profitably sandwich, WETH and IMD royalties, the exact 30-day boundary, one-step deployment). A re-check of the fixes comes before the collection opens.",
     },
     tokens: {
       "0xe2c46c7068566740a33a4c93f5445b07bcfe5644": {
@@ -359,7 +361,9 @@ const EARN_ABI = [
   "function buybackReserve() view returns (uint256)",
   "function totalRecycled() view returns (uint256)",
   "function totalPepesBurned() view returns (uint256)",
-  "function buybackAndBurnPepes(uint256 imdIn, uint256 minPepesOut, uint256 deadline) returns (uint256)",
+  "function buybackAndBurnPepes(uint256 minPepesOut, uint256 deadline) returns (uint256)",
+  "function maxBuyback() view returns (uint256)",
+  "function lastBuyback() view returns (uint256)",
 ];
 const MIRROR_ABI = [
   "function totalSupply() view returns (uint256)",
@@ -367,7 +371,11 @@ const MIRROR_ABI = [
   "function ownerAt(uint256) view returns (address)",
 ];
 const RENDERER_ABI = ["function tokenURI(uint256) pure returns (string)"];
-const EARN_HOOK_ABI = ["function convertRoyalties(uint256 minImdOut) returns (uint256)"];
+const EARN_HOOK_ABI = [
+  "function convertRoyalties(uint256 minImdOut) returns (uint256)",
+  "function maxRoyaltySwap() view returns (uint256)",
+  "function lastRoyaltyConversion() view returns (uint256)",
+];
 const TOKEN_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function withdrawableDividendOf(address) view returns (uint256)",
@@ -1587,7 +1595,6 @@ async function renderNft() {
   if (!$("#app")) return;
   const q = info.quote;
   const priceImd = priceOf(info.sqrtPriceX96, info.quoteIsCurrency0); // IMD per $EARN = per NFT
-  const isOwner = account && account.toLowerCase() === owner.toLowerCase();
   if (!P.ethLive) nftViaEth = false;
 
   app.innerHTML = `
@@ -1621,7 +1628,7 @@ async function renderNft() {
         </div>
         <div class="card" style="margin-top:14px"><span class="h">Your IMD rewards</span><div id="nrew" class="stat">${account ? "Loading…" : "Connect a wallet to see your rewards."}</div></div>
         ${nftAuditCard("margin-top:14px")}
-        ${isOwner ? `<div class="card" style="margin-top:14px" id="nadmin"><span class="h">Owner tools</span><div class="stat">Loading…</div></div>` : ""}
+        ${account ? `<div class="card" style="margin-top:14px" id="nadmin"><span class="h">Community tools</span><div class="stat">Loading…</div></div>` : ""}
       </div>
     </div>
     ${nftHowItWorks(3)}
@@ -1795,48 +1802,63 @@ async function renderNft() {
         renderNft();
       } catch (e) { toast(errMsg(e), 7000); }
     };
-    if (isOwner) renderNftAdmin(P, reserve);
+    renderNftTools(reserve);
   } catch (e) {
     if ($("#mynfts")) $("#mynfts").textContent = `Couldn't load your NFTs: ${errMsg(e)}`;
   }
 }
 
-/// Owner tools: buyback-and-burn of $Pepes from the expired-rewards reserve, royalty conversion, recycling.
-async function renderNftAdmin(P, reserve) {
+/// Community tools, open to every wallet (the contracts cap and pace them so nobody can profit from timing them):
+/// $Pepes buyback-and-burn from the expired-rewards reserve, royalty conversion, and recycling expired rewards.
+async function renderNftTools(reserve) {
   const el = $("#nadmin");
   if (!el) return;
+  const tokR = new ethers.Contract(EARN.token, EARN_ABI, reader);
+  const hookR = new ethers.Contract(EARN.hook, EARN_HOOK_ABI, reader);
   const v1 = PADS.find((p) => p.version === 1 && p.live);
-  const royaltyEth = await reader.getBalance(EARN.hook);
-  let pepesQuote = 0n, royaltyQuote = 0n, pepesInfo = null;
+  const now = Date.now() / 1000;
+  let maxBuy = 0n, lastBuy = 0n, maxRoy = 0n, lastRoy = 0n, ethBal = 0n, wethBal = 0n, imdBal = 0n;
   try {
-    if (reserve > 0n && v1) {
-      pepesInfo = await v1.c.getTokenInfo(CONFIG.pepes);
-      pepesQuote = await quoteSwap(v1, CONFIG.pepes, pepesInfo.quoteIsCurrency0, true, reserve);
+    [maxBuy, lastBuy, maxRoy, lastRoy, ethBal, wethBal, imdBal] = await Promise.all([
+      tokR.maxBuyback(), tokR.lastBuyback(), hookR.maxRoyaltySwap(), hookR.lastRoyaltyConversion(), reader.getBalance(EARN.hook),
+      new ethers.Contract(CONFIG.weth, ERC20_ABI, reader).balanceOf(EARN.hook), new ethers.Contract(CONFIG.imd, ERC20_ABI, reader).balanceOf(EARN.hook),
+    ]);
+  } catch (e) { return (el.innerHTML = `<span class="h">Community tools</span><div class="stat">${esc(errMsg(e))}</div>`); }
+  const buyNow = reserve < maxBuy ? reserve : maxBuy;
+  const swapEth = ethBal + wethBal < maxRoy ? ethBal + wethBal : maxRoy;
+  const wait = (last) => Math.max(0, Math.ceil((Number(last) + 3600 - now) / 60));
+  const buyWait = wait(lastBuy), royWait = wait(lastRoy);
+  let pepesQuote = 0n, royaltyQuote = 0n;
+  try {
+    if (buyNow > 0n && v1) {
+      const info = await v1.c.getTokenInfo(CONFIG.pepes);
+      pepesQuote = await quoteSwap(v1, CONFIG.pepes, info.quoteIsCurrency0, true, buyNow);
     }
-    if (royaltyEth > 0n) royaltyQuote = await quoteExact(CONFIG.imdEthKey, true, royaltyEth);
+    if (swapEth > 0n) royaltyQuote = await quoteExact(CONFIG.imdEthKey, true, swapEth);
   } catch {}
-  el.innerHTML = `<span class="h">Owner tools</span>
-    <div class="stat">Buyback reserve: <b>${fmt(reserve, 6)} IMD</b>${pepesQuote ? ` → ≈ ${fmt(pepesQuote)} $Pepes` : ""}</div>
-    <button class="full" id="nbuyback" ${reserve === 0n ? "disabled" : ""}>Buy back &amp; burn $Pepes</button>
-    <div class="stat" style="margin-top:12px">Royalties waiting: <b>${fmt(royaltyEth, 6)} ETH</b>${royaltyQuote ? ` → ≈ ${fmt(royaltyQuote, 6)} IMD` : ""}</div>
-    <button class="full" id="nroyal" ${royaltyEth === 0n ? "disabled" : ""}>Convert royalties (1% you, 3% holders)</button>
+  const royaltyWaiting = ethBal + wethBal > 0n || imdBal > 0n;
+  el.innerHTML = `<span class="h">Community tools</span>
+    <p class="stat" style="margin:0 0 8px">Anyone can run these. Each is limited per call and to once an hour, so nobody can profit from timing them, and the funds can only go to holders, the protocol fee and the $Pepes burn.</p>
+    <div class="stat">Buyback reserve: <b>${fmt(reserve, 6)} IMD</b>${buyNow > 0n && buyNow < reserve ? ` · next burn uses ${fmt(buyNow, 6)} IMD` : ""}${pepesQuote ? ` → ≈ ${fmt(pepesQuote)} $Pepes` : ""}</div>
+    <button class="full" id="nbuyback" ${buyNow === 0n || buyWait ? "disabled" : ""}>${buyWait && buyNow ? `Next buyback in ${buyWait} min` : "Buy back &amp; burn $Pepes"}</button>
+    <div class="stat" style="margin-top:12px">Royalties waiting: <b>${fmt(ethBal + wethBal, 6)} ETH</b>${imdBal ? ` + ${fmt(imdBal, 6)} IMD` : ""}${royaltyQuote ? ` → ≈ ${fmt(royaltyQuote, 6)} IMD this call` : ""}</div>
+    <button class="full" id="nroyal" ${!royaltyWaiting || royWait ? "disabled" : ""}>${royWait && royaltyWaiting ? `Next conversion in ${royWait} min` : "Convert royalties (1% protocol, 3% holders)"}</button>
     <label for="nrecycle">Recycle a wallet's expired rewards</label>
     <form id="nrecf" class="row" style="flex-wrap:nowrap"><input id="nrecycle" placeholder="0x…" spellcheck="false"><button type="submit">Recycle</button></form>
-    <p class="stat" style="margin:10px 0 0">Anyone may recycle; nobody can withdraw the reserve. Protocol fees and holder payouts: <a href="#/admin" style="text-decoration:underline">Admin</a>.</p>`;
+    <p class="stat" style="margin:10px 0 0">Nobody can withdraw the reserve or the royalties. Protocol fees and holder payouts: <a href="#/admin" style="text-decoration:underline">Admin</a>.</p>`;
   const run = async (btn, fn, done) => {
     btn.disabled = true;
     try { await requireWallet(); toast("Confirm in your wallet…", 8000); const tx = await fn(); toast("Sent…", 15000); await tx.wait(); toast(done); renderNft(); }
     catch (e) { toast(errMsg(e), 7000); btn.disabled = false; }
   };
   $("#nbuyback").onclick = () => run($("#nbuyback"), () =>
-    new ethers.Contract(EARN.token, EARN_ABI, signer).buybackAndBurnPepes(reserve, withSlippage(pepesQuote, 300), deadline()), "$Pepes bought back and burned");
+    new ethers.Contract(EARN.token, EARN_ABI, signer).buybackAndBurnPepes(withSlippage(pepesQuote, 300), deadline()), "$Pepes bought back and burned");
   $("#nroyal").onclick = () => run($("#nroyal"), () =>
     new ethers.Contract(EARN.hook, EARN_HOOK_ABI, signer).convertRoyalties(withSlippage(royaltyQuote, 300)), "Royalties converted");
   $("#nrecf").onsubmit = async (e) => {
     e.preventDefault();
     const who = $("#nrecycle").value.trim();
     if (!ethers.isAddress(who)) return toast("Enter a valid address");
-    const tokR = new ethers.Contract(EARN.token, EARN_ABI, reader);
     const exp = await tokR.expiredRewardsOf(who).catch(() => 0n);
     if (exp === 0n) return toast("Nothing has expired for this wallet");
     run($("#nrecf button"), () => new ethers.Contract(EARN.token, EARN_ABI, signer).recycle(who), `${fmt(exp, 6)} IMD recycled`);
