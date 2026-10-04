@@ -152,6 +152,16 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .scroll-x { overflow-x: auto; }
 .share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border: 1px solid var(--line); background: #000; }
 #rf input { flex: 1; min-width: 0; }
+.koth { border: 1.5px solid var(--strong); margin: 6px 0 14px; }
+.koth-main { display: flex; gap: 16px; align-items: center; padding: 16px; transition: background .12s; }
+.koth-main:hover { background: var(--panel-2); }
+.koth .crown { display: inline-block; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; background: var(--accent); color: #000; padding: 2px 8px; }
+.koth .name { font-weight: 600; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.koth-stats { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.koth-stats b { color: var(--text); font-weight: 500; }
+.koth-rest { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; border-top: 1px solid var(--line); padding: 8px 16px; font-size: 12px; }
+.koth-rest a:hover { text-decoration: underline; }
+@media (max-width: 600px) { .koth-main { flex-wrap: wrap; } .koth-main .btn { width: 100%; text-align: center; } }
 .imgrow { display: flex; gap: 12px; align-items: flex-start; }
 .imgprev { width: 60px; height: 60px; flex: none; border: 1px dashed var(--line); display: grid; place-items: center; color: var(--dim); overflow: hidden; }
 .imgprev img { width: 100%; height: 100%; object-fit: cover; }
@@ -251,6 +261,8 @@ const CONFIG = {
     { version: 1, pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC", router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", permit: false },
   ],
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
+  // King of the hill spotlights launches, so the house token (Pepes) is left out. Remove an address to include it.
+  kingExclude: ["0xe2c46c7068566740a33a4c93f5445b07bcfe5644"],
   // Independent audits by the IMD Swarm (reports are public on explorer.imd.fun).
   audits: {
     launchpad: {
@@ -907,6 +919,7 @@ const Feed = (() => {
 async function renderHome() {
   const app = $("#app");
   app.innerHTML = `
+    <div id="koth"></div>
     <div class="scene" id="scene">
       <canvas class="wall" aria-hidden="true"></canvas>
       <div class="screen">
@@ -939,6 +952,7 @@ async function renderHome() {
           <div class="stat">${esc(a.note)}</div>
         </a>`).join("")}
     </div>`;
+  loadKing().catch((e) => console.warn("king of the hill", e));
   Scene.mount($("#scene"));
   Feed.start();
   loadTotals().catch((e) => console.warn("totals", e));
@@ -965,6 +979,78 @@ async function renderHome() {
   } catch (e) {
     $("#list").innerHTML = `<div class="card">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
   }
+}
+
+// ---------------------------------------------------------------- King of the hill
+/// Trade events since `sinceTs` (unix seconds) from the given launchpads, via Blockscout (newest first, paged).
+async function tradesSince(sinceTs, pads) {
+  const out = [];
+  await Promise.all(pads.map(async (P) => {
+    const topic = P.c.interface.getEvent("Trade").topicHash;
+    let next = null;
+    for (let page = 0; page < 20; page++) {
+      const r = await fetch(`${CONFIG.blockscoutApi}/addresses/${P.pad}/logs?topic=${topic}` + (next ? "&" + new URLSearchParams(next) : ""),
+        { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error("blockscout " + r.status);
+      const j = await r.json();
+      let reachedOlder = false;
+      for (const i of j.items) {
+        const ts = Date.parse(i.block_timestamp) / 1000;
+        if (ts < sinceTs) { reachedOlder = true; continue; }
+        if (i.topics[0] !== topic) continue;
+        out.push(P.c.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args);
+      }
+      if (reachedOlder || !j.next_page_params) break;
+      next = j.next_page_params;
+    }
+  }));
+  return out;
+}
+
+/// Crowns the listed token (IMD pair, not excluded) with the most trading volume in the last 24 h; ties and quiet
+/// days fall back to market cap. Shows #2 and #3 underneath.
+async function loadKing() {
+  const el = $("#koth");
+  if (!el) return;
+  const skip = new Set(CONFIG.kingExclude.map((a) => a.toLowerCase()));
+  const cands = (await allTokenInfos()).filter(({ t }) => isListed(t) && !skip.has(t.token.toLowerCase()));
+  const tokens = cands.map((x) => x.t);
+  if (!tokens.length || !$("#koth")) return;
+  const pads = [...new Set(cands.map((x) => x.P))]; // skip launchpads with no candidates (v1 only has Pepes)
+  const vol = new Map(), cnt = new Map();
+  let live = true;
+  try {
+    for (const a of await tradesSince(Date.now() / 1000 - 86400, pads)) {
+      const k = a.token.toLowerCase();
+      vol.set(k, (vol.get(k) ?? 0n) + a.quoteAmount);
+      cnt.set(k, (cnt.get(k) ?? 0) + 1);
+    }
+  } catch { live = false; } // trade history unavailable: rank by market cap only
+  const cmp = (x, y) => (x > y ? -1 : x < y ? 1 : 0);
+  const ranked = tokens.map((t) => ({ t, v: vol.get(t.token.toLowerCase()) ?? 0n, n: cnt.get(t.token.toLowerCase()) ?? 0 }))
+    .sort((x, y) => cmp(x.v, y.v) || cmp(x.t.marketCap, y.t.marketCap));
+  const [k, ...rest] = ranked;
+  const q = k.t.quote;
+  const volTxt = k.v > 0n ? `${usd(k.v, q)} <span class="muted">· ${k.n} trade${k.n === 1 ? "" : "s"}</span>` : live ? "no trades yet today" : "—";
+  el.className = "koth";
+  el.innerHTML = `
+    <a class="koth-main" href="#/t/${k.t.token}">
+      ${avatar(k.t, "lg")}
+      <div style="min-width:0;flex:1">
+        <span class="crown">👑 King of the hill</span>
+        <div class="row" style="margin-top:6px"><span class="name">${esc(k.t.name)}</span><span class="mono muted">$${esc(k.t.symbol)}</span></div>
+        <div class="koth-stats">
+          <span>MC <b>${usd(k.t.marketCap, q)}</b></span>
+          <span>24h vol <b>${volTxt}</b></span>
+          <span>Paid to holders <b>${usd(k.t.totalDividendsDistributed + k.t.pendingHolderFees, q)}</b></span>
+        </div>
+      </div>
+      <span class="btn primary">Trade $${esc(k.t.symbol)}</span>
+    </a>
+    ${rest.length ? `<div class="koth-rest">${rest.slice(0, 2).map((r, i) => `
+      <a href="#/t/${r.t.token}"><span class="muted">#${i + 2}</span> $${esc(r.t.symbol)}
+        <span class="muted">· ${r.v > 0n ? usd(r.v, r.t.quote) + " 24h vol" : "MC " + usd(r.t.marketCap, r.t.quote)}</span></a>`).join("")}
+      <span class="spacer"></span><span class="muted">${live ? "ranked by 24h volume" : "ranked by market cap"}</span></div>` : ""}`;
 }
 
 // ---------------------------------------------------------------- Platform totals
