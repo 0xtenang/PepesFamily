@@ -39,6 +39,7 @@
   --frame: #1c221c;
 }
 * { box-sizing: border-box; border-radius: 0 !important; }
+[hidden] { display: none !important; } /* layout classes like .row must not override the hidden attribute */
 html, body { background: var(--bg); }
 body { margin: 0; color: var(--text); font: 13px/1.6 "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; padding-bottom: 44px; }
 a { color: inherit; text-decoration: none; }
@@ -1607,9 +1608,10 @@ async function renderCreate() {
           <div style="flex:1;min-width:140px"><label for="tg">Telegram</label><input id="tg" placeholder="https://t.me/…" /></div>
         </div>
         ${sec(3, "Initial buy")}
-        <label for="ib" style="margin-top:0">Amount (IMD, optional): buy first, in the same transaction</label><input id="ib" inputmode="decimal" placeholder="0" />
+        <div class="row" style="margin-bottom:4px"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">ETH</button><button type="button" data-p="imd">IMD</button></div></div>
+        <label for="ib" id="ibl">Amount (optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
-        <div class="stat">The launch-time buy is paid in IMD. After launch, anyone can buy with ETH too.</div>
+        <div class="stat" id="ibnote"></div>
         ${sec(4, "Launch")}
         <button class="primary full" id="go" type="submit">Launch token</button>
       </form>
@@ -1626,17 +1628,35 @@ async function renderCreate() {
       $("#startmc").innerHTML = `Starting market cap: <b style="color:var(--text)">≈ ${usd(v, quote)}</b> <span class="muted">(${fmt(v)} ${qsym(quote)})</span>`;
     } catch {}
   };
-  const updPreview = () => {
-    const v = $("#ib").value.trim();
-    let amt = 0n; try { amt = v ? ethers.parseUnits(v, 18) : 0n; } catch {}
+  // Initial buy: in IMD it happens inside the launch transaction (nobody can buy first). In ETH it is a second
+  // transaction right after the launch, through the ETH router (ETH -> IMD -> token), so creators don't need IMD.
+  let pay = LAUNCH.ethLive ? "eth" : "imd";
+  if (!LAUNCH.ethLive) $("#ibpay").parentElement.remove();
+  const ibAmount = () => { try { const v = $("#ib").value.trim(); return v ? ethers.parseUnits(v, 18) : 0n; } catch { return 0n; } };
+  /// Tokens bought at launch for `imdIn` IMD: the new pool behaves like x*y=k with startMcap(tick) of virtual IMD.
+  const tokensFor = (imdIn, tick) => { const net = imdIn - (imdIn * 400n) / 10000n; return (SUPPLY * net) / (startMcap(tick) + net); };
+  let pvSeq = 0;
+  const updPreview = async () => {
+    const seq = ++pvSeq, amt = ibAmount();
     if (!amt) return ($("#ibp").textContent = "");
-    padR.startTick(quote).then((tick) => {
-      const vq = startMcap(tick); // the pool behaves like x*y=k with this much virtual quote
-      const net = amt - (amt * 400n) / 10000n;
-      const out = (SUPPLY * net) / (vq + net);
-      $("#ibp").textContent = `≈ ${fmt(out)} tokens (${(Number((out * 10000n) / SUPPLY) / 100).toFixed(2)}% of supply)`;
-    }).catch(() => {});
+    try {
+      const imdIn = pay === "eth" ? await quoteExact(CONFIG.imdEthKey, true, amt) : amt;
+      const out = tokensFor(imdIn, await padR.startTick(quote));
+      if (seq !== pvSeq) return;
+      $("#ibp").textContent = `≈ ${fmt(out)} tokens (${(Number((out * 10000n) / SUPPLY) / 100).toFixed(2)}% of supply)` + (pay === "eth" ? ` · ≈ ${fmt(imdIn)} IMD` : "");
+    } catch { if (seq === pvSeq) $("#ibp").textContent = "Can't quote this amount"; }
   };
+  const setPay = (p) => {
+    pay = p;
+    document.querySelectorAll("#ibpay button").forEach((b) => b.classList.toggle("on", b.dataset.p === p));
+    $("#ibl").textContent = `Amount in ${p.toUpperCase()} (optional): buy your token first`;
+    $("#ibnote").textContent = p === "eth"
+      ? "Two wallet confirmations: the launch, then your buy with ETH (swapped to IMD automatically). Someone could buy in the few seconds between them; pay with IMD to buy inside the launch itself."
+      : "Bought in the same transaction as the launch, so nobody can buy before you.";
+    updPreview();
+  };
+  document.querySelectorAll("#ibpay button").forEach((b) => b.onclick = () => setPay(b.dataset.p));
+  setPay(pay);
   $("#ib").oninput = updPreview;
   updStart();
   const image = setupImageField();
@@ -1651,18 +1671,39 @@ async function renderCreate() {
       const m = {};
       const put = (k, id) => { const v = $(id).value.trim(); if (v) m[k] = v; };
       put("image", "#img"); put("description", "#d"); put("website", "#w"); put("x", "#x"); put("telegram", "#tg");
-      const ibv = $("#ib").value.trim();
-      const initialBuy = ibv ? ethers.parseUnits(ibv, 18) : 0n;
-      if (quote !== ZERO && initialBuy > 0n) await ensureImdAllowance(initialBuy, LAUNCH.router);
+      const amt = ibAmount();
+      if ($("#ib").value.trim() && !amt) throw new Error("Enter a valid amount for the initial buy, or leave it empty");
+      const ethBuy = pay === "eth" ? amt : 0n, imdBuy = pay === "imd" ? amt : 0n;
+      // IMD buy inside the launch: 10% below the previewed amount, so a changed start price can't fill it far worse.
+      let minOut = 0n;
+      if (imdBuy > 0n) {
+        minOut = withSlippage(tokensFor(imdBuy, await padR.startTick(quote)), 1000);
+        await ensureImdAllowance(imdBuy, LAUNCH.router);
+      }
       const router = new ethers.Contract(LAUNCH.router, ROUTER_ABI, signer);
-      toast("Confirm the launch in your wallet…", 8000);
-      const tx = await router.launch($("#n").value.trim(), $("#s").value.trim(), JSON.stringify(m), quote, initialBuy, 0n,
-        { value: quote === ZERO ? initialBuy : 0n });
+      toast(ethBuy ? "Step 1 of 2: confirm the launch in your wallet…" : "Confirm the launch in your wallet…", 8000);
+      const tx = await router.launch($("#n").value.trim(), $("#s").value.trim(), JSON.stringify(m), quote, imdBuy, minOut, { value: 0n });
       toast("Launching…", 15000);
       const rc = await tx.wait();
       const ev2 = rc.logs.map((l) => { try { return padR.interface.parseLog(l); } catch { return null; } }).find((l) => l?.name === "TokenLaunched");
-      toast("Token launched");
-      location.hash = ev2 ? "#/t/" + ev2.args.token : "#/";
+      const token = ev2?.args.token;
+      if (ethBuy > 0n && token) {
+        try {
+          let info = null; // the read RPC can be a block behind the wallet's: retry briefly
+          for (let i = 0; i < 6 && !info; i++) { try { info = await padR.getTokenInfo(token); } catch { await new Promise((r) => setTimeout(r, 1500)); } }
+          if (!info) throw new Error("the new token isn't visible yet");
+          const expected = await quoteSwapEth(LAUNCH, token, info.quoteIsCurrency0, true, ethBuy);
+          toast("Token launched! Step 2 of 2: confirm your ETH buy…", 10000);
+          const tx2 = await new ethers.Contract(LAUNCH.ethRouter, ETH_ROUTER_ABI, signer)
+            .buyWithEth(token, withSlippage(expected, 500), deadline(), { value: ethBuy });
+          toast("Buying…", 15000);
+          await tx2.wait();
+          toast("Token launched and bought");
+        } catch (e) {
+          toast(`Token launched, but the ETH buy didn't go through (${errMsg(e)}). You can buy it on the token page.`, 10000);
+        }
+      } else toast("Token launched");
+      location.hash = token ? "#/t/" + token : "#/";
     } catch (e) { toast(errMsg(e), 7000); }
     btn.disabled = false;
   };
