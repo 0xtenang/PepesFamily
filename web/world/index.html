@@ -110,6 +110,7 @@ const CONFIG = {
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
   // PepesWorldVault, from contracts/deployments/robinhood-world.json. Empty: NFT holders only.
   vault: "",
+  vaultAudit: "https://explorer.imd.fun/jobs/4e9b1481-d807-4a37-ab7e-f5b3d3a7e066",
   dailyGoal: 10,
 };
 
@@ -132,7 +133,7 @@ const VAULT_ABI = [
   "function canPlay(address) view returns (bool)",
   "function hasPass(address) view returns (bool)",
   "function passPrice() view returns (uint256)",
-  "function enter()",
+  "function enter(uint256 maxPrice)",
 ];
 const earnC = new ethers.Contract(CONFIG.earn, EARN_ABI, ro);
 const renderC = new ethers.Contract(CONFIG.renderer, RENDER_ABI, ro);
@@ -781,7 +782,7 @@ async function locked(vault, err) {
       <p>Buy 1 $EARN and the NFT lands in your wallet. Play as your own Pepe, and earn 3% of every $EARN trade in IMD.</p>
       <a class="btn primary" href="/#/nft" style="width:100%">Get a Pepes Earn IMD NFT</a></div>
     <div class="opt"><b>🎟️ Pepes World pass</b>
-      ${vault ? `<p>A one-time deposit of ${fmt(price)} $PEPES to the Pepes World vault. Not refundable, and the pass never expires. You hold ${fmt(pepesBal)} $PEPES.</p>
+      ${vault ? `<p>A one-time deposit of ${fmt(price)} $PEPES to the Pepes World vault (<a href="${CONFIG.vaultAudit}" target="_blank" rel="noopener">audited ↗</a>). Not refundable, and the pass never expires. You hold ${fmt(pepesBal)} $PEPES.</p>
         ${enough ? `<button class="btn" id="enter" style="width:100%">Enter with ${fmt(price)} $PEPES</button>` : `<a class="btn" href="/#/t/${CONFIG.pepes}" style="width:100%">Get $PEPES</a>`}`
         : `<p>Coming soon: a one-time 50,000 $PEPES entry.</p>`}</div>
     <div class="row" style="margin-top:12px"><button class="btn" id="recheck">I got one, check again</button></div>
@@ -800,7 +801,7 @@ async function enterVault(vault, price) {
     await (await pepes.approve(CONFIG.vault, price)).wait();
   }
   btn.disabled = true; btn.textContent = "Confirm the deposit in your wallet…";
-  await (await vault.connect(signer).enter()).wait();
+  await (await vault.connect(signer).enter(price)).wait(); // reverts if the price changed since it was shown
   toast("🎟️ Pass unlocked. Welcome to Pepes World!");
   choose([]);
 }

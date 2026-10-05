@@ -8,8 +8,9 @@ interface IPepesToken {
     function claim() external returns (uint256);
 }
 
-interface IBalanceOf {
+interface IEarn {
     function balanceOf(address account) external view returns (uint256);
+    function totalSupply() external view returns (uint256);
 }
 
 /// @title PepesWorldVault
@@ -18,7 +19,8 @@ interface IBalanceOf {
 ///         Entering is a one-time deposit of `passPrice` $Pepes. The deposit is not refundable: the pass never
 ///         expires, and the deposited $Pepes belong to the PepesFamily team (`owner`), who can withdraw them and
 ///         the IMD rewards they earn. The owner can also grant free passes (giveaways, contest prizes).
-///         Changing `passPrice` only affects future entries; existing passes are never revoked.
+///         Changing `passPrice` only affects future entries; existing passes are never revoked. Players state the
+///         most they accept to pay (`maxPrice`), so a price change can never charge more than they saw.
 contract PepesWorldVault {
     using SafeTransfer for address;
 
@@ -26,6 +28,9 @@ contract PepesWorldVault {
     error AlreadyEntered();
     error ZeroAddress();
     error WrongAmountReceived();
+    error PriceAboveMax();
+    error ZeroPrice();
+    error NotEarn();
 
     event Entered(address indexed player, address indexed payer, uint256 amount);
     event PassGranted(address indexed player);
@@ -57,9 +62,14 @@ contract PepesWorldVault {
 
     constructor(address pepes_, address earn_, address owner_, uint256 passPrice_) {
         if (pepes_ == address(0) || earn_ == address(0) || owner_ == address(0)) revert ZeroAddress();
+        if (passPrice_ == 0) revert ZeroPrice();
+        // the $EARN token, not its NFT mirror (whose balanceOf counts NFTs, not 18-decimal tokens)
+        if (earn_.code.length == 0 || IEarn(earn_).totalSupply() != 2_000e18) revert NotEarn();
         pepes = pepes_;
         earn = earn_;
+        // rewards must be an ERC20 (IMD): this vault cannot receive the ETH an ETH-paired token pays
         imd = IPepesToken(pepes_).quote();
+        if (imd == address(0)) revert ZeroAddress();
         owner = owner_;
         passPrice = passPrice_;
         emit OwnershipTransferred(address(0), owner_);
@@ -68,25 +78,27 @@ contract PepesWorldVault {
 
     // ---------------------------------------------------------------- Players
 
-    /// @notice Deposits `passPrice` $Pepes (approve this vault first) for a lifetime pass.
-    function enter() external {
-        _enter(msg.sender);
+    /// @notice Deposits `passPrice` $Pepes (approve this vault first) for a lifetime pass. Reverts if the price
+    ///         is above `maxPrice`, the price the player agreed to.
+    function enter(uint256 maxPrice) external {
+        _enter(msg.sender, maxPrice);
     }
 
     /// @notice Buys a pass for another wallet (a gift). The caller pays.
-    function enterFor(address player) external {
+    function enterFor(address player, uint256 maxPrice) external {
         if (player == address(0)) revert ZeroAddress();
-        _enter(player);
+        _enter(player, maxPrice);
     }
 
     /// @notice True if `player` can play Pepes World: a pass from this vault, or at least 1 $EARN (1 NFT).
     function canPlay(address player) external view returns (bool) {
-        return hasPass[player] || IBalanceOf(earn).balanceOf(player) >= 1e18;
+        return hasPass[player] || IEarn(earn).balanceOf(player) >= 1e18;
     }
 
-    function _enter(address player) internal {
+    function _enter(address player, uint256 maxPrice) internal {
         if (hasPass[player]) revert AlreadyEntered();
         uint256 amount = passPrice;
+        if (amount > maxPrice) revert PriceAboveMax();
         hasPass[player] = true;
         passes++;
         totalDeposited += amount;
@@ -107,8 +119,9 @@ contract PepesWorldVault {
         emit PassGranted(player);
     }
 
-    /// @notice Sets the price of future passes. Existing passes are unaffected.
+    /// @notice Sets the price of future passes. Existing passes are unaffected. Free passes go through `grantPass`.
     function setPassPrice(uint256 passPrice_) external onlyOwner {
+        if (passPrice_ == 0) revert ZeroPrice();
         passPrice = passPrice_;
         emit PassPriceSet(passPrice_);
     }
@@ -122,9 +135,12 @@ contract PepesWorldVault {
         emit Withdrawn(imd, to, amount);
     }
 
-    /// @notice Withdraws any token held here (the deposited $Pepes, IMD, or anything sent by mistake).
+    /// @notice Withdraws any token held here (the deposited $Pepes, IMD, or anything sent by mistake). Moving
+    ///         $Pepes out first claims the IMD they earned (it stays here for `claimRewards`): $Pepes holder fees
+    ///         from other routers are only distributed at the next flush, to whoever holds $Pepes then.
     function withdraw(address token, address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
+        if (token == pepes) IPepesToken(pepes).claim();
         token.transferOut(to, amount);
         emit Withdrawn(token, to, amount);
     }

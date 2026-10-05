@@ -52,7 +52,7 @@ contract PepesWorldForkTest is Test {
         assertGe(got, 50_000e18, "50 IMD buys at least 50k $Pepes");
         vm.startPrank(alice);
         IERC20(PEPES).approve(address(vault), 50_000e18);
-        vault.enter();
+        vault.enter(50_000e18);
         vm.stopPrank();
         assertTrue(vault.canPlay(alice));
         assertEq(IERC20(PEPES).balanceOf(address(vault)), 50_000e18);
