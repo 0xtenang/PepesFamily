@@ -100,6 +100,12 @@ The per-call cap and the hourly pace make sandwiching the buyback cost more in t
 
 Deployment order (one account): `PepesEarnRenderer`, `PepesEarnIMD` (CREATE2, hook flags `0x28CC`), `PepesEarnToken(earnIMD, renderer)` (creates the mirror), then `earnIMD.openPool(token)` from the owner. `script/DeployEarn.s.sol` does all of it and writes `deployments/robinhood-earn.json`; copy those addresses into `CONFIG.earn` in `web/index.html` to switch the site's NFT tab from preview to live. Tests: `test/PepesEarn.t.sol`, and on a mainnet fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesEarnForkTest`.
 
+### Pepes World (web game)
+
+A single-player browser game at [pepesfamily.fun/world](https://pepesfamily.fun/world/) (`web/world/index.html`, three.js): walk a tiny Pepe planet and deliver letters to villagers, who are on-chain Pepes Earn IMD NFTs (#1 The King lives in the castle). The player's character is their own NFT, drawn by the renderer. Daily goal and streak are kept in the browser.
+
+Who can play: a wallet holding at least 1 `$EARN` (one NFT), or one with a Pepes World pass from `src/world/PepesWorldVault.sol`. A pass is a one-time, non-refundable deposit of `passPrice` `$Pepes` (50,000 at launch) and never expires. The deposits belong to the team: the owner can withdraw them, claim the IMD rewards they earn as `$Pepes` holdings, grant free passes, and change the price of future passes (existing passes are never revoked). The game checks access in the browser only: it holds no prizes, so a bypass gains nothing. Tests: `test/PepesWorld.t.sol`, and on a fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesWorldForkTest`. With `CONFIG.vault` empty in `web/world/index.html`, only NFT holders can play.
+
 Uniswap v4 on Robinhood Chain: PoolManager `0x8366a39CC670B4001A1121B8F6A443A643e40951`, V4Quoter `0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94`.
 
 ## Setup

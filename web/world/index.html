@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data: blob:; connect-src https: wss:; base-uri 'none'; form-action 'none'; object-src 'none'" />
+<meta name="referrer" content="no-referrer" />
+<title>Pepes World</title>
+<meta name="description" content="Deliver letters around a tiny Pepe planet. Your Pepes Earn IMD NFT is your character." />
+<link rel="icon" href="/favicon.ico" sizes="32x32" />
+<link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.4/ethers.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js" integrity="sha512-vnmn/Qqn6aG0POAc9mIGzjq0IybrvxJXYDafNvp9JSnDGxeF3pbkSqLvf+YGd5ku63pT7sa/jxHn7/d0mU8+tA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+:root {
+  --sky: #a8dcc9; --ink: #000000; --paper: #ffffff; --muted: #666666; --line: #dcdcdc;
+  --accent: #0a8f3c; --gold: #c99a06; --down: #d23c3c;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky); }
+body { color: var(--ink); font: 13px/1.6 "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; -webkit-user-select: none; user-select: none; touch-action: none; }
+a { color: inherit; }
+canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+
+.box { background: var(--paper); border: 1.5px solid var(--ink); }
+.btn { font: inherit; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink); padding: 9px 14px; cursor: pointer; text-decoration: none; display: inline-block; text-align: center; }
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:not(:disabled):hover { background: var(--ink); color: var(--paper); }
+.btn.primary:not(:disabled):hover { background: #333; }
+
+/* gate */
+#gate { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; z-index: 10; }
+#gate .card { width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 22px; }
+.logo { display: inline-flex; border: 1.5px solid var(--ink); font-size: 13px; letter-spacing: .18em; height: 32px; text-decoration: none; background: var(--paper); }
+.logo .mk { display: grid; place-items: center; width: 32px; border-right: 1.5px solid var(--ink); font-weight: 600; letter-spacing: 0; }
+.logo .nm { display: grid; place-items: center; padding: 0 12px; background: var(--ink); color: var(--paper); font-weight: 500; }
+h1 { font-size: 26px; margin: 16px 0 4px; letter-spacing: .02em; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+.opt { border: 1.5px solid var(--ink); padding: 12px 14px; margin-top: 10px; }
+.opt b { display: block; }
+.opt p { margin: 4px 0 10px; color: var(--muted); font-size: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row .btn { flex: 1; }
+.note { font-size: 11px; color: var(--muted); margin-top: 12px; }
+.pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin: 12px 0; }
+.pick button { font: inherit; font-size: 11px; border: 1.5px solid var(--line); background: #f4f4f1; padding: 4px; cursor: pointer; }
+.pick button.on { border-color: var(--ink); background: #e9f7ee; }
+.pick img { width: 100%; aspect-ratio: 100/156; display: block; object-fit: contain; }
+.err { color: var(--down); font-size: 12px; margin-top: 10px; }
+
+/* hud */
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#hud > * { pointer-events: auto; }
+.hud-top { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+.stats { padding: 6px 10px; display: flex; gap: 12px; white-space: nowrap; }
+.stats b { font-weight: 600; }
+#compass { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 6px 12px; display: flex; gap: 10px; align-items: center; white-space: nowrap; max-width: calc(100% - 24px); }
+#arrow { display: inline-block; font-size: 16px; line-height: 1; transition: transform .08s linear; }
+#target { overflow: hidden; text-overflow: ellipsis; }
+#bag { position: absolute; left: 12px; bottom: 12px; padding: 6px 10px; max-width: 60%; }
+#bag:empty { display: none; }
+#help { position: absolute; right: 12px; bottom: 12px; padding: 6px 10px; font-size: 11px; color: var(--muted); }
+#joy { position: absolute; right: 22px; bottom: 22px; width: 124px; height: 124px; border: 1.5px solid var(--ink); border-radius: 50%; background: rgba(255,255,255,.55); touch-action: none; }
+#knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: var(--ink); }
+#labels { position: fixed; inset: 0; pointer-events: none; z-index: 4; }
+.label { position: absolute; transform: translate(-50%, -100%); background: var(--paper); border: 1.5px solid var(--ink); padding: 1px 7px; font-size: 11px; white-space: nowrap; }
+.label.mail { background: #fff6cf; }
+#toast { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 6; padding: 8px 14px; max-width: calc(100% - 24px); text-align: center; pointer-events: none; }
+@media (max-width: 600px) {
+  .stats { gap: 8px; font-size: 12px; }
+  .hud-top .logo .nm { display: none; }
+  #help { display: none; }
+  #bag { bottom: 160px; max-width: calc(100% - 24px); }
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+
+<div id="hud" hidden>
+  <div class="hud-top">
+    <a class="logo" href="/" aria-label="PepesFamily home"><span class="mk">P</span><span class="nm">PEPES WORLD</span></a>
+    <div class="stats box"><span title="Letters delivered today">📬 <b id="h-today">0</b>/<span id="h-goal">10</span></span><span title="IMD letters delivered today">✨ <b id="h-gold">0</b></span><span title="Days in a row">🔥 <b id="h-streak">0</b>d</span></div>
+  </div>
+  <div id="compass" class="box"><span id="arrow">▲</span><span id="target">Go to Pepes Post</span></div>
+  <div id="bag" class="box"></div>
+  <div id="help" class="box">WASD or arrow keys to walk</div>
+  <div id="joy" hidden><div id="knob"></div></div>
+</div>
+<div id="toast" class="box" hidden></div>
+
+<div id="gate"><div class="card box" id="gatecard"></div></div>
+
+<script>
+// ---------------------------------------------------------------- Config
+const CONFIG = {
+  chainId: 4663,
+  chainName: "Robinhood Chain",
+  rpc: "https://robinhood-rpc.publicnode.com",
+  walletRpc: "https://rpc.mainnet.chain.robinhood.com",
+  explorer: "https://robinhoodchain.blockscout.com",
+  earn: "0xf2363c208B1772C3c9dB7a3fe84d75Bf2881fc20",
+  renderer: "0xdb42735B94b45195cD175aE74C0AE5B40D9351cB",
+  pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
+  // PepesWorldVault, from contracts/deployments/robinhood-world.json. Empty: NFT holders only.
+  vault: "",
+  dailyGoal: 10,
+};
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const errMsg = (e) => e?.shortMessage || e?.info?.error?.message || e?.reason || e?.message || String(e);
+const fmt = (x) => Number(ethers.formatUnits(x, 18)).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const ro = new ethers.JsonRpcProvider(CONFIG.rpc, CONFIG.chainId, { staticNetwork: true });
+const ERC20_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address,address) view returns (uint256)",
+  "function approve(address,uint256) returns (bool)",
+];
+const EARN_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function ownedIds(address,uint256,uint256) view returns (uint256[])",
+];
+const RENDER_ABI = ["function image(uint256) pure returns (string)"];
+const VAULT_ABI = [
+  "function canPlay(address) view returns (bool)",
+  "function hasPass(address) view returns (bool)",
+  "function passPrice() view returns (uint256)",
+  "function enter()",
+];
+const earnC = new ethers.Contract(CONFIG.earn, EARN_ABI, ro);
+const renderC = new ethers.Contract(CONFIG.renderer, RENDER_ABI, ro);
+
+let toastTimer;
+function toast(msg, ms = 3200) {
+  const t = $("#toast");
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), ms);
+}
+
+// ---------------------------------------------------------------- Pepe art (on-chain)
+// The renderer draws each Pepe over a background wall; the game only needs the frog, which is the inner <svg>.
+const svgCache = new Map();
+function pepeSvg(id) {
+  if (!svgCache.has(id)) svgCache.set(id, renderC.image(id).then((svg) => {
+    const i = svg.indexOf('<svg x="75"');
+    if (i < 0) return svg;
+    const inner = svg.slice(i);
+    const body = inner.slice(inner.indexOf(">") + 1, inner.length - "</svg></svg>".length);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -30 100 156">${body}</svg>`;
+  }).catch((e) => { svgCache.delete(id); throw e; }));
+  return svgCache.get(id);
+}
+const svgUrl = (svg) => "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+function loadImg(src) {
+  return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
+}
+/// Plain green frog, used until (or if) the on-chain art loads.
+function fallbackCanvas() {
+  const c = document.createElement("canvas"); c.width = 200; c.height = 312;
+  const g = c.getContext("2d");
+  g.fillStyle = "#5cae4a"; g.strokeStyle = "#111"; g.lineWidth = 5;
+  g.beginPath(); g.ellipse(100, 205, 58, 80, 0, 0, 7); g.fill(); g.stroke();
+  g.beginPath(); g.ellipse(100, 120, 72, 52, 0, 0, 7); g.fill(); g.stroke();
+  for (const x of [68, 132]) {
+    g.fillStyle = "#fff"; g.beginPath(); g.arc(x, 82, 22, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = "#111"; g.beginPath(); g.arc(x + 4, 84, 8, 0, 7); g.fill();
+  }
+  g.strokeStyle = "#a33"; g.beginPath(); g.moveTo(62, 140); g.quadraticCurveTo(100, 156, 138, 140); g.stroke();
+  return c;
+}
+async function pepeTexture(id) {
+  const c = document.createElement("canvas"); c.width = 200; c.height = 312;
+  const im = await loadImg(svgUrl(await pepeSvg(id)));
+  c.getContext("2d").drawImage(im, 0, 0, 200, 312);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function texFromCanvas(c) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+
+// ---------------------------------------------------------------- Scene
+const R = 12;                      // planet radius
+const UP = new THREE.Vector3(0, 1, 0);
+const canvas = $("#c");
+const gl = new THREE.WebGLRenderer({ canvas, antialias: true });
+gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+const scene = new THREE.Scene();
+const SKY = 0xa8dcc9;
+scene.background = new THREE.Color(SKY);
+scene.fog = new THREE.Fog(SKY, 34, 80);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 300);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x3f6b45, 1.6));
+const sun = new THREE.DirectionalLight(0xfff4dd, 2.2);
+sun.position.set(10, 30, 14);
+scene.add(sun);
+
+const world = new THREE.Group();   // the planet and everything on it; walking rotates this under the player
+scene.add(world);
+
+function mulberry32(a) {
+  return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const rng = mulberry32(4663);
+const rdir = () => { const u = rng() * 2 - 1, t = rng() * Math.PI * 2, s = Math.sqrt(1 - u * u); return new THREE.Vector3(s * Math.cos(t), u, s * Math.sin(t)); };
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
+const arc = (a, b) => R * Math.acos(Math.min(1, Math.max(-1, a.dot(b))));
+const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9, ...extra });
+
+function place(obj, dir, h = 0, spin = 0) {
+  obj.position.copy(dir).multiplyScalar(R + h);
+  obj.quaternion.setFromUnitVectors(UP, dir);
+  obj.rotateY(spin);
+  world.add(obj);
+  return obj;
+}
+
+// ---- layout (decided first, so the ground can be flattened under buildings)
+const SPAWN = v3(0, 1, 0);
+const POST = v3(0, 1, -0.42);
+const POND = v3(0.75, 0.15, -0.65);
+const VILLAGERS = [
+  { id: 1, name: "King Pepe", castle: true, dir: v3(-0.25, -0.55, -0.8) },
+  { id: 777, name: "Gold Pepe" },
+  { id: 42, name: "Granny Pepe" },
+  { id: 69, name: "Fisher Pepe", dir: v3(0.55, 0.45, -0.7) },
+  { id: 420, name: "Doc Pepe" },
+  { id: 1337, name: "Coder Pepe" },
+  { id: 88, name: "Baker Pepe" },
+  { id: 1000, name: "Farmer Pepe" },
+  { id: 1500, name: "Artist Pepe" },
+];
+const taken = [{ d: SPAWN, r: 2.4 }, { d: POST, r: 3.6 }, { d: POND, r: 4.2 }];
+const free = (d, r) => taken.every((t) => arc(d, t.d) > t.r + r);
+for (const v of VILLAGERS) {
+  if (!v.dir) { let d, n = 0; do { d = rdir(); n++; } while (!free(d, 4.4) && n < 500); v.dir = d; }
+  taken.push({ d: v.dir, r: v.castle ? 3.2 : 2.6 });
+}
+const flats = [
+  { d: SPAWN, a: 2.6 / R, h: 0.02 },
+  { d: POST, a: 3.4 / R, h: 0.02 },
+  { d: POND, a: 2.7 / R, h: -0.45 },
+  ...VILLAGERS.map((v) => ({ d: v.dir, a: (v.castle ? 3.3 : 2.6) / R, h: 0.02 })),
+];
+
+// ---- ground
+{
+  const geo = new THREE.IcosahedronGeometry(R, 14);
+  const pos = geo.attributes.position, col = [];
+  const v = new THREE.Vector3(), c = new THREE.Color();
+  const greens = [new THREE.Color(0x67b85a), new THREE.Color(0x7cc861), new THREE.Color(0x58a650)];
+  const sand = new THREE.Color(0xe7d79a);
+  const noise = (p) => Math.sin(p.x * 4.1 + 1.7) * Math.sin(p.y * 3.7 + 0.3) * Math.sin(p.z * 4.3 + 2.1)
+    + 0.5 * Math.sin(p.x * 9.3) * Math.sin(p.y * 8.1 + 1) * Math.sin(p.z * 9.7 + 0.5);
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+    let h = noise(v) * 0.14, nearPond = 0;
+    for (const f of flats) {
+      const d = v.dot(f.d), outer = Math.cos(f.a * 1.35), inner = Math.cos(f.a);
+      if (d > outer) {
+        const k = Math.min(1, (d - outer) / (inner - outer));
+        const s = k * k * (3 - 2 * k);
+        h = h * (1 - s) + f.h * s;
+        if (f.d === POND) nearPond = s;
+      }
+    }
+    pos.setXYZ(i, v.x * (R + h), v.y * (R + h), v.z * (R + h));
+    c.copy(greens[Math.floor(i / 3) % 3]);
+    if (nearPond > 0.05) c.lerp(sand, Math.min(1, nearPond * 1.6));
+    col.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  geo.computeVertexNormals();
+  world.add(new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 })));
+}
+
+// ---- pond
+{
+  const water = new THREE.Mesh(
+    new THREE.SphereGeometry(R - 0.18, 48, 6, 0, Math.PI * 2, 0, 2.95 / R),
+    mat(0x4fb3d9, { roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.92 }),
+  );
+  water.quaternion.setFromUnitVectors(UP, POND);
+  world.add(water);
+  for (let i = 0; i < 7; i++) {
+    const a = rng() * Math.PI * 2, r = 0.6 + rng() * 1.8;
+    const t = new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r).applyQuaternion(water.quaternion);
+    const d = POND.clone().multiplyScalar(R).add(t).normalize();
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 10, 1, false, 0, Math.PI * 1.75), mat(0x3f9a3e));
+    place(pad, d, -0.15, rng() * 6);
+  }
+}
+
+// ---- props
+const obstacles = [];   // { obj, r }: the player can't walk into these
+function tree(s = 1) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.14 * s, 0.6 * s, 6), mat(0x8a5a36));
+  trunk.position.y = 0.3 * s; g.add(trunk);
+  const greens = [0x2f8a4a, 0x3a9d4f, 0x4daa55];
+  for (let i = 0; i < 3; i++) {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry((0.75 - i * 0.18) * s, 0.9 * s, 7), mat(greens[i]));
+    cone.position.y = (0.85 + i * 0.45) * s; g.add(cone);
+  }
+  return g;
+}
+function roundTree(s = 1) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.14 * s, 0.8 * s, 6), mat(0x7a4f30));
+  trunk.position.y = 0.4 * s; g.add(trunk);
+  const top = new THREE.Mesh(new THREE.IcosahedronGeometry(0.62 * s, 0), mat(rng() < 0.2 ? 0xe39bb5 : 0x5bb35a));
+  top.position.y = 1.15 * s; g.add(top);
+  return g;
+}
+function house(wall, roof) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.3, 1.5), mat(wall)); body.position.y = 0.65; g.add(body);
+  const top = new THREE.Mesh(new THREE.ConeGeometry(1.45, 0.95, 4), mat(roof)); top.position.y = 1.77; top.rotation.y = Math.PI / 4; g.add(top);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.7, 0.06), mat(0x5a3a22)); door.position.set(0, 0.35, 0.76); g.add(door);
+  for (const x of [-0.55, 0.55]) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.06), mat(0xfff1a8, { emissive: 0x332a00 })); w.position.set(x, 0.85, 0.76); g.add(w);
+  }
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.5, 0.24), mat(0x9b6b52)); ch.position.set(0.45, 1.95, -0.2); g.add(ch);
+  return g;
+}
+function castle() {
+  const g = new THREE.Group();
+  const stone = 0xd9d2c3, roof = 0x7d3cbf;
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.8, 1.8), mat(stone)); keep.position.y = 0.9; g.add(keep);
+  for (const [x, z] of [[-1.15, -0.95], [1.15, -0.95], [-1.15, 0.95], [1.15, 0.95]]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.42, 2.4, 8), mat(stone)); t.position.set(x, 1.2, z); g.add(t);
+    const c = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.8, 8), mat(roof)); c.position.set(x, 2.8, z); g.add(c);
+  }
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.06), mat(0x5a3a22)); door.position.set(0, 0.45, 0.92); g.add(door);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 4), mat(0x333333)); pole.position.set(0, 2.3, 0); g.add(pole);
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.02), mat(0xf2c230, { emissive: 0x332200 })); flag.position.set(0.26, 2.65, 0); g.add(flag);
+  return g;
+}
+function mailbox() {
+  const g = new THREE.Group();
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5), mat(0x6b4a2e)); post.position.y = 0.35; g.add(post);
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.24, 0.42), mat(0xd23c3c)); box.position.y = 0.8; g.add(box);
+  return g;
+}
+function textCanvas(text, w = 256, h = 64, bg = "#ffffff", fg = "#000000") {
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.fillStyle = bg; g.fillRect(0, 0, w, h); g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+  g.fillStyle = fg; g.font = `600 ${Math.floor(h * 0.42)}px "IBM Plex Mono", monospace`; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(text, w / 2, h / 2 + 2);
+  return c;
+}
+function postOffice() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.6, 2), mat(0xf6f1e4)); body.position.y = 0.8; g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.3, 2.3), mat(0x2f6fbf)); roof.position.y = 1.75; g.add(roof);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshBasicMaterial({ map: texFromCanvas(textCanvas("PEPES POST", 320, 80)) }));
+  sign.position.set(0, 2.25, 0.4); g.add(sign);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.95, 0.06), mat(0x2f6fbf)); door.position.set(0, 0.48, 1.02); g.add(door);
+  const box = mailbox(); box.position.set(1.7, 0, 1.2); box.scale.setScalar(1.3); g.add(box);
+  return g;
+}
+
+// buildings face the spawn, so their doors are what you see walking up to them
+function faceSpawn(dir) {
+  const toSpawn = SPAWN.clone().sub(dir.clone().multiplyScalar(dir.dot(SPAWN))).normalize();
+  if (!isFinite(toSpawn.x) || toSpawn.lengthSq() < 0.01) return 0;
+  const q = new THREE.Quaternion().setFromUnitVectors(UP, dir);
+  const front = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+  const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+  return Math.atan2(toSpawn.dot(right), toSpawn.dot(front));
+}
+function anchorAt(parent, x, y, z) { const a = new THREE.Object3D(); a.position.set(x, y, z); parent.add(a); return a; }
+
+const POSTOBJ = place(postOffice(), POST, 0, faceSpawn(POST));
+obstacles.push({ obj: POSTOBJ, r: 1.75 });
+const postAnchor = anchorAt(POSTOBJ, 0, 0, 2.3);
+const postLabel = anchorAt(POSTOBJ, 0, 3.0, 0);
+
+const HOUSE_COLORS = [[0xffd7a8, 0xc6533b], [0xcde8ff, 0x3b6fc6], [0xffe7f0, 0xc63b7a], [0xe9ffd6, 0x4f8f3a], [0xfff3b0, 0x9b5f1f], [0xe7ddff, 0x6a4fc6], [0xffe0cc, 0x8f3a3a], [0xd8fff6, 0x2f8f80]];
+const villagerSprites = [];
+VILLAGERS.forEach((v, i) => {
+  const spin = faceSpawn(v.dir);
+  const b = place(v.castle ? castle() : house(...HOUSE_COLORS[i % HOUSE_COLORS.length]), v.dir, 0, spin);
+  obstacles.push({ obj: b, r: v.castle ? 1.7 : 1.15 });
+  const mb = mailbox(); mb.position.set(v.castle ? 1.5 : 1.15, 0, v.castle ? 1.5 : 1.15); b.add(mb);
+  v.anchor = anchorAt(b, 0, 0, v.castle ? 2.3 : 1.7);   // stand at the door to deliver
+  v.labelAnchor = anchorAt(b, 0, v.castle ? 3.6 : 2.7, 0);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFromCanvas(fallbackCanvas()), transparent: true }));
+  sp.scale.set(0.75, 1.17, 1); sp.position.set(-0.85, 0.58, v.castle ? 1.35 : 1.05);
+  b.add(sp); villagerSprites.push([v.id, sp]);
+});
+
+for (let n = 0, placed = 0; placed < 85 && n < 4000; n++) {
+  const d = rdir();
+  if (!free(d, 0.6)) continue;
+  const s = 0.7 + rng() * 0.6;
+  const t = place(rng() < 0.55 ? tree(s) : roundTree(s), d, 0, rng() * 6);
+  obstacles.push({ obj: t, r: 0.42 * s });
+  taken.push({ d, r: 0.55 });
+  placed++;
+}
+for (let n = 0, placed = 0; placed < 22 && n < 2000; n++) {
+  const d = rdir();
+  if (!free(d, 0.3)) continue;
+  const s = 0.25 + rng() * 0.35;
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), mat(0x9aa0a6));
+  place(rock, d, s * 0.3, rng() * 6);
+  obstacles.push({ obj: rock, r: s * 0.9 });
+  taken.push({ d, r: s });
+  placed++;
+}
+{
+  const petals = [0xffffff, 0xffd84d, 0xff8fb1, 0xb59cff];
+  for (let i = 0; i < 160; i++) {
+    const d = rdir();
+    if (arc(d, POND) < 3.4) continue;
+    const f = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), mat(petals[i % 4]));
+    place(f, d, 0.08);
+  }
+}
+// clouds drift around the planet on their own pivot
+const clouds = new THREE.Group();
+scene.add(clouds);
+for (let i = 0; i < 12; i++) {
+  const c = new THREE.Group();
+  for (let j = 0; j < 3 + Math.floor(rng() * 3); j++) {
+    const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6 + rng() * 0.5, 0), mat(0xffffff, { roughness: 1 }));
+    puff.position.set(j * 0.7 - 0.9, rng() * 0.3, rng() * 0.4); c.add(puff);
+  }
+  const d = rdir();
+  c.position.copy(d).multiplyScalar(R + 19 + rng() * 3);
+  c.quaternion.setFromUnitVectors(UP, d);
+  c.scale.setScalar(1.2);
+  clouds.add(c);
+}
+
+// ---- player
+const player = new THREE.Sprite(new THREE.SpriteMaterial({ map: texFromCanvas(fallbackCanvas()), transparent: true }));
+const PW = 1.0, PH = 1.56;
+player.scale.set(PW, PH, 1);
+player.position.set(0, R + PH / 2 + 0.02, 0);
+player.visible = false;
+scene.add(player);
+const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.42, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.18, depthWrite: false }));
+shadow.rotation.x = -Math.PI / 2; shadow.position.set(0, R + 0.06, 0); shadow.visible = false;
+scene.add(shadow);
+
+// ---- letter markers
+function envelopeCanvas(gold) {
+  const c = document.createElement("canvas"); c.width = 128; c.height = 96;
+  const g = c.getContext("2d");
+  g.fillStyle = gold ? "#f5c542" : "#ffffff"; g.strokeStyle = "#111"; g.lineWidth = 6;
+  g.fillRect(8, 12, 112, 72); g.strokeRect(8, 12, 112, 72);
+  g.beginPath(); g.moveTo(8, 12); g.lineTo(64, 56); g.lineTo(120, 12); g.stroke();
+  return c;
+}
+const ENV = { plain: texFromCanvas(envelopeCanvas(false)), gold: texFromCanvas(envelopeCanvas(true)) };
+const markers = new Map(); // villager index -> sprite
+function setMarker(vi, gold) {
+  let m = markers.get(vi);
+  if (!m) {
+    m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ENV.plain, transparent: true }));
+    m.scale.set(0.9, 0.68, 1); m.renderOrder = 10;
+    VILLAGERS[vi].labelAnchor.add(m);
+    markers.set(vi, m);
+  }
+  m.material.map = gold ? ENV.gold : ENV.plain; m.material.needsUpdate = true;
+  m.visible = true;
+}
+function clearMarker(vi) { const m = markers.get(vi); if (m) m.visible = false; }
+
+// ---------------------------------------------------------------- Game state
+const LETTERS = [
+  "Your 3% IMD is ready to claim!",
+  "Postcard from the $EARN pool 🌊",
+  "Buyback receipt: more $Pepes burned 🔥",
+  "gm from the castle 👑",
+  "Invitation: pond party at sunset",
+  "Reminder: claim within 30 days!",
+  "Fan mail for your on-chain drip",
+  "A new token just launched on PepesFamily",
+  "Recipe: IMD soup with lily pads",
+  "Thank you for holding 💚",
+];
+let account = null;
+let save = { day: "", today: 0, gold: 0, streak: 0, total: 0, lastDay: "" };
+let bag = [];           // [{ vi, gold, text }]
+let playing = false;
+
+const dayKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function loadSave() {
+  try { const s = JSON.parse(localStorage.getItem("pw:" + account.toLowerCase()) || "null"); if (s) save = { ...save, ...s }; } catch {}
+  if (save.day !== dayKey()) { save.day = dayKey(); save.today = 0; save.gold = 0; }
+}
+function writeSave() { try { localStorage.setItem("pw:" + account.toLowerCase(), JSON.stringify(save)); } catch {} }
+function hud() {
+  $("#h-today").textContent = save.today;
+  $("#h-goal").textContent = CONFIG.dailyGoal;
+  $("#h-gold").textContent = save.gold;
+  $("#h-streak").textContent = save.streak;
+  $("#bag").innerHTML = bag.length ? "✉️ " + bag.map((b) => `<span style="${b.gold ? "color:var(--gold);font-weight:600" : ""}">${esc(VILLAGERS[b.vi].name)}</span>`).join(" · ") : "";
+}
+
+function pickUp() {
+  const n = 3;
+  const pool = VILLAGERS.map((_, i) => i).sort(() => Math.random() - 0.5).slice(0, n);
+  bag = pool.map((vi) => ({ vi, gold: Math.random() < 0.18, text: LETTERS[Math.floor(Math.random() * LETTERS.length)] }));
+  bag.forEach((b) => setMarker(b.vi, b.gold));
+  const golds = bag.filter((b) => b.gold).length;
+  toast(golds ? `📬 ${n} letters picked up, ${golds} of them an IMD letter ✨` : `📬 ${n} letters picked up. Follow the arrow!`);
+  hud();
+}
+function deliver(vi) {
+  const mine = bag.filter((b) => b.vi === vi);
+  if (!mine.length) return;
+  bag = bag.filter((b) => b.vi !== vi);
+  clearMarker(vi);
+  const today = dayKey();
+  if (save.lastDay !== today) {
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    save.streak = save.lastDay === dayKey(y) ? save.streak + 1 : 1;
+    save.lastDay = today;
+  }
+  const before = save.today;
+  for (const b of mine) { save.today++; save.total++; if (b.gold) save.gold++; }
+  writeSave();
+  const b = mine[0];
+  if (before < CONFIG.dailyGoal && save.today >= CONFIG.dailyGoal) toast(`🎉 Daily goal done! ${CONFIG.dailyGoal} letters. Come back tomorrow for a ${save.streak + 1}-day streak.`, 5000);
+  else toast(`${b.gold ? "✨" : "✉️"} ${VILLAGERS[vi].name}: "${b.text}"`, 3800);
+  if (!bag.length) setTimeout(() => playing && toast("Bag empty. Head back to Pepes Post for more letters."), 3900);
+  hud();
+}
+
+// ---------------------------------------------------------------- Input
+const keys = new Set();
+addEventListener("keydown", (e) => { if (!playing) return; keys.add(e.key.toLowerCase()); if (e.key.startsWith("Arrow")) e.preventDefault(); });
+addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+addEventListener("blur", () => keys.clear());
+const joy = { x: 0, y: 0, id: null };
+{
+  const pad = $("#joy"), knob = $("#knob");
+  const move = (e) => {
+    const r = pad.getBoundingClientRect();
+    let x = (e.clientX - r.left - r.width / 2) / (r.width / 2), y = (e.clientY - r.top - r.height / 2) / (r.height / 2);
+    const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
+    joy.x = x; joy.y = y;
+    knob.style.transform = `translate(${x * 36}px, ${y * 36}px)`;
+  };
+  pad.addEventListener("pointerdown", (e) => { joy.id = e.pointerId; pad.setPointerCapture(e.pointerId); move(e); });
+  pad.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) move(e); });
+  const end = (e) => { if (e.pointerId !== joy.id) return; joy.id = null; joy.x = joy.y = 0; knob.style.transform = ""; };
+  pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
+  if (matchMedia("(pointer: coarse)").matches) pad.hidden = false;
+}
+
+// ---------------------------------------------------------------- Loop
+const SPEED = 4.2, TURN = 2.3;
+const FOOT = new THREE.Vector3(0, R, 0);
+const tmp = new THREE.Vector3(), qx = new THREE.Quaternion(), qy = new THREE.Quaternion();
+const AX = new THREE.Vector3(1, 0, 0);
+const PLAY_CAM = { pos: new THREE.Vector3(0, R + 6.2, 10.5), look: new THREE.Vector3(0, R + 0.6, -3.2) };
+const IDLE_CAM = { pos: new THREE.Vector3(0, 4, 44), look: new THREE.Vector3(0, 0, 0) };
+let intro = null;       // camera move into play
+let walkT = 0, tilt = 0;
+
+function blocked() {
+  for (const o of obstacles) {
+    o.obj.getWorldPosition(tmp);
+    if (tmp.y < R * 0.6) continue;
+    if (Math.hypot(tmp.x, tmp.z) < o.r + 0.38 && tmp.y > 0) return true;
+  }
+  const p = POND.clone().applyQuaternion(world.quaternion);
+  return arc(p, UP) < 2.75;
+}
+function update(dt, t) {
+  clouds.rotation.y += dt * 0.02;
+  if (!playing && !intro) { world.rotateOnWorldAxis(v3(0.25, 1, 0.1), dt * 0.12); return; }
+  if (intro) {
+    intro.k = Math.min(1, intro.k + dt / 1.8);
+    const e = intro.k < 0.5 ? 2 * intro.k * intro.k : 1 - Math.pow(-2 * intro.k + 2, 2) / 2;
+    world.quaternion.slerpQuaternions(intro.from, new THREE.Quaternion(), e);
+    camera.position.lerpVectors(IDLE_CAM.pos, PLAY_CAM.pos, e);
+    tmp.lerpVectors(IDLE_CAM.look, PLAY_CAM.look, e); camera.lookAt(tmp);
+    if (intro.k >= 1) { intro = null; playing = true; toast("Welcome to Pepes World! Pick up letters at Pepes Post 📬", 4200); }
+    return;
+  }
+  let fwd = 0, turn = 0;
+  if (keys.has("w") || keys.has("arrowup")) fwd += 1;
+  if (keys.has("s") || keys.has("arrowdown")) fwd -= 1;
+  if (keys.has("a") || keys.has("arrowleft")) turn -= 1;
+  if (keys.has("d") || keys.has("arrowright")) turn += 1;
+  if (joy.id !== null) { fwd -= joy.y; turn += joy.x; }
+  fwd = Math.max(-1, Math.min(1, fwd)); turn = Math.max(-1, Math.min(1, turn));
+  if (turn) { qy.setFromAxisAngle(UP, turn * TURN * dt); world.quaternion.premultiply(qy); }
+  if (fwd) {
+    const prev = world.quaternion.clone();
+    qx.setFromAxisAngle(AX, (fwd * (fwd > 0 ? SPEED : SPEED * 0.6) * dt) / R);
+    world.quaternion.premultiply(qx);
+    if (blocked()) world.quaternion.copy(prev);
+  }
+  const moving = fwd !== 0 || turn !== 0;
+  walkT = moving ? walkT + dt * 11 : 0;
+  tilt += ((-turn * 0.18) - tilt) * Math.min(1, dt * 10);
+  player.position.y = R + PH / 2 + 0.02 + Math.abs(Math.sin(walkT)) * 0.12;
+  player.material.rotation = tilt + (moving ? Math.sin(walkT) * 0.05 : 0);
+
+  // pick up and deliver
+  if (!bag.length) {
+    postAnchor.getWorldPosition(tmp);
+    if (tmp.distanceTo(FOOT) < 1.7) pickUp();
+  } else {
+    for (const b of [...bag]) {
+      VILLAGERS[b.vi].anchor.getWorldPosition(tmp);
+      if (tmp.distanceTo(FOOT) < 1.6) deliver(b.vi);
+    }
+  }
+  // markers bob
+  for (const m of markers.values()) m.position.y = 0.5 + Math.sin(t * 3) * 0.15;
+  compass();
+}
+
+// arrow to the nearest letter's house, or to the post office
+function compass() {
+  let best = null;
+  if (bag.length) {
+    for (const b of bag) {
+      const p = VILLAGERS[b.vi].anchor.getWorldPosition(new THREE.Vector3());
+      const d = arc(p.clone().normalize(), UP);
+      if (!best || d < best.d) best = { p, d, name: VILLAGERS[b.vi].name, gold: b.gold };
+    }
+  } else {
+    const p = postAnchor.getWorldPosition(new THREE.Vector3());
+    best = { p, d: arc(p.clone().normalize(), UP), name: "Pepes Post", post: true };
+  }
+  const ang = Math.atan2(best.p.x, -best.p.z);
+  $("#arrow").style.transform = `rotate(${ang}rad)`;
+  $("#target").textContent = `${best.post ? "Pick up letters at" : best.gold ? "✨ Deliver to" : "Deliver to"} ${best.name} · ${Math.max(0, Math.round(best.d))}m`;
+}
+
+// floating name tags over nearby buildings
+const labelEls = new Map();
+function labels() {
+  const box = $("#labels");
+  const items = playing ? [{ key: "post", a: postLabel, name: "Pepes Post", mail: !bag.length }, ...VILLAGERS.map((v, i) => ({ key: i, a: v.labelAnchor, name: v.name, mail: bag.some((b) => b.vi === i) }))] : [];
+  const seen = new Set();
+  for (const it of items) {
+    it.a.getWorldPosition(tmp);
+    if (tmp.y < R * 0.55 || Math.hypot(tmp.x, tmp.z) > 13) continue;
+    tmp.project(camera);
+    if (tmp.z > 1) continue;
+    let el = labelEls.get(it.key);
+    if (!el) { el = document.createElement("div"); el.className = "label"; box.appendChild(el); labelEls.set(it.key, el); }
+    el.textContent = it.name; el.classList.toggle("mail", it.mail);
+    el.style.left = ((tmp.x + 1) / 2) * innerWidth + "px";
+    el.style.top = ((1 - tmp.y) / 2) * innerHeight - (it.mail ? 30 : 0) + "px";
+    el.hidden = false; seen.add(it.key);
+  }
+  for (const [k, el] of labelEls) if (!seen.has(k)) el.hidden = true;
+}
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  gl.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.fov = w < h ? 62 : 50;   // portrait phones see a bit more
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize);
+resize();
+camera.position.copy(IDLE_CAM.pos); camera.lookAt(IDLE_CAM.look);
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  update(dt, now / 1000);
+  labels();
+  gl.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// villagers wear their on-chain looks
+for (const [id, sp] of villagerSprites) pepeTexture(id).then((t) => { sp.material.map = t; sp.material.needsUpdate = true; }).catch(() => {});
+
+// ---------------------------------------------------------------- Wallet + access
+const WALLETS = [];
+addEventListener("eip6963:announceProvider", (e) => {
+  const { info, provider } = e.detail || {};
+  if (info?.uuid && provider && !WALLETS.some((w) => w.info.uuid === info.uuid)) WALLETS.push({ info, provider });
+});
+dispatchEvent(new Event("eip6963:requestProvider"));
+let ETH = null;
+
+function pickWallet() {
+  if (WALLETS.length === 0) return Promise.resolve(window.ethereum ? { provider: window.ethereum, info: { name: "Your wallet" } } : null);
+  if (WALLETS.length === 1) return Promise.resolve(WALLETS[0]);
+  return new Promise((resolve) => {
+    gate(`<b>Connect a wallet</b><div style="margin-top:10px;display:grid;gap:8px">${WALLETS.map((w, i) => `<button class="btn" data-i="${i}">${esc(w.info.name)}</button>`).join("")}<button class="btn" data-i="-1">Cancel</button></div>`);
+    $("#gatecard").querySelectorAll("[data-i]").forEach((b) => (b.onclick = () => resolve(b.dataset.i === "-1" ? null : WALLETS[Number(b.dataset.i)])));
+  });
+}
+async function connect() {
+  const picked = await pickWallet();
+  if (!picked) { if (!WALLETS.length && !window.ethereum) throw new Error("No wallet found. Install a browser wallet such as MetaMask, Rabby or Phantom."); return null; }
+  ETH = picked.provider;
+  // Ask for the account first: some wallets (Phantom) reject every other request until the site is authorized.
+  const accs = await ETH.request({ method: "eth_requestAccounts" });
+  ETH.on?.("accountsChanged", () => location.reload());
+  return ethers.getAddress(accs[0]);
+}
+async function ensureChain() {
+  const hex = "0x" + CONFIG.chainId.toString(16);
+  if ((await ETH.request({ method: "eth_chainId" })) === hex) return;
+  try {
+    await ETH.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+  } catch (e) {
+    if ((e?.code ?? e?.data?.originalError?.code) === 4001) throw e;
+    await ETH.request({ method: "wallet_addEthereumChain", params: [{
+      chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.walletRpc],
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [CONFIG.explorer],
+    }] });
+  }
+}
+
+const HEAD = `<a class="logo" href="/" aria-label="PepesFamily home"><span class="mk">P</span><span class="nm">PEPESFAMILY</span></a>
+  <h1>Pepes World 🐸</h1>`;
+function gate(html) { $("#gate").hidden = false; $("#gatecard").innerHTML = html; }
+
+function welcome(err) {
+  gate(`${HEAD}
+    <p class="sub">Deliver letters around a tiny Pepe planet. Your Pepes Earn IMD NFT is your character.</p>
+    <div class="row"><button class="btn primary" id="go">Connect wallet to play</button></div>
+    <p class="note">Open to holders of 1 Pepes Earn IMD NFT${CONFIG.vault ? ", or anyone with a Pepes World pass (a one-time 50,000 $PEPES entry)" : ""}. Connecting only reads your wallet: nothing is signed or sent.</p>
+    ${err ? `<p class="err">${esc(err)}</p>` : ""}`);
+  $("#go").onclick = () => start().catch((e) => welcome(errMsg(e)));
+}
+
+async function start() {
+  const addr = await connect();
+  if (!addr) return welcome();
+  account = addr;
+  gate(`${HEAD}<p class="sub">Checking ${esc(addr.slice(0, 6))}…${esc(addr.slice(-4))}…</p>`);
+  const vault = CONFIG.vault ? new ethers.Contract(CONFIG.vault, VAULT_ABI, ro) : null;
+  const [earnBal, pass] = await Promise.all([earnC.balanceOf(addr), vault ? vault.hasPass(addr) : false]);
+  const ids = earnBal >= 10n ** 18n ? (await earnC.ownedIds(addr, 0, 60)).map(Number) : [];
+  if (ids.length) return choose(ids);
+  if (earnBal >= 10n ** 18n || pass) return choose([], earnBal >= 10n ** 18n);
+  locked(vault);
+}
+
+// character select: owned Pepes, or a guest look for pass holders
+function choose(ids, smartWallet) {
+  const guest = 1 + Number(BigInt(account) % 2000n);
+  const list = ids.length ? ids : [guest];
+  let sel = list[0];
+  gate(`${HEAD}
+    <p class="sub">${ids.length ? `Pick your Pepe (${ids.length} in your wallet).` : smartWallet ? "Your wallet holds $EARN but no NFT (smart wallets don't receive them), so you get a guest look." : "You have a Pepes World pass. Here's your guest look; hold a Pepes Earn IMD NFT to play as your own Pepe."}</p>
+    <div class="pick">${list.map((id, i) => `<button data-id="${id}" class="${i ? "" : "on"}"><img alt="Pepe #${id}" /><span>#${id}</span></button>`).join("")}</div>
+    <div class="row"><button class="btn primary" id="play">Play</button></div>
+    <p class="note">Controls: WASD or arrow keys, or the joystick on phones.</p>`);
+  const card = $("#gatecard");
+  card.querySelectorAll("[data-id]").forEach((b) => {
+    const id = Number(b.dataset.id);
+    pepeSvg(id).then((svg) => (b.querySelector("img").src = svgUrl(svg))).catch(() => (b.querySelector("img").src = fallbackCanvas().toDataURL()));
+    b.onclick = () => { sel = id; card.querySelectorAll("[data-id]").forEach((x) => x.classList.toggle("on", x === b)); };
+  });
+  $("#play").onclick = () => play(sel);
+}
+
+async function locked(vault, err) {
+  let pepesBal = 0n, price = 0n;
+  if (vault) [pepesBal, price] = await Promise.all([new ethers.Contract(CONFIG.pepes, ERC20_ABI, ro).balanceOf(account), vault.passPrice()]);
+  const enough = vault && pepesBal >= price;
+  gate(`${HEAD}
+    <p class="sub">This wallet can't play yet. Choose a way in:</p>
+    <div class="opt"><b>🐸 Hold 1 Pepes Earn IMD NFT</b>
+      <p>Buy 1 $EARN and the NFT lands in your wallet. Play as your own Pepe, and earn 3% of every $EARN trade in IMD.</p>
+      <a class="btn primary" href="/#/nft" style="width:100%">Get a Pepes Earn IMD NFT</a></div>
+    <div class="opt"><b>🎟️ Pepes World pass</b>
+      ${vault ? `<p>A one-time deposit of ${fmt(price)} $PEPES to the Pepes World vault. Not refundable, and the pass never expires. You hold ${fmt(pepesBal)} $PEPES.</p>
+        ${enough ? `<button class="btn" id="enter" style="width:100%">Enter with ${fmt(price)} $PEPES</button>` : `<a class="btn" href="/#/t/${CONFIG.pepes}" style="width:100%">Get $PEPES</a>`}`
+        : `<p>Coming soon: a one-time 50,000 $PEPES entry.</p>`}</div>
+    <div class="row" style="margin-top:12px"><button class="btn" id="recheck">I got one, check again</button></div>
+    ${err ? `<p class="err">${esc(err)}</p>` : ""}`);
+  $("#recheck").onclick = () => start().catch((e) => welcome(errMsg(e)));
+  if ($("#enter")) $("#enter").onclick = () => enterVault(vault, price).catch((e) => locked(vault, errMsg(e)));
+}
+
+async function enterVault(vault, price) {
+  await ensureChain();
+  const signer = await new ethers.BrowserProvider(ETH).getSigner();
+  const pepes = new ethers.Contract(CONFIG.pepes, ERC20_ABI, signer);
+  const btn = $("#enter");
+  if ((await pepes.allowance(account, CONFIG.vault)) < price) {
+    btn.disabled = true; btn.textContent = "Approve $PEPES in your wallet…";
+    await (await pepes.approve(CONFIG.vault, price)).wait();
+  }
+  btn.disabled = true; btn.textContent = "Confirm the deposit in your wallet…";
+  await (await vault.connect(signer).enter()).wait();
+  toast("🎟️ Pass unlocked. Welcome to Pepes World!");
+  choose([]);
+}
+
+async function play(id) {
+  $("#gate").hidden = true;
+  loadSave(); hud();
+  pepeTexture(id).then((t) => { player.material.map = t; player.material.needsUpdate = true; }).catch(() => {});
+  player.visible = shadow.visible = true;
+  $("#hud").hidden = false;
+  intro = { k: 0, from: world.quaternion.clone() };
+}
+
+welcome();
+</script>
+</body>
+</html>
