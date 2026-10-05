@@ -109,7 +109,7 @@ const CONFIG = {
   renderer: "0xdb42735B94b45195cD175aE74C0AE5B40D9351cB",
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
   // PepesWorldVault, from contracts/deployments/robinhood-world.json. Empty: NFT holders only.
-  vault: "",
+  vault: "0xE38cE23F33D5901402352392b49fb6e658801b51",
   vaultAudit: "https://explorer.imd.fun/jobs/4e9b1481-d807-4a37-ab7e-f5b3d3a7e066",
   dailyGoal: 10,
 };
@@ -735,7 +735,7 @@ function welcome(err) {
   gate(`${HEAD}
     <p class="sub">Deliver letters around a tiny Pepe planet. Your Pepes Earn IMD NFT is your character.</p>
     <div class="row"><button class="btn primary" id="go">Connect wallet to play</button></div>
-    <p class="note">Open to holders of 1 Pepes Earn IMD NFT${CONFIG.vault ? ", or anyone with a Pepes World pass (a one-time 50,000 $PEPES entry)" : ""}. Connecting only reads your wallet: nothing is signed or sent.</p>
+    <p class="note">Open to holders of 1 Pepes Earn IMD NFT${CONFIG.vault ? ", or anyone with a Pepes World pass (a one-time 100,000 $PEPES entry)" : ""}. Connecting only reads your wallet: nothing is signed or sent.</p>
     ${err ? `<p class="err">${esc(err)}</p>` : ""}`);
   $("#go").onclick = () => start().catch((e) => welcome(errMsg(e)));
 }
@@ -784,7 +784,7 @@ async function locked(vault, err) {
     <div class="opt"><b>🎟️ Pepes World pass</b>
       ${vault ? `<p>A one-time deposit of ${fmt(price)} $PEPES to the Pepes World vault (<a href="${CONFIG.vaultAudit}" target="_blank" rel="noopener">audited ↗</a>). Not refundable, and the pass never expires. You hold ${fmt(pepesBal)} $PEPES.</p>
         ${enough ? `<button class="btn" id="enter" style="width:100%">Enter with ${fmt(price)} $PEPES</button>` : `<a class="btn" href="/#/t/${CONFIG.pepes}" style="width:100%">Get $PEPES</a>`}`
-        : `<p>Coming soon: a one-time 50,000 $PEPES entry.</p>`}</div>
+        : `<p>Coming soon: a one-time 100,000 $PEPES entry.</p>`}</div>
     <div class="row" style="margin-top:12px"><button class="btn" id="recheck">I got one, check again</button></div>
     ${err ? `<p class="err">${esc(err)}</p>` : ""}`);
   $("#recheck").onclick = () => start().catch((e) => welcome(errMsg(e)));
