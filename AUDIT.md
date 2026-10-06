@@ -15,7 +15,16 @@ PepesFamily is a fixed-supply token launchpad on **Robinhood Chain** (chain ID 4
 
 ## 2. Scope
 
-### In scope: v3 (receives all new launches)
+### In scope: v4 (in review, not deployed; will receive all new launches)
+
+v4 is v3 (below) with IMD-only launches and **expiry of unclaimed holder rewards**; same files, same deployment shape:
+
+- `PadToken`: a wallet is active when it claims, buys (the hook calls `markActive(buyer)` on every buy; the buyer is the user reported by `PepesFamilyRouter`/`PepesFamilyEthRouter` in hookData, otherwise `tx.origin`), sends, pulls tokens itself (`msg.sender == to`) or receives tokens for the first time. Receipts initiated by someone else never count.
+- After more than 7 days of inactivity a wallet's unclaimed rewards expire, except those earned in its last 7 days (`expiredRewardsOf`, from time checkpoints of `magnifiedDividendPerShare`). `recycle(holder)` (anyone) and `claim()` (the holder, before paying out) send the expired part to the launchpad's `feeRecipient`, read at call time.
+- The team buys back and burns $Pepes with that IMD manually: a trust assumption, not enforced on-chain. The on-chain buyback tried in earlier rounds was removed (IMD Swarm ec4e3ea7, b803125e, 348884ab, cbe092d6).
+- Known limit: "recent" rewards are estimated from the current balance, so tokens received during the last 7 days can delay the expiry of older rewards by up to 7 days (cbe092d6, finding 1); `recycle` never exceeds `expiredRewardsOf`.
+
+### Live: v3 (until v4 is deployed)
 
 | File | Deployed at |
 | --- | --- |
@@ -79,9 +88,9 @@ The hook and fee logic are otherwise the same. Small hardening that landed befor
 
 | Role | Can do | Cannot do |
 | --- | --- | --- |
-| `owner` of PepesFamily (v1 and v2: `0x3c8A…691C`) | `setFeeRecipient`; `setStartTick(quote, tick)` (starting price for **future** launches, bounded and spacing-aligned); two-step `transferOwnership` / `acceptOwnership` | Change fee rates; touch pools, liquidity, holder rewards or tokens; pause; upgrade; add quote assets |
-| `feeRecipient` | Receives protocol fees | Anything else |
-| Anyone | `launch`; `flush(token)`; `collectProtocolFees(quote)` (always pays `feeRecipient`); `PadToken.distribute()`; trade through any v4 router | |
+| `owner` of PepesFamily (`0x3c8A…691C`) | `setFeeRecipient` (on v4 this also chooses where expired holder rewards go); `setStartTick(quote, tick)` (starting price for **future** launches, bounded and spacing-aligned); two-step `transferOwnership` / `acceptOwnership` | Change fee rates; touch pools, liquidity, unexpired holder rewards or tokens; pause; upgrade; add quote assets |
+| `feeRecipient` | Receives protocol fees; on v4 also expired holder rewards, for a manual $Pepes buyback-and-burn | Anything else |
+| Anyone | `launch`; `flush(token)`; `collectProtocolFees(quote)` (always pays `feeRecipient`); `PadToken.distribute()`; v4: `PadToken.recycle(holder)` / `recycleMany` (only expired rewards, only to `feeRecipient`); trade through any v4 router | |
 | Uniswap v4 PoolManager `0x8366a39CC670B4001A1121B8F6A443A643e40951` | Calls hook callbacks and `unlockCallback` | |
 
 **External dependencies we trust:**
@@ -135,7 +144,8 @@ The position is owned by the launchpad (salt 0). There is no remove path.
 1. **Locked liquidity.** No call sequence by anyone, including the owner, reduces the launchpad's liquidity in any launched pool. No third party can initialize a pool with this hook or add liquidity to one.
 2. **Fee correctness.** For every swap on a launched pool, through any router, in any of the four modes (exact-in/out × buy/sell), the hook takes exactly 4% of the trader's gross quote amount (±1 wei rounding), split 1% / 3%.
 3. **Claim solvency.** For each currency, the launchpad's ERC-6909 claim balance equals the sum of `pendingHolderFees[t]` over tokens with that quote, plus `pendingProtocolFees[quote]`.
-4. **Reward solvency.** For each token, `accountedBalance ≤ quote.balanceOf(token)`. The sum of all holders' `withdrawableDividendOf` is at most `accountedBalance`. Claims can never pay out more than was distributed.
+4. **Reward solvency.** For each token, `accountedBalance` = distributed − claimed − recycled ≤ `quote.balanceOf(token)`. The sum of all holders' `withdrawableDividendOf` is at most `accountedBalance`. Claims can never pay out more than was distributed.
+4b. **Expiry (v4).** `recycle` (and the expired part of `claim`) never moves more than `expiredRewardsOf(holder)`, which never includes rewards the holder earned in its last 7 days, and is zero while the holder is active.
 5. **Supply.** `totalSupply` is constant at 1e27. The sum of balances equals 1e27. `eligibleSupply` equals the sum of non-excluded balances.
 6. **Transfers move only future rewards.** Moving tokens never changes either party's already-accrued rewards.
 7. **Routers are stateless and only spend `msg.sender`'s assets.** They hold no funds between transactions and cannot be made to pull another account's tokens or IMD.
@@ -210,13 +220,16 @@ The position is owned by the launchpad (salt 0). There is no remove path.
 - **Unclaimed early fees.** Holder fees from before any holder has at least 1 token wait in the token contract and go to the holders present at the next distribution.
 - **Lost transfers.** Tokens sent directly to the launchpad or the PoolManager are lost; they are excluded from rewards.
 - **Locked donations.** Donations to a pool go to the locked position and cannot be recovered.
+- **v4: gifts delay expiry.** Tokens received during a wallet's last 7 days count toward its "recent" balance, so a large gift can delay the expiry of older rewards by up to 7 days. Nobody gains from it.
+- **v4: smart-contract wallets on third-party routers.** Their buys credit `tx.origin`, so they should claim at least weekly.
+- **v4: manual buyback.** Expired rewards reach `feeRecipient`; burning $Pepes with them is the team's job, published on-chain.
 
 ## 9. Tests
 
 ```bash
 cd contracts
-forge test                                       # 34 unit + attack tests against a real v4 PoolManager
-FORK_RPC=https://robinhood.drpc.org forge test   # + 7 fork tests on live Robinhood Chain state
+forge test                                       # 116 unit, attack and fuzz tests (launchpad, $EARN, Pepes World)
+FORK_RPC=https://robinhood.drpc.org forge test   # + fork tests on live Robinhood Chain state
 ```
 
 The tests cover:
@@ -231,6 +244,7 @@ The tests cover:
 - two-step ownership
 - permit: valid use, wrong signer, replay, expiry, and front-run tolerance
 - a fuzzed solvency check
+- v4 expiry: the 7-day boundary, recent rewards, strict claim, gifts, every buy path marking activity, and a ground-truth fuzz over random action sequences (`testFuzz_expiryGroundTruth`)
 - fork tests using the real PoolManager, IMD, the IMD/ETH pool and Uniswap's deployed V4Quoter
 
 The tests do not include formal invariant/stateful fuzzing of §5. We would welcome suggestions or additions there.

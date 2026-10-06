@@ -947,4 +947,158 @@ contract PepesFamilyTest is Test {
         assertEq(t.expiredRewardsOf(bob), 0);
         assertGe(imd.balanceOf(address(t)), t.accountedBalance());
     }
+
+    // ------------------------------------------------------------ v4 final check (cbe092d6)
+
+    /// Finding 2: expiry is strict; an inactive wallet that claims receives only what hasn't expired.
+    function test_expiry_claimSendsExpiredPartToProtocol() public {
+        PadToken t = _launch();
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 10e18);
+        uint256 owed = t.withdrawableDividendOf(bob);
+        vm.warp(vm.getBlockTimestamp() + 60 days);
+        uint256 before = imd.balanceOf(bob);
+        vm.prank(bob);
+        uint256 paid = t.claim();
+        assertEq(paid, 0, "everything had expired");
+        assertEq(imd.balanceOf(bob), before);
+        assertEq(imd.balanceOf(FEE_RECIPIENT), owed);
+        assertEq(t.totalRecycled(), owed);
+        assertEq(t.lastActive(bob), vm.getBlockTimestamp(), "the claim still counts as activity");
+    }
+
+    function test_expiry_claimKeepsRecentPart() public {
+        PadToken t = _launch();
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 10e18); // day 0: R1
+        uint256 r1 = t.withdrawableDividendOf(bob);
+        vm.warp(vm.getBlockTimestamp() + 6 days);
+        _buy(alice, t, 10e18); // day 6: R2
+        uint256 r2 = t.withdrawableDividendOf(bob) - r1;
+        vm.warp(vm.getBlockTimestamp() + 2 days); // day 8
+        vm.prank(bob);
+        uint256 paid = t.claim();
+        assertApproxEqAbs(paid, r2, 1e6, "the recent rewards are paid");
+        assertApproxEqAbs(imd.balanceOf(FEE_RECIPIENT), r1, 1e6, "the old ones went to the protocol");
+        assertGe(imd.balanceOf(address(t)), t.accountedBalance());
+    }
+
+    /// Finding 1 (documented limit): a gift right after a distribution can delay the expiry of older rewards, but
+    /// only until the gift is older than 7 days; nothing is lost and the token stays solvent.
+    function test_expiry_giftInWindowOnlyDelays() public {
+        PadToken t = _launch();
+        uint256 t0 = vm.getBlockTimestamp();
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 50e18); // day 0: bob's old rewards
+        uint256 oldRewards = t.withdrawableDividendOf(bob);
+        vm.warp(t0 + 6 days);
+        _buy(alice, t, 200e18); // day 6: a distribution inside bob's window
+        uint256 owed = t.withdrawableDividendOf(bob);
+        uint256 carolBal = t.balanceOf(carol);
+        vm.prank(carol);
+        t.transfer(bob, carolBal); // a gift: not bob's activity
+        assertEq(t.lastActive(bob), t0);
+
+        vm.warp(t0 + 7 days + 1);
+        uint256 early = t.expiredRewardsOf(bob);
+        assertLe(early, oldRewards, "never more than the old rewards");
+        vm.warp(t0 + 13 days + 1); // the day-6 distribution has left the window too
+        assertEq(t.expiredRewardsOf(bob), owed, "everything older than 7 days expires");
+        assertEq(t.recycle(bob), owed);
+        assertGe(imd.balanceOf(address(t)), t.accountedBalance());
+    }
+
+    /// Finding 5: a 1-wei buy through a third-party router pays no fee but still counts as the buyer's activity.
+    function test_expiry_oneWeiExternalBuyCounts() public {
+        PadToken t = _launchWithOrder(true);
+        _buy(bob, t, 10e18);
+        PoolKey memory key = pad.poolKey(address(t));
+        uint256 proto = pad.pendingProtocolFees(address(imd));
+        vm.warp(vm.getBlockTimestamp() + 6 days);
+        vm.prank(bob, bob);
+        extRouter.swap(key, SwapParams(true, -1, TickMath.MIN_SQRT_PRICE + 1), settings, "");
+        assertEq(pad.pendingProtocolFees(address(imd)), proto, "no fee on 1 wei");
+        assertEq(t.lastActive(bob), vm.getBlockTimestamp());
+    }
+
+    /// Finding 5: ground truth. Random sequences of buys, partial sells, gifts to bob, external buys, warps, flushes,
+    /// claims and recycles. bob's accumulated rewards are recorded after every step, so the rewards he earned at or
+    /// before any cutoff are known exactly. Every recycle, and every claim's expired part, must stay within the
+    /// rewards bob earned more than 7 days ago (net of what he already withdrew), and the token stays solvent.
+    uint256[] internal _gtTime;
+    uint256[] internal _gtAcc;
+
+    function _record(PadToken t) internal {
+        _gtTime.push(vm.getBlockTimestamp());
+        _gtAcc.push(t.accumulativeDividendOf(bob));
+    }
+
+    function _earnedBy(uint256 cutoff) internal view returns (uint256 acc) {
+        for (uint256 i; i < _gtTime.length; i++) {
+            if (_gtTime[i] <= cutoff) acc = _gtAcc[i];
+        }
+    }
+
+    function _checkTakenFromBob(PadToken t, uint256 taken, uint256 withdrawnBefore) internal view {
+        uint256 now_ = vm.getBlockTimestamp();
+        if (now_ <= 7 days + 1) return;
+        uint256 old = _earnedBy(now_ - 7 days - 1);
+        uint256 bound = old > withdrawnBefore ? old - withdrawnBefore : 0;
+        assertLe(taken, bound + 2, "only rewards older than 7 days expire");
+        assertGe(imd.balanceOf(address(t)), t.accountedBalance(), "solvent");
+    }
+
+    function testFuzz_expiryGroundTruth(uint256 seed) public {
+        PadToken t = _launchWithOrder(true);
+        PoolKey memory key = pad.poolKey(address(t));
+        vm.prank(carol);
+        t.approve(address(router), type(uint256).max);
+        vm.prank(bob);
+        t.approve(address(router), type(uint256).max);
+        _buy(bob, t, 5e18);
+        _record(t);
+        for (uint256 i; i < 30; i++) {
+            uint256 r = uint256(keccak256(abi.encode(seed, i)));
+            uint256 action = r % 9;
+            uint256 amt = 1e16 + ((r >> 8) % 50e18);
+            if (action == 0) {
+                _buy(carol, t, amt);
+            } else if (action == 1) {
+                _buy(alice, t, amt);
+            } else if (action == 2) {
+                uint256 half = t.balanceOf(carol) / 2;
+                if (half > 0) {
+                    vm.prank(carol);
+                    router.sell(address(t), half, 0, vm.getBlockTimestamp());
+                }
+            } else if (action == 3) {
+                uint256 gift = t.balanceOf(carol) / (2 + (r >> 16) % 5);
+                if (gift > 0) {
+                    vm.prank(carol);
+                    t.transfer(bob, gift);
+                }
+            } else if (action == 4) {
+                vm.prank(alice, alice); // fees left pending until a later flush
+                extRouter.swap(key, SwapParams(true, -int256(amt), TickMath.MIN_SQRT_PRICE + 1), settings, "");
+            } else if (action == 5) {
+                pad.flush(address(t));
+            } else if (action == 6) {
+                vm.warp(vm.getBlockTimestamp() + 1 hours + ((r >> 24) % 10 days));
+            } else if (action == 7) {
+                uint256 w = t.withdrawnDividends(bob);
+                uint256 fr = imd.balanceOf(FEE_RECIPIENT);
+                vm.prank(bob);
+                t.claim();
+                _checkTakenFromBob(t, imd.balanceOf(FEE_RECIPIENT) - fr, w);
+            } else {
+                uint256 w = t.withdrawnDividends(bob);
+                uint256 owed = t.withdrawableDividendOf(bob);
+                uint256 expired = t.recycle(bob);
+                assertLe(expired, owed);
+                assertEq(t.withdrawableDividendOf(bob), owed - expired);
+                _checkTakenFromBob(t, expired, w);
+            }
+            _record(t);
+        }
+    }
 }

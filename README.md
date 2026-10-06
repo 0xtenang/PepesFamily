@@ -79,10 +79,11 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 v4 is v3 with one addition: **holder rewards are meant to be claimed.** Launches are IMD-only.
 
 - **Activity:** a wallet is active when it claims, buys (any amount: the hook records the user of the PepesFamily routers, or the transaction's signer for third-party routers), sends tokens, pulls tokens itself, or receives tokens for the first time. Tokens someone else sends don't count, so nobody can keep another wallet's rewards from expiring. Smart-contract wallets buying through third-party routers should claim at least weekly.
-- **Expiry:** when a wallet has been inactive for more than 7 days, its unclaimed rewards expire, except what it earned during those last 7 days. Anyone can call `recycle(holder)` (or `recycleMany`) on the token; it can only move expired rewards, and only to the launchpad's `feeRecipient`.
+- **Expiry:** when a wallet has been inactive for more than 7 days, its unclaimed rewards expire, except what it earned during those last 7 days. Anyone can call `recycle(holder)` (or `recycleMany`) on the token, and `claim()` does it first for the claimer; either way only expired rewards move, and only to the launchpad's `feeRecipient`. Known limit: tokens a wallet receives during its last 7 days count toward its recent balance, so a large gift can delay the expiry of its older rewards by up to 7 days.
 - **Buyback and burn (manual):** expired rewards go to the PepesFamily protocol address (`feeRecipient`, `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`), which buys back and burns $Pepes with them. This step is done by the team and is a trust assumption: burns are published on-chain (IMD in, $Pepes to `0x…dEaD`). An automatic on-chain buyback was built and audited three times (IMD Swarm ec4e3ea7, b803125e, 348884ab); every price guard that kept a predictable public buyer from being front-run opened new issues, so it was replaced by this.
 - Everything else is as in v3: 4% hook fee (1% protocol, 3% holders), liquidity locked forever, flash-borrow guard on distributions, renounced tokens with permit. Start market cap 635 IMD.
-- Tests: `test/PepesFamily.t.sol` (expiry, activity and fuzz tests, including every expiry case from the audits), and on a fork `FORK_RPC=https://robinhood.drpc.org forge test --mc "ForkTest|EthRouterForkTest"`.
+- IMD Swarm: [audit](https://explorer.imd.fun/jobs/ec4e3ea7-9b37-4113-ae4d-8cdd5ea19424), [re-check](https://explorer.imd.fun/jobs/b803125e-4ee8-464e-9328-ef7c6e1b9a9d), [final check](https://explorer.imd.fun/jobs/348884ab-fe4b-46f9-871d-d613c6b27c06), [final check 2](https://explorer.imd.fun/jobs/cbe092d6-65c8-4742-ada8-22bc471cbe91) (2 low, 3 info: strict claim, documentation, tests).
+- Tests: `test/PepesFamily.t.sol` (expiry, activity and fuzz tests, including a ground-truth fuzz over random action sequences and every expiry case from the audits), and on a fork `FORK_RPC=https://robinhood.drpc.org forge test --mc "ForkTest|EthRouterForkTest"`.
 
 ### Pepes Earn IMD (NFT collection)
 
@@ -135,8 +136,8 @@ forge build
 
 ```bash
 cd contracts
-forge test                                           # 34 unit + attack tests against a real v4 PoolManager
-FORK_RPC=https://robinhood.drpc.org forge test       # + 7 fork tests against live mainnet state
+forge test                                           # 116 unit, attack and fuzz tests against a real v4 PoolManager
+FORK_RPC=https://robinhood.drpc.org forge test       # + fork tests against live mainnet state
 ```
 
 The tests cover:
@@ -150,7 +151,7 @@ The tests cover:
 
 ## Deploy (mainnet)
 
-The owner defaults to `0x3c8A…691C`, and any wallet can pay for the deployment (about 0.0003 ETH). The script mines the hook salt, deploys through the standard CREATE2 factory, and writes `deployments/robinhood.json`.
+`script/Deploy.s.sol` deploys the current version (v4). The owner defaults to `0x3c8A…691C`, and any wallet can pay for the deployment (about 0.0003 ETH). The script mines the hook salt, deploys through the standard CREATE2 factory, and writes `deployments/robinhood-v4.json` (`robinhood.json` records v1).
 
 ```bash
 cd contracts
@@ -158,9 +159,9 @@ forge script script/Deploy.s.sol --rpc-url robinhood --broadcast --interactive
 ```
 
 Optional environment variables:
-- `ETH_START_MCAP` (wei, default `1.5e18`)
 - `IMD_START_MCAP` (wei, default `635e18`)
 - `OWNER`
+- `SALT_START` (where salt mining starts)
 
 Verify on Blockscout:
 
@@ -175,7 +176,7 @@ Every launch deploys a new `PadToken` contract, and scanners such as DexScreener
 
 ## Website
 
-Copy `pad`, `router` and `block` from `contracts/deployments/robinhood.json` into `CONFIG` at the top of `web/index.html`, then host the file on any static host. For production, point `CONFIG.rpc` at a paid RPC; the public endpoint is rate-limited.
+Add each launchpad version's `pad`, `router` and `ethRouter` (from `contracts/deployments/robinhood*.json`) to `CONFIG.pads` at the top of `web/index.html`, then host the file on any static host. For production, point `CONFIG.rpc` at a paid RPC; the public endpoint is rate-limited.
 
 Image upload on the launch form uses the Vercel function `web/api/upload.js`, which pins images to IPFS through Pinata. Set the environment variable `PINATA_JWT` (a Pinata API key JWT with permission to upload files) in the Vercel project; the key never reaches the browser. Without it the Upload button stays hidden and creators paste image links instead.
 
@@ -185,7 +186,7 @@ Image upload on the launch form uses the Vercel function `web/api/upload.js`, wh
 - `setStartTick`: sets the starting market cap for future launches.
 - `transferOwnership` + `acceptOwnership`: a two-step handover, so a typo can't lose the admin role.
 
-The owner **can't** change the fee percentages, touch pool liquidity or holder rewards, pause trading, upgrade the contracts, or add quote assets other than ETH and IMD. No contract is upgradeable.
+The owner **can't** change the fee percentages, touch pool liquidity or unexpired holder rewards, pause trading, upgrade the contracts, or add quote assets (v1–v3: ETH and IMD; v4: IMD only). No contract is upgradeable.
 
 ## Security
 

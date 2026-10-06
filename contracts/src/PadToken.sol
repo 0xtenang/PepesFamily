@@ -17,11 +17,17 @@ interface IPadFlush {
 ///
 ///         Rewards are meant to be claimed: a wallet is active when it claims, buys (any amount; the pad's hook
 ///         records the buyer: the user of the PepesFamily routers, otherwise the transaction's signer), sends
-///         tokens, pulls tokens itself, or receives tokens for the first time. Tokens someone else sends it don't
-///         count, so nobody can keep another wallet's rewards from expiring. Smart-contract wallets buying through
-///         third-party routers should claim (or send) at least weekly. Rewards of a wallet inactive for more than
-///         7 days expire, except what it earned during those last 7 days. Anyone may send expired rewards to the
-///         PepesFamily protocol address (the pad's `feeRecipient`), which uses them to buy back and burn $Pepes.
+///         tokens, pulls tokens itself, or receives tokens for the first time. Tokens someone else sends it never
+///         reset its timer. Smart-contract wallets buying through third-party routers should claim (or send) at
+///         least weekly. Rewards of a wallet inactive for more than 7 days expire, except what it earned during
+///         those last 7 days. Expired rewards go to the PepesFamily protocol address (the pad's `feeRecipient`),
+///         which uses them to buy back and burn $Pepes: anyone may send them with `recycle`, and `claim` sends
+///         them first, so an inactive wallet that claims only receives what hasn't expired.
+///
+///         Known limit (IMD Swarm cbe092d6, finding 1): "recent" rewards are estimated from the wallet's current
+///         balance, so tokens it is sent during its last 7 days are counted as if they had earned for it in that
+///         window. A large gift right after a distribution can therefore delay the expiry of older rewards, by at
+///         most 7 days and to nobody's gain (the sender keeps its own rewards on those tokens).
 /// @dev Dividends use the "magnified dividend per share" pattern: accrual is O(1) and automatic for every
 ///      holder on each distribution; holders withdraw with `claim()`. The pad, the router, the v4
 ///      PoolManager (which holds the pool's tokens), this contract and burn addresses are excluded.
@@ -278,11 +284,16 @@ contract PadToken {
         return acc > done ? acc - done : 0;
     }
 
-    /// @notice Pulls in fees from swaps made through other routers, pays out the caller's share, and resets
-    ///         their 7-day timer.
+    /// @notice Pulls in fees from swaps made through other routers, sends any expired part of the caller's rewards
+    ///         to the protocol address, pays out the rest, and resets their 7-day timer.
     function claim() external nonReentrant returns (uint256 amount) {
         IPadFlush(pad).flush(address(this));
-        if (!isExcluded(msg.sender)) lastActive[msg.sender] = block.timestamp;
+        if (!isExcluded(msg.sender)) {
+            // Expiry is strict: rewards that expired before this claim go to the protocol, not to the claimer
+            // (cbe092d6, finding 2). Computed before the claim resets the timer.
+            _recycle(msg.sender);
+            lastActive[msg.sender] = block.timestamp;
+        }
         amount = withdrawableDividendOf(msg.sender);
         if (amount != 0) {
             withdrawnDividends[msg.sender] += amount;
@@ -317,6 +328,10 @@ contract PadToken {
     ///         to that address.
     function recycle(address holder) public nonReentrant returns (uint256 expired) {
         if (isExcluded(holder)) revert NotEligible();
+        expired = _recycle(holder);
+    }
+
+    function _recycle(address holder) internal returns (uint256 expired) {
         expired = expiredRewardsOf(holder);
         if (expired == 0) return 0;
         withdrawnDividends[holder] += expired;
