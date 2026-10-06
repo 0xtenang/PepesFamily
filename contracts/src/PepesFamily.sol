@@ -20,10 +20,11 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {PadToken} from "./PadToken.sol";
 import {PepesFamilyRouter} from "./PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "./PepesFamilyEthRouter.sol";
+import {PepesBuyback} from "./PepesBuyback.sol";
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 
-/// @title PepesFamily
-/// @notice Fixed-supply token launchpad on Uniswap v4 (Robinhood Chain). Every launch is paired with ETH or IMD.
+/// @title PepesFamily (v4)
+/// @notice Fixed-supply token launchpad on Uniswap v4 (Robinhood Chain). Every launch is paired with IMD.
 ///         The full 1B supply is added as single-sided liquidity from the launch price to the end of the curve,
 ///         owned by this contract, which has no way to remove it: liquidity is locked forever.
 ///
@@ -32,6 +33,8 @@ import {SafeTransfer} from "./lib/SafeTransfer.sol";
 ///           - 1% protocol fee -> `feeRecipient`
 ///           - 3% holder fee   -> the token's holders, pro rata (see PadToken)
 ///         Fees are held as PoolManager ERC-6909 claims until flushed; PepesFamilyRouter flushes on every trade.
+///         v4: holder rewards left unclaimed by a wallet inactive for more than 7 days expire and go to `buyback`
+///         (PepesBuyback, deployed here), which spends them buying $Pepes and burning it (see PadToken).
 /// @dev Must be deployed at an address whose low 14 bits equal `HOOK_FLAGS` (mine a CREATE2 salt).
 contract PepesFamily is IHooks, IUnlockCallback {
     using StateLibrary for IPoolManager;
@@ -86,7 +89,6 @@ contract PepesFamily is IHooks, IUnlockCallback {
         | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
         | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
 
-    address public constant ETH = address(0);
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
     /// @dev Kept out of the liquidity calculation so rounding can never ask for more than the supply; burned.
     uint256 internal constant LIQUIDITY_BUFFER = 1e9;
@@ -103,6 +105,8 @@ contract PepesFamily is IHooks, IUnlockCallback {
     address public immutable router;
     /// @notice Router for trading IMD-paired tokens with ETH (through the Uniswap v4 IMD/ETH pool).
     address public immutable ethRouter;
+    /// @notice Shared $Pepes buyback-and-burn that receives every v4 token's expired holder rewards.
+    address public immutable buyback;
 
     address public owner;
     address public pendingOwner;
@@ -166,9 +170,10 @@ contract PepesFamily is IHooks, IUnlockCallback {
         address imd,
         address owner_,
         address feeRecipient_,
-        int24 ethStartTick,
         int24 imdStartTick,
-        ImdEthPool memory imdEthPool
+        ImdEthPool memory imdEthPool,
+        address pepes,
+        address pepesRouter
     ) {
         if (imd == address(0) || owner_ == address(0) || feeRecipient_ == address(0)) revert ZeroAddress();
         Hooks.validateHookPermissions(
@@ -200,7 +205,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
                 poolManager_, address(this), imd, imdEthPool.fee, imdEthPool.tickSpacing, imdEthPool.hooks
             )
         );
-        _setStartTick(ETH, ethStartTick);
+        buyback = address(new PepesBuyback(imd, pepes, pepesRouter, address(poolManager_)));
         _setStartTick(imd, imdStartTick);
         emit OwnershipTransferred(address(0), owner_);
         emit FeeRecipientUpdated(feeRecipient_);
@@ -208,7 +213,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
 
     // --------------------------------------------------------------- Launch
 
-    /// @notice Deploys a token paired with `quote` (ETH = address(0), or IMD) and locks its full supply in a v4 pool.
+    /// @notice Deploys a token paired with `quote` (must be IMD) and locks its full supply in a v4 pool.
     ///         To launch with an initial buy in the same transaction use `PepesFamilyRouter.launch`.
     /// @param metadata JSON string, e.g. {"image":"https://…","description":"…","website":"…","x":"…","telegram":"…"}
     function launch(string calldata name, string calldata symbol, string calldata metadata, address quote)
@@ -236,14 +241,14 @@ contract PepesFamily is IHooks, IUnlockCallback {
         string calldata metadata,
         address quote
     ) internal returns (address token) {
-        if (quote != ETH && quote != IMD) revert UnsupportedQuote();
+        if (quote != IMD) revert UnsupportedQuote();
         uint256 nameLen = bytes(name).length;
         uint256 symLen = bytes(symbol).length;
         if (nameLen == 0 || nameLen > 32 || symLen == 0 || symLen > 12 || bytes(metadata).length > 2048) {
             revert BadMetadata();
         }
 
-        token = address(new PadToken(name, symbol, metadata, quote, creator, router, address(poolManager)));
+        token = address(new PadToken(name, symbol, metadata, quote, creator, router, address(poolManager), buyback));
         bool quoteIs0 = uint160(quote) < uint160(token);
         launches[token] = Launch({
             quote: quote,
@@ -452,7 +457,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     }
 
     function _setStartTick(address quote, int24 tick) internal {
-        if (quote != ETH && quote != IMD) revert UnsupportedQuote();
+        if (quote != IMD) revert UnsupportedQuote();
         int24 limit = TickMath.maxUsableTick(TICK_SPACING) - TICK_SPACING;
         if (tick % TICK_SPACING != 0 || tick > limit || tick < -limit) revert BadTick();
         startTick[quote] = tick;

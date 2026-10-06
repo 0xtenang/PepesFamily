@@ -1,55 +1,42 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {SafeTransfer} from "./lib/SafeTransfer.sol";
+import {SafeTransfer} from "../lib/SafeTransfer.sol";
 import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {TransientStateLibrary} from "v4-core/src/libraries/TransientStateLibrary.sol";
-import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 
 interface IPadFlush {
     function flush(address token) external;
 }
 
-/// @title PadToken (PepesFamily v4)
-/// @notice Fixed-supply ERC20 launched by PepesFamily, paired with IMD. Holders earn a pro-rata share of the 3%
-///         holder fee charged on every Uniswap v4 swap of this token, paid in IMD and claimed manually.
-///
-///         Rewards are meant to be claimed: a wallet is active when it claims, sends tokens, pulls tokens itself,
-///         receives at least `ACTIVITY_MIN` tokens (a real buy), or receives tokens for the first time. Rewards of
-///         a wallet inactive for more than 7 days expire, except what it earned during those last 7 days. Anyone
-///         may send expired rewards to `buyback` (PepesBuyback), which can only spend them buying $Pepes and
-///         burning it.
+/// @title PadTokenV3 (deployed by PepesFamily v3 0xC5a1f48C…28cC; kept so v3 tokens can be source-verified)
+/// @notice Fixed-supply ERC20 launched by PepesFamily. Holders earn a pro-rata share of the 3% holder fee
+///         charged on every Uniswap v4 swap of this token, paid in its quote asset (ETH or IMD).
 /// @dev Dividends use the "magnified dividend per share" pattern: accrual is O(1) and automatic for every
 ///      holder on each distribution; holders withdraw with `claim()`. The pad, the router, the v4
 ///      PoolManager (which holds the pool's tokens), this contract and burn addresses are excluded.
-contract PadToken {
+contract PadTokenV3 {
     using SafeTransfer for address;
     using TransientStateLibrary for IPoolManager;
 
     error InsufficientBalance();
     error InsufficientAllowance();
     error InvalidRecipient();
+    error EthNotAccepted();
     error Overflow();
     error Reentrancy();
     error PermitExpired();
     error InvalidSignature();
-    error NotEligible();
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event DividendsDistributed(uint256 amount, uint256 eligibleSupply);
     event DividendClaimed(address indexed holder, uint256 amount);
-    event RewardsRecycled(address indexed holder, uint256 amount);
 
     uint256 public constant totalSupply = 1_000_000_000e18;
     uint8 public constant decimals = 18;
     /// @dev Distributions wait until at least 1 whole token is held outside the pool. Bounds per-share growth.
     uint256 public constant MIN_ELIGIBLE_SUPPLY = 1e18;
-    /// @notice Rewards of a wallet inactive for longer than this expire (except those earned within it).
-    uint256 public constant INACTIVITY_PERIOD = 7 days;
-    /// @notice Smallest receipt that counts as activity when the recipient didn't initiate it (0.001% of supply).
-    ///         Keeps dust gifts from holding off someone else's expiry for free.
-    uint256 public constant ACTIVITY_MIN = 10_000e18;
     uint256 internal constant MAGNITUDE = 2 ** 128;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
@@ -61,11 +48,9 @@ contract PadToken {
     address public immutable pad;
     address public immutable router;
     address public immutable poolManager;
-    /// @notice Asset rewards are paid in (IMD).
+    /// @notice Asset dividends are paid in. address(0) = ETH, otherwise IMD.
     address public immutable quote;
     address public immutable creator;
-    /// @notice Where expired rewards go: the shared $Pepes buyback-and-burn (PepesBuyback).
-    address public immutable buyback;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -75,23 +60,9 @@ contract PadToken {
     mapping(address => uint256) public withdrawnDividends;
     /// @notice Tokens held by dividend-eligible accounts.
     uint256 public eligibleSupply;
-    /// @notice IMD held here that is owed to holders (distributed, not yet claimed or recycled).
+    /// @notice Quote held here that has already been accounted as dividends (distributed, not yet claimed).
     uint256 public accountedBalance;
     uint256 public totalDividendsDistributed;
-
-    /// @notice Last activity of each holder (unix seconds), see the contract notice.
-    mapping(address => uint256) public lastActive;
-    /// @notice Expired rewards sent to the buyback so far.
-    uint256 public totalRecycled;
-
-    /// @dev magnifiedDividendPerShare after each distribution, by time: lets expiry compute what a holder earned
-    ///      in the last 7 days (those rewards never expire).
-    struct Checkpoint {
-        uint64 time;
-        uint192 mag;
-    }
-
-    Checkpoint[] internal _checkpoints;
 
     uint256 private _locked = 1;
 
@@ -101,13 +72,6 @@ contract PadToken {
     uint256 private immutable _initialChainId;
     bytes32 private immutable _initialDomainSeparator;
 
-    modifier nonReentrant() {
-        if (_locked != 1) revert Reentrancy();
-        _locked = 2;
-        _;
-        _locked = 1;
-    }
-
     constructor(
         string memory name_,
         string memory symbol_,
@@ -115,15 +79,13 @@ contract PadToken {
         address quote_,
         address creator_,
         address router_,
-        address poolManager_,
-        address buyback_
+        address poolManager_
     ) {
         pad = msg.sender;
         router = router_;
         poolManager = poolManager_;
         quote = quote_;
         creator = creator_;
-        buyback = buyback_;
         name = name_;
         symbol = symbol_;
         metadata = metadata_;
@@ -131,6 +93,10 @@ contract PadToken {
         emit Transfer(address(0), msg.sender, totalSupply);
         _initialChainId = block.chainid;
         _initialDomainSeparator = _domainSeparator();
+    }
+
+    receive() external payable {
+        if (quote != address(0)) revert EthNotAccepted();
     }
 
     /// @notice This token has no owner and no admin functions: nothing about it can ever be changed.
@@ -220,17 +186,6 @@ contract PadToken {
         if (fromExcluded && !toExcluded) eligibleSupply += amount;
         else if (!fromExcluded && toExcluded) eligibleSupply -= amount;
 
-        // Activity (a zero-amount transferFrom needs no allowance, so it never counts). Sending, directly or through
-        // an allowance the holder gave, is the holder's own act. Receiving counts when the recipient initiated it,
-        // for a real amount (a buy from the pool arrives from the PoolManager), or the first time. An unrecorded
-        // small receipt only raises the balance, which over-estimates "recent" rewards in the holder's favour.
-        if (amount != 0) {
-            if (!fromExcluded) lastActive[from] = block.timestamp;
-            if (!toExcluded && (msg.sender == to || amount >= ACTIVITY_MIN || lastActive[to] == 0)) {
-                lastActive[to] = block.timestamp;
-            }
-        }
-
         emit Transfer(from, to, amount);
     }
 
@@ -241,7 +196,7 @@ contract PadToken {
             || account == address(0) || account == DEAD;
     }
 
-    /// @notice Spreads any IMD received since the last call across current holders, pro rata.
+    /// @notice Spreads any quote received since the last call across current holders, pro rata.
     /// @dev Called by the pad after it forwards holder fees; anyone may call it (e.g. after a donation).
     ///      If nobody holds tokens yet, the funds wait here for the next distribution.
     function distribute() public returns (uint256 amount) {
@@ -251,14 +206,12 @@ contract PadToken {
         if (msg.sender != pad && IPoolManager(poolManager).isUnlocked()) return 0;
         uint256 bal = quote.balanceOf(address(this));
         uint256 eligible = eligibleSupply;
-        // Never revert: trades and claims call this, so an odd IMD balance must not block them.
+        // Never revert: trades and claims call this, so an odd quote balance must not block them.
         if (bal <= accountedBalance || eligible < MIN_ELIGIBLE_SUPPLY) return 0;
         amount = bal - accountedBalance;
-        uint256 mag = magnifiedDividendPerShare + (amount * MAGNITUDE) / eligible;
-        magnifiedDividendPerShare = mag;
+        magnifiedDividendPerShare += (amount * MAGNITUDE) / eligible;
         accountedBalance = bal;
         totalDividendsDistributed += amount;
-        _checkpoint(mag);
         emit DividendsDistributed(amount, eligible);
     }
 
@@ -274,11 +227,11 @@ contract PadToken {
         return acc > done ? acc - done : 0;
     }
 
-    /// @notice Pulls in fees from swaps made through other routers, pays out the caller's share, and resets
-    ///         their 7-day timer.
-    function claim() external nonReentrant returns (uint256 amount) {
+    /// @notice Pulls in fees from swaps made through other routers, then pays out the caller's share.
+    function claim() external returns (uint256 amount) {
+        if (_locked != 1) revert Reentrancy();
+        _locked = 2;
         IPadFlush(pad).flush(address(this));
-        if (!isExcluded(msg.sender)) lastActive[msg.sender] = block.timestamp;
         amount = withdrawableDividendOf(msg.sender);
         if (amount != 0) {
             withdrawnDividends[msg.sender] += amount;
@@ -286,68 +239,7 @@ contract PadToken {
             quote.transferOut(msg.sender, amount);
             emit DividendClaimed(msg.sender, amount);
         }
-    }
-
-    // ------------------------------------------------------------ Expiry
-
-    /// @notice Rewards of `holder` that have expired: everything unclaimed except what it earned in the last
-    ///         7 days, once it has been inactive for more than 7 days. Zero while it is active.
-    /// @dev Both boundaries are exclusive on the holder's side: a wallet is inactive only after more than 7 days,
-    ///      and a reward distributed exactly 7 days ago still counts as recent.
-    function expiredRewardsOf(address holder) public view returns (uint256) {
-        if (isExcluded(holder)) return 0;
-        uint256 last = lastActive[holder];
-        if (last == 0 || block.timestamp <= last + INACTIVITY_PERIOD) return 0;
-        uint256 w = withdrawableDividendOf(holder);
-        if (w == 0) return 0;
-        // Since `last` the balance can only have grown (every send records activity), so balance x (per-share
-        // growth since the cutoff) is at least what it earned since the cutoff: "recent" can only be
-        // over-estimated, in the holder's favour. Rounded up as well.
-        uint256 magCut = magAt(block.timestamp - INACTIVITY_PERIOD - 1);
-        uint256 recent = FullMath.mulDivRoundingUp(magnifiedDividendPerShare - magCut, balanceOf[holder], MAGNITUDE);
-        return w > recent ? w - recent : 0;
-    }
-
-    /// @notice Sends `holder`'s expired rewards to the $Pepes buyback-and-burn. Callable by anyone; it can only ever
-    ///         move rewards that have expired, and only to `buyback`.
-    function recycle(address holder) public nonReentrant returns (uint256 expired) {
-        if (isExcluded(holder)) revert NotEligible();
-        expired = expiredRewardsOf(holder);
-        if (expired == 0) return 0;
-        withdrawnDividends[holder] += expired;
-        accountedBalance -= expired;
-        totalRecycled += expired;
-        quote.transferOut(buyback, expired);
-        emit RewardsRecycled(holder, expired);
-    }
-
-    function recycleMany(address[] calldata holders) external returns (uint256 total) {
-        for (uint256 i; i < holders.length; i++) {
-            if (!isExcluded(holders[i])) total += recycle(holders[i]);
-        }
-    }
-
-    function checkpointCount() external view returns (uint256) {
-        return _checkpoints.length;
-    }
-
-    /// @notice magnifiedDividendPerShare as of time `t` (after every distribution at or before `t`).
-    function magAt(uint256 t) public view returns (uint256) {
-        uint256 hi = _checkpoints.length;
-        uint256 lo;
-        while (lo < hi) {
-            uint256 mid = (lo + hi) / 2;
-            if (_checkpoints[mid].time <= t) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo == 0 ? 0 : _checkpoints[lo - 1].mag;
-    }
-
-    function _checkpoint(uint256 mag) internal {
-        if (mag > type(uint192).max) return; // unreachable in practice; never block a distribution
-        uint256 n = _checkpoints.length;
-        if (n != 0 && _checkpoints[n - 1].time == block.timestamp) _checkpoints[n - 1].mag = uint192(mag);
-        else _checkpoints.push(Checkpoint(uint64(block.timestamp), uint192(mag)));
+        _locked = 1;
     }
 
     function _toInt(uint256 x) private pure returns (int256) {

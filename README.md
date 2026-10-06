@@ -71,7 +71,19 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PepesFamily.sol` | Launcher, v4 hook (fees), and owner of the locked liquidity. Its address must carry hook flags `0x28CC` (mined CREATE2 salt). |
 | `src/PepesFamilyRouter.sol` | Buy, sell, and launch-with-initial-buy for the website. Deployed by PepesFamily. |
 | `src/PepesFamilyEthRouter.sol` | Buy or sell IMD-paired tokens with ETH in one transaction (ETH ⇄ IMD ⇄ token through the Uniswap v4 IMD/ETH pool). No owner, holds no funds. |
-| `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards. |
+| `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards (v4: with 7-day expiry, see below). |
+| `src/PepesBuyback.sol` | v4: shared $Pepes buyback-and-burn for expired rewards. Deployed by PepesFamily. |
+| `src/v1`, `src/v2`, `src/v3` | Exact token sources of earlier launchpad versions, kept so their tokens can be source-verified. |
+
+### Launchpad v4 (in review, not deployed)
+
+v4 is v3 with one addition: **holder rewards are meant to be claimed.** Launches are IMD-only.
+
+- **Activity:** a wallet is active when it claims, sends tokens, pulls tokens itself, receives at least 10,000 tokens (0.001% of supply, so any real buy) or receives tokens for the first time. Smaller receipts someone else sends don't count, so dust can't hold off another wallet's expiry.
+- **Expiry:** when a wallet has been inactive for more than 7 days, its unclaimed rewards expire, except what it earned during those last 7 days. Anyone can call `recycle(holder)` (or `recycleMany`) on the token; it can only move expired rewards, and only to `PepesBuyback`.
+- **Buyback and burn:** `PepesBuyback.buybackAndBurnPepes(minOut, deadline)` is callable by anyone, at most once an hour, and spends at most 1% of the $Pepes pool's IMD depth per call, buying $Pepes through the PepesFamily v1 router and sending all of it to the burn address. One buyback contract serves every v4 token, so the cap and the hourly pace hold however many tokens recycle. It has no owner; its IMD can only leave through that swap. The 1% cap is half of $EARN's 2%, so both buybacks together stay within the bound the $EARN audit found safe.
+- Everything else is as in v3: 4% hook fee (1% protocol, 3% holders), liquidity locked forever, flash-borrow guard on distributions, renounced tokens with permit. Start market cap 635 IMD.
+- Tests: `test/PepesFamily.t.sol` (48, incl. expiry and buyback fuzz tests), and on a fork `FORK_RPC=https://robinhood.drpc.org forge test --mc "ForkTest|BuybackSandwichForkTest|EthRouterForkTest"`: real $Pepes bought and burned from expired rewards, and a buyback sandwich that loses money.
 
 ### Pepes Earn IMD (NFT collection)
 

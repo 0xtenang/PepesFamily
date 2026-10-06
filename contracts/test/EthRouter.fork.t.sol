@@ -11,7 +11,7 @@ import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 import {IV4Quoter, IERC20} from "./Fork.t.sol";
 
-/// @notice v2 deployment on a mainnet fork, trading IMD pairs with ETH through the real Uniswap v4 IMD/ETH pool:
+/// @notice v4 deployment on a mainnet fork, trading IMD pairs with ETH through the real Uniswap v4 IMD/ETH pool:
 ///   FORK_RPC=https://robinhood.drpc.org forge test --mc EthRouterForkTest
 contract EthRouterForkTest is Test {
     IPoolManager constant PM = IPoolManager(0x8366a39CC670B4001A1121B8F6A443A643e40951);
@@ -26,7 +26,6 @@ contract EthRouterForkTest is Test {
     address bob;
     uint256 bobKey;
     PadToken imdToken;
-    PadToken ethToken;
 
     function setUp() public {
         string memory rpc = vm.envOr("FORK_RPC", string(""));
@@ -42,9 +41,10 @@ contract EthRouterForkTest is Test {
                 IMD,
                 FEE_RECIPIENT,
                 FEE_RECIPIENT,
-                DeployLib.startTickForMarketCap(1.5 ether),
                 DeployLib.startTickForMarketCap(635e18),
-                PepesFamily.ImdEthPool(10_000, 100, address(0))
+                PepesFamily.ImdEthPool(10_000, 100, address(0)),
+                0xE2C46c7068566740A33A4C93f5445B07BCfE5644, // $Pepes
+                0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC // PepesFamily v1 router
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), uint160(0x28CC), initCode, 0);
@@ -65,8 +65,6 @@ contract EthRouterForkTest is Test {
         IERC20(IMD).approve(address(router), type(uint256).max);
         (address t,) = router.launch("Fork Pepe", "FPEPE", "{}", IMD, 20e18, 1);
         imdToken = PadToken(payable(t));
-        (t,) = router.launch{value: 0.01 ether}("Fork Eth", "FETH", "{}", address(0), 0.01 ether, 1);
-        ethToken = PadToken(payable(t));
         vm.stopPrank();
     }
 
@@ -80,9 +78,8 @@ contract EthRouterForkTest is Test {
         return out;
     }
 
-    function test_fork_v2_tokenIsRenounced() public view {
+    function test_fork_tokenIsRenounced() public view {
         assertEq(imdToken.owner(), address(0));
-        assertEq(ethToken.owner(), address(0));
     }
 
     function test_fork_buyWithEth() public {
@@ -101,7 +98,7 @@ contract EthRouterForkTest is Test {
         assertEq(IERC20(IMD).balanceOf(address(eth)), 0);
         uint256 proto = pad.pendingProtocolFees(IMD) - protoBefore;
         uint256 holders = imdToken.withdrawableDividendOf(alice) - aliceDivBefore;
-        assertGt(proto, 0.3e18);
+        assertGt(proto, 0); // 1% of the IMD that 0.1 ETH buys (depends on the IMD price)
         // + the creator's own 20 IMD launch-buy fee (0.6 IMD), which waited for a holder and is paid out now
         assertApproxEqAbs(holders, proto * 3 + 0.6e18, 1e6);
     }
@@ -136,11 +133,7 @@ contract EthRouterForkTest is Test {
         console.log("permit round trip 0.1 ETH ->", ethOut);
     }
 
-    function test_fork_rejectsEthPairsAndSlippage() public {
-        vm.prank(bob);
-        vm.expectRevert(PepesFamilyEthRouter.NotImdPair.selector);
-        eth.buyWithEth{value: 0.1 ether}(address(ethToken), 0, block.timestamp);
-
+    function test_fork_rejectsSlippageAndExpiry() public {
         vm.prank(bob);
         vm.expectRevert(PepesFamilyEthRouter.Slippage.selector);
         eth.buyWithEth{value: 0.1 ether}(address(imdToken), type(uint256).max, block.timestamp);
