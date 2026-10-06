@@ -7,16 +7,12 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {DeployLib} from "./DeployLib.sol";
 
-/// @notice Deploys PepesFamily v4 (with its routers and the shared $Pepes buyback) to Robinhood Chain at a mined
-///         hook address.
+/// @notice Deploys PepesFamily v4 (with its routers) to Robinhood Chain at a mined hook address.
 ///   forge script script/Deploy.s.sol --rpc-url robinhood --broadcast --interactive
 contract Deploy is Script {
     IPoolManager constant POOL_MANAGER = IPoolManager(0x8366a39CC670B4001A1121B8F6A443A643e40951);
     address constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
-    // Expired holder rewards buy $Pepes through the PepesFamily v1 router and burn it.
-    address constant PEPES = 0xE2C46c7068566740A33A4C93f5445B07BCfE5644;
-    address constant PEPES_ROUTER = 0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC;
     // Uniswap v4 IMD/ETH pool 0xd2fc01ee…8f02 (1% fee, tick spacing 100, no hooks), used by the ETH router.
     uint24 constant IMD_ETH_FEE = 10_000;
     int24 constant IMD_ETH_TICK_SPACING = 100;
@@ -39,9 +35,7 @@ contract Deploy is Script {
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(imdStartMcap),
-                PepesFamily.ImdEthPool({fee: IMD_ETH_FEE, tickSpacing: IMD_ETH_TICK_SPACING, hooks: address(0)}),
-                PEPES,
-                PEPES_ROUTER
+                PepesFamily.ImdEthPool({fee: IMD_ETH_FEE, tickSpacing: IMD_ETH_TICK_SPACING, hooks: address(0)})
             )
         );
         (bytes32 salt, address expected) =
@@ -57,7 +51,6 @@ contract Deploy is Script {
         console.log("PepesFamily (hook)  :", address(pad));
         console.log("PepesFamilyRouter   :", pad.router());
         console.log("PepesFamilyEthRouter:", pad.ethRouter());
-        console.log("PepesBuyback        :", pad.buyback());
         console.log("Owner               :", pad.owner());
         console.log("Fee recipient       :", pad.feeRecipient());
         uint256 l2Block = _l2BlockNumber();
@@ -69,7 +62,6 @@ contract Deploy is Script {
         vm.serializeAddress(json, "pad", address(pad));
         vm.serializeAddress(json, "router", pad.router());
         vm.serializeAddress(json, "ethRouter", pad.ethRouter());
-        vm.serializeAddress(json, "buyback", pad.buyback());
         vm.serializeAddress(json, "owner", pad.owner());
         vm.serializeAddress(json, "feeRecipient", pad.feeRecipient());
         string memory out = vm.serializeUint(json, "block", l2Block);

@@ -8,6 +8,7 @@ import {FullMath} from "v4-core/src/libraries/FullMath.sol";
 
 interface IPadFlush {
     function flush(address token) external;
+    function feeRecipient() external view returns (address);
 }
 
 /// @title PadToken (PepesFamily v4)
@@ -19,8 +20,8 @@ interface IPadFlush {
 ///         tokens, pulls tokens itself, or receives tokens for the first time. Tokens someone else sends it don't
 ///         count, so nobody can keep another wallet's rewards from expiring. Smart-contract wallets buying through
 ///         third-party routers should claim (or send) at least weekly. Rewards of a wallet inactive for more than
-///         7 days expire, except what it earned during those last 7 days. Anyone may send expired rewards to
-///         `buyback` (PepesBuyback), which can only spend them buying $Pepes and burning it.
+///         7 days expire, except what it earned during those last 7 days. Anyone may send expired rewards to the
+///         PepesFamily protocol address (the pad's `feeRecipient`), which uses them to buy back and burn $Pepes.
 /// @dev Dividends use the "magnified dividend per share" pattern: accrual is O(1) and automatic for every
 ///      holder on each distribution; holders withdraw with `claim()`. The pad, the router, the v4
 ///      PoolManager (which holds the pool's tokens), this contract and burn addresses are excluded.
@@ -64,8 +65,6 @@ contract PadToken {
     /// @notice Asset rewards are paid in (IMD).
     address public immutable quote;
     address public immutable creator;
-    /// @notice Where expired rewards go: the shared $Pepes buyback-and-burn (PepesBuyback).
-    address public immutable buyback;
 
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -81,7 +80,7 @@ contract PadToken {
 
     /// @notice Last activity of each holder (unix seconds), see the contract notice.
     mapping(address => uint256) public lastActive;
-    /// @notice Expired rewards sent to the buyback so far.
+    /// @notice Expired rewards sent to the protocol address so far.
     uint256 public totalRecycled;
 
     /// @dev magnifiedDividendPerShare after each distribution, by time: lets expiry compute what a holder earned
@@ -115,15 +114,13 @@ contract PadToken {
         address quote_,
         address creator_,
         address router_,
-        address poolManager_,
-        address buyback_
+        address poolManager_
     ) {
         pad = msg.sender;
         router = router_;
         poolManager = poolManager_;
         quote = quote_;
         creator = creator_;
-        buyback = buyback_;
         name = name_;
         symbol = symbol_;
         metadata = metadata_;
@@ -315,8 +312,9 @@ contract PadToken {
         return w > recent ? w - recent : 0;
     }
 
-    /// @notice Sends `holder`'s expired rewards to the $Pepes buyback-and-burn. Callable by anyone; it can only ever
-    ///         move rewards that have expired, and only to `buyback`.
+    /// @notice Sends `holder`'s expired rewards to the PepesFamily protocol address (the pad's `feeRecipient`), for
+    ///         $Pepes buyback-and-burn. Callable by anyone; it can only ever move rewards that have expired, and only
+    ///         to that address.
     function recycle(address holder) public nonReentrant returns (uint256 expired) {
         if (isExcluded(holder)) revert NotEligible();
         expired = expiredRewardsOf(holder);
@@ -324,10 +322,7 @@ contract PadToken {
         withdrawnDividends[holder] += expired;
         accountedBalance -= expired;
         totalRecycled += expired;
-        quote.transferOut(buyback, expired);
-        // Keep the buyback's price reference current (bounded, can't fail the recycle).
-        (bool ok,) = buyback.call(abi.encodeWithSignature("poke()"));
-        ok;
+        quote.transferOut(IPadFlush(pad).feeRecipient(), expired);
         emit RewardsRecycled(holder, expired);
     }
 

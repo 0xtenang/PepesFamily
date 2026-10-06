@@ -72,7 +72,6 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PepesFamilyRouter.sol` | Buy, sell, and launch-with-initial-buy for the website. Deployed by PepesFamily. |
 | `src/PepesFamilyEthRouter.sol` | Buy or sell IMD-paired tokens with ETH in one transaction (ETH ⇄ IMD ⇄ token through the Uniswap v4 IMD/ETH pool). No owner, holds no funds. |
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards (v4: with 7-day expiry, see below). |
-| `src/PepesBuyback.sol` | v4: shared $Pepes buyback-and-burn for expired rewards. Deployed by PepesFamily. |
 | `src/v1`, `src/v2`, `src/v3` | Exact token sources of earlier launchpad versions, kept so their tokens can be source-verified. |
 
 ### Launchpad v4 (in review, not deployed)
@@ -80,12 +79,10 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 v4 is v3 with one addition: **holder rewards are meant to be claimed.** Launches are IMD-only.
 
 - **Activity:** a wallet is active when it claims, buys (any amount: the hook records the user of the PepesFamily routers, or the transaction's signer for third-party routers), sends tokens, pulls tokens itself, or receives tokens for the first time. Tokens someone else sends don't count, so nobody can keep another wallet's rewards from expiring. Smart-contract wallets buying through third-party routers should claim at least weekly.
-- **Expiry:** when a wallet has been inactive for more than 7 days, its unclaimed rewards expire, except what it earned during those last 7 days. Anyone can call `recycle(holder)` (or `recycleMany`) on the token; it can only move expired rewards, and only to `PepesBuyback`.
-- **Buyback and burn:** `PepesBuyback.buybackAndBurnPepes(minOut, deadline)` is callable by anyone, at most once an hour, and spends at most 1% of the $Pepes pool's IMD depth (and at least 0.1 IMD) per call, buying $Pepes through the PepesFamily v1 router and sending every $Pepes it holds to the burn address. One buyback contract serves every v4 token, so the cap and pace hold however many tokens recycle. It has no owner; its IMD can only leave through that swap. Its constructor checks that the router's pool is an initialised $Pepes/IMD pool, so a mis-wired deployment reverts.
-- **Price guard:** a buyback only runs while the $Pepes price is at most 2% above a slow reference. The reference follows the buybacks' own price impact exactly and otherwise drifts toward the market by at most 2% a day, counting at most one day per update (`poke()`, which anyone can call and every recycle and buyback runs). Buying ahead of buybacks, pumping after an idle period, or dipping the price around a buyback all move the reference by at most 2% a day, so they stall the buyback instead of being sold into; an organic rise is followed within days. Within one transaction, the $EARN (2%) and v4 (1%) buybacks together reach 3% of depth, below the ~4% at which a sandwich starts to pay. Residual: after a sharp genuine fall the reference sits above the market for a while, so a large pump back toward the old price would not be stopped until the reference has caught up (2% a day).
+- **Expiry:** when a wallet has been inactive for more than 7 days, its unclaimed rewards expire, except what it earned during those last 7 days. Anyone can call `recycle(holder)` (or `recycleMany`) on the token; it can only move expired rewards, and only to the launchpad's `feeRecipient`.
+- **Buyback and burn (manual):** expired rewards go to the PepesFamily protocol address (`feeRecipient`, `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`), which buys back and burns $Pepes with them. This step is done by the team and is a trust assumption: burns are published on-chain (IMD in, $Pepes to `0x…dEaD`). An automatic on-chain buyback was built and audited three times (IMD Swarm ec4e3ea7, b803125e, 348884ab); every price guard that kept a predictable public buyer from being front-run opened new issues, so it was replaced by this.
 - Everything else is as in v3: 4% hook fee (1% protocol, 3% holders), liquidity locked forever, flash-borrow guard on distributions, renounced tokens with permit. Start market cap 635 IMD.
-- IMD Swarm [audit](https://explorer.imd.fun/jobs/ec4e3ea7-9b37-4113-ae4d-8cdd5ea19424) (3 low, 4 info) and [re-check](https://explorer.imd.fun/jobs/b803125e-4ee8-464e-9328-ef7c6e1b9a9d) (2 medium, 3 low): all fixed, each reproduced as a test.
-- Tests: `test/PepesFamily.t.sol` (58, incl. expiry and buyback fuzz tests), `test/PepesBuyback.t.sol` (price guard against a real priced pool, incl. every front-run and stall from both audits), and on a fork `FORK_RPC=https://robinhood.drpc.org forge test --mc "ForkTest|BuybackSandwichForkTest|EthRouterForkTest"`: real $Pepes bought and burned from expired rewards, and a front-run that the guard turns into a loss.
+- Tests: `test/PepesFamily.t.sol` (expiry, activity and fuzz tests, including every expiry case from the audits), and on a fork `FORK_RPC=https://robinhood.drpc.org forge test --mc "ForkTest|EthRouterForkTest"`.
 
 ### Pepes Earn IMD (NFT collection)
 
@@ -184,7 +181,7 @@ Image upload on the launch form uses the Vercel function `web/api/upload.js`, wh
 
 ## Owner powers
 
-- `setFeeRecipient`: changes where the 1% protocol fee goes.
+- `setFeeRecipient`: changes where the 1% protocol fee goes (on v4 also where expired holder rewards go).
 - `setStartTick`: sets the starting market cap for future launches.
 - `transferOwnership` + `acceptOwnership`: a two-step handover, so a typo can't lose the admin role.
 

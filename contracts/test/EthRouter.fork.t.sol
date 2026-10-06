@@ -42,9 +42,7 @@ contract EthRouterForkTest is Test {
                 FEE_RECIPIENT,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(635e18),
-                PepesFamily.ImdEthPool(10_000, 100, address(0)),
-                0xE2C46c7068566740A33A4C93f5445B07BCfE5644, // $Pepes
-                0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC // PepesFamily v1 router
+                PepesFamily.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), uint160(0x28CC), initCode, 0);

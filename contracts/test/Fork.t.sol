@@ -7,7 +7,6 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
-import {PepesBuyback} from "../src/PepesBuyback.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 
@@ -30,21 +29,16 @@ interface IERC20 {
     function transfer(address, uint256) external returns (bool);
 }
 
-/// @notice PepesFamily v4 against Robinhood Chain mainnet state: the real PoolManager, IMD, V4Quoter, and the real
-///         $Pepes token and PepesFamily v1 router for the buyback-and-burn.
+/// @notice PepesFamily v4 against Robinhood Chain mainnet state: the real PoolManager, IMD and V4Quoter.
 ///   FORK_RPC=https://robinhood.drpc.org forge test --mc ForkTest -vv
 contract ForkTest is Test {
     IPoolManager constant PM = IPoolManager(0x8366a39CC670B4001A1121B8F6A443A643e40951);
     IV4Quoter constant QUOTER = IV4Quoter(0x8Dc178eFB8111BB0973Dd9d722ebeFF267c98F94);
     address constant IMD = 0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127;
-    address constant PEPES = 0xE2C46c7068566740A33A4C93f5445B07BCfE5644;
-    address constant V1_ROUTER = 0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC;
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
-    address constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
     PepesFamily pad;
     PepesFamilyRouter router;
-    PepesBuyback buyback;
     address bob = makeAddr("bob");
     address carol = makeAddr("carol");
 
@@ -63,9 +57,7 @@ contract ForkTest is Test {
                 address(this),
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(635e18),
-                PepesFamily.ImdEthPool(10_000, 100, address(0)),
-                PEPES,
-                V1_ROUTER
+                PepesFamily.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt,) = DeployLib.mineSalt(address(this), pad_flags(), initCode, 0);
@@ -75,7 +67,6 @@ contract ForkTest is Test {
         }
         pad = PepesFamily(deployed);
         router = PepesFamilyRouter(payable(pad.router()));
-        buyback = PepesBuyback(pad.buyback());
         address[2] memory users = [bob, carol];
         for (uint256 i; i < users.length; i++) {
             // Borrow IMD from the PoolManager's balance for testing.
@@ -119,65 +110,19 @@ contract ForkTest is Test {
         assertGt(IERC20(IMD).balanceOf(FEE_RECIPIENT) - feeBefore, 1.5e18);
     }
 
-    /// Bob launches and never claims; after more than 7 days his rewards buy real $Pepes, which are burned.
-    function test_fork_expiredRewardsBurnPepes() public {
+    /// Bob launches and never claims; after more than 7 days his rewards go to the protocol address.
+    function test_fork_expiredRewardsGoToProtocol() public {
         vm.prank(bob);
-        (address token,) = router.launch("Fork Burn", "FBURN", "{}", IMD, 100e18, 1);
+        (address token,) = router.launch("Fork Expire", "FEXP", "{}", IMD, 100e18, 1);
         PadToken t = PadToken(payable(token));
         vm.prank(carol);
         router.buy(token, 200e18, 1, block.timestamp);
         uint256 owed = t.withdrawableDividendOf(bob);
         assertGt(owed, 0);
-
         vm.warp(block.timestamp + 7 days + 1);
-        uint256 expired = t.recycle(bob);
-        assertEq(expired, owed);
-        assertEq(IERC20(IMD).balanceOf(address(buyback)), expired);
-
-        uint256 cap = buyback.maxBuyback();
-        console.log("buyback cap per hour (IMD wei)", cap);
-        assertGt(cap, 0, "reads the real $Pepes pool depth");
-        uint256 deadBefore = IERC20(PEPES).balanceOf(DEAD);
-        uint256 burned = buyback.buybackAndBurnPepes(1, block.timestamp);
-        assertGt(burned, 0);
-        assertEq(IERC20(PEPES).balanceOf(DEAD) - deadBefore, burned, "all bought $Pepes burned");
-        assertEq(IERC20(PEPES).balanceOf(address(buyback)), 0);
-        assertEq(IERC20(IMD).balanceOf(address(buyback)), expired > cap ? expired - cap : 0);
-        console.log("$Pepes burned", burned);
-    }
-}
-
-interface IV1Router {
-    function buy(address token, uint256 amountIn, uint256 minTokensOut, uint256 deadline) external payable returns (uint256);
-    function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline) external returns (uint256);
-}
-
-/// @notice Front-running the v4 buyback on the real $Pepes pool: buy $Pepes, trigger the buyback, sell. The price guard
-///         refuses to buy into the pump, so the attacker only pays the $Pepes pool's 4% fee each way.
-contract BuybackSandwichForkTest is ForkTest {
-    function test_fork_buybackSandwichDoesNotPay() public {
-        // a large reserve (as if many holders' rewards expired)
-        vm.prank(address(PM));
-        IERC20(IMD).transfer(address(buyback), 5_000e18);
-        address eve = makeAddr("eve");
-        vm.prank(address(PM));
-        IERC20(IMD).transfer(eve, 3_000e18);
-
-        uint256 deadline = block.timestamp + 1 hours;
-        uint256 imd0 = IERC20(IMD).balanceOf(eve);
-        vm.startPrank(eve);
-        IERC20(IMD).approve(V1_ROUTER, type(uint256).max);
-        uint256 bought = IV1Router(V1_ROUTER).buy(PEPES, 3_000e18, 0, deadline);
-        // the pump trips the price guard: no buyback into it (audit ec4e3ea7, finding 1)
-        vm.expectRevert(PepesBuyback.PriceRisen.selector);
-        buyback.buybackAndBurnPepes(0, deadline);
-        IERC20(PEPES).approve(V1_ROUTER, bought);
-        IV1Router(V1_ROUTER).sell(PEPES, bought, 0, deadline);
-        vm.stopPrank();
-        // with the price back, the buyback runs
-        assertGt(buyback.buybackAndBurnPepes(0, deadline), 0);
-        uint256 imd1 = IERC20(IMD).balanceOf(eve);
-        emit log_named_decimal_uint("attacker IMD lost", imd0 > imd1 ? imd0 - imd1 : 0, 18);
-        assertLt(imd1, imd0, "sandwiching the buyback must lose money");
+        uint256 before = IERC20(IMD).balanceOf(FEE_RECIPIENT);
+        assertEq(t.recycle(bob), owed);
+        assertEq(IERC20(IMD).balanceOf(FEE_RECIPIENT) - before, owed);
+        assertGe(IERC20(IMD).balanceOf(token), t.accountedBalance());
     }
 }

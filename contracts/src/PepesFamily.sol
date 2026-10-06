@@ -20,7 +20,6 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {PadToken} from "./PadToken.sol";
 import {PepesFamilyRouter} from "./PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "./PepesFamilyEthRouter.sol";
-import {PepesBuyback} from "./PepesBuyback.sol";
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 
 /// @title PepesFamily (v4)
@@ -33,8 +32,8 @@ import {SafeTransfer} from "./lib/SafeTransfer.sol";
 ///           - 1% protocol fee -> `feeRecipient`
 ///           - 3% holder fee   -> the token's holders, pro rata (see PadToken)
 ///         Fees are held as PoolManager ERC-6909 claims until flushed; PepesFamilyRouter flushes on every trade.
-///         v4: holder rewards left unclaimed by a wallet inactive for more than 7 days expire and go to `buyback`
-///         (PepesBuyback, deployed here), which spends them buying $Pepes and burning it (see PadToken).
+///         v4: holder rewards left unclaimed by a wallet inactive for more than 7 days expire and go to
+///         `feeRecipient`, which uses them to buy back and burn $Pepes (see PadToken).
 /// @dev Must be deployed at an address whose low 14 bits equal `HOOK_FLAGS` (mine a CREATE2 salt).
 contract PepesFamily is IHooks, IUnlockCallback {
     using StateLibrary for IPoolManager;
@@ -105,8 +104,6 @@ contract PepesFamily is IHooks, IUnlockCallback {
     address public immutable router;
     /// @notice Router for trading IMD-paired tokens with ETH (through the Uniswap v4 IMD/ETH pool).
     address public immutable ethRouter;
-    /// @notice Shared $Pepes buyback-and-burn that receives every v4 token's expired holder rewards.
-    address public immutable buyback;
 
     address public owner;
     address public pendingOwner;
@@ -171,9 +168,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
         address owner_,
         address feeRecipient_,
         int24 imdStartTick,
-        ImdEthPool memory imdEthPool,
-        address pepes,
-        address pepesRouter
+        ImdEthPool memory imdEthPool
     ) {
         if (imd == address(0) || owner_ == address(0) || feeRecipient_ == address(0)) revert ZeroAddress();
         Hooks.validateHookPermissions(
@@ -205,7 +200,6 @@ contract PepesFamily is IHooks, IUnlockCallback {
                 poolManager_, address(this), imd, imdEthPool.fee, imdEthPool.tickSpacing, imdEthPool.hooks
             )
         );
-        buyback = address(new PepesBuyback(imd, pepes, pepesRouter, address(poolManager_)));
         _setStartTick(imd, imdStartTick);
         emit OwnershipTransferred(address(0), owner_);
         emit FeeRecipientUpdated(feeRecipient_);
@@ -248,7 +242,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
             revert BadMetadata();
         }
 
-        token = address(new PadToken(name, symbol, metadata, quote, creator, router, address(poolManager), buyback));
+        token = address(new PadToken(name, symbol, metadata, quote, creator, router, address(poolManager)));
         bool quoteIs0 = uint160(quote) < uint160(token);
         launches[token] = Launch({
             quote: quote,

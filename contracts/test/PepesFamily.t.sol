@@ -15,15 +15,14 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../src/PepesFamilyEthRouter.sol";
-import {PepesBuyback} from "../src/PepesBuyback.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 import {FlashHolder} from "./FlashHolder.sol";
-import {MockIMD, MockPepes, MockPepesRouter} from "./Mocks.sol";
+import {MockIMD} from "./Mocks.sol";
 
 
 /// @notice PepesFamily v4: IMD-only launches, 4% hook fee, and expiry of rewards a wallet leaves unclaimed for
-///         more than 7 days, which go to the shared $Pepes buyback-and-burn.
+///         more than 7 days, which go to the protocol address for a manual $Pepes buyback-and-burn.
 contract PepesFamilyTest is Test {
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
@@ -33,10 +32,7 @@ contract PepesFamilyTest is Test {
     PoolManager pm;
     PepesFamily pad;
     PepesFamilyRouter router;
-    PepesBuyback buyback;
     MockIMD imd;
-    MockPepes pepes;
-    MockPepesRouter pepesRouter;
     PoolSwapTest extRouter; // stands in for Universal Router / aggregators
     PoolSwapTest.TestSettings settings = PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
@@ -49,22 +45,7 @@ contract PepesFamilyTest is Test {
         vm.warp(1_800_000_000);
         pm = new PoolManager(address(this));
         imd = new MockIMD();
-        pepes = new MockPepes();
-        pepesRouter = new MockPepesRouter(imd, pepes);
         extRouter = new PoolSwapTest(pm);
-
-        // A plain $Pepes/IMD pool at 1:1 with 1,000 IMD of virtual depth: the buyback cap reads it (1% = 10 IMD).
-        PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(pm);
-        pepes.mint(address(this), 100_000e18);
-        imd.mint(address(this), 100_000e18);
-        pepes.approve(address(lp), type(uint256).max);
-        imd.approve(address(lp), type(uint256).max);
-        (address c0, address c1) =
-            address(pepes) < address(imd) ? (address(pepes), address(imd)) : (address(imd), address(pepes));
-        PoolKey memory pepesKey = PoolKey(Currency.wrap(c0), Currency.wrap(c1), 3000, 60, IHooks(address(0)));
-        pm.initialize(pepesKey, TickMath.getSqrtPriceAtTick(0));
-        lp.modifyLiquidity(pepesKey, ModifyLiquidityParams(-887220, 887220, 1_000e18, 0), "");
-        pepesRouter.setKey(pepesKey);
 
         bytes memory initCode = abi.encodePacked(
             type(PepesFamily).creationCode,
@@ -74,9 +55,7 @@ contract PepesFamilyTest is Test {
                 owner,
                 FEE_RECIPIENT,
                 DeployLib.startTickForMarketCap(START_MCAP),
-                PepesFamily.ImdEthPool(10_000, 100, address(0)),
-                address(pepes),
-                address(pepesRouter)
+                PepesFamily.ImdEthPool(10_000, 100, address(0))
             )
         );
         (bytes32 salt, address expected) = DeployLib.mineSalt(address(this), pad_flags(), initCode, 0);
@@ -87,7 +66,6 @@ contract PepesFamilyTest is Test {
         require(deployed == expected, "hook address");
         pad = PepesFamily(deployed);
         router = PepesFamilyRouter(payable(pad.router()));
-        buyback = PepesBuyback(pad.buyback());
 
         address[4] memory users = [alice, bob, carol, address(this)];
         for (uint256 i; i < users.length; i++) {
@@ -142,10 +120,6 @@ contract PepesFamilyTest is Test {
         assertEq(address(router.pad()), address(pad));
         assertEq(pad.feeRecipient(), FEE_RECIPIENT);
         assertEq(pad.owner(), owner);
-        assertEq(buyback.imd(), address(imd));
-        assertEq(buyback.pepes(), address(pepes));
-        assertEq(buyback.pepesRouter(), address(pepesRouter));
-        assertEq(buyback.poolManager(), address(pm));
     }
 
     function test_onlyImd() public {
@@ -165,7 +139,6 @@ contract PepesFamilyTest is Test {
         assertEq(t.balanceOf(address(pad)), 0);
         assertEq(t.creator(), alice);
         assertEq(t.quote(), address(imd));
-        assertEq(t.buyback(), address(buyback));
         uint256 mc = pad.marketCap(address(t));
         assertApproxEqRel(mc, START_MCAP, 0.025e18);
         assertGe(mc, START_MCAP);
@@ -655,8 +628,8 @@ contract PepesFamilyTest is Test {
     // ------------------------------------------------------------ v4: expiry
 
     /// bob buys and carol's buy pays him; after more than 7 days without activity, all of it has expired, goes to
-    /// the buyback, and bob can claim nothing more.
-    function test_expiry_inactiveWalletsRewardsGoToBuyback() public {
+    /// the protocol address, and bob can claim nothing more.
+    function test_expiry_inactiveWalletsRewardsGoToProtocol() public {
         PadToken t = _launch();
         _buy(bob, t, 10e18);
         _buy(carol, t, 10e18);
@@ -669,7 +642,7 @@ contract PepesFamilyTest is Test {
         vm.prank(alice); // anyone can trigger it
         uint256 expired = t.recycle(bob);
         assertEq(expired, owed);
-        assertEq(imd.balanceOf(address(buyback)), owed);
+        assertEq(imd.balanceOf(FEE_RECIPIENT), owed);
         assertEq(t.totalRecycled(), owed);
         assertEq(t.withdrawableDividendOf(bob), 0);
         assertEq(t.recycle(bob), 0, "nothing twice");
@@ -872,7 +845,7 @@ contract PepesFamilyTest is Test {
         (list[0], list[1], list[2], list[3]) = (bob, carol, address(pm), makeAddr("nobody"));
         uint256 total = t.recycleMany(list);
         assertEq(total, t.totalRecycled()); // alice bought last, so she earned nothing
-        assertEq(imd.balanceOf(address(buyback)), t.totalRecycled());
+        assertEq(imd.balanceOf(FEE_RECIPIENT), t.totalRecycled());
         assertApproxEqAbs(total, owed, 2);
     }
 
@@ -896,54 +869,10 @@ contract PepesFamilyTest is Test {
         assertGe(imd.balanceOf(address(t)), t.accountedBalance());
     }
 
-    // ------------------------------------------------------------ v4: buyback
+    // ------------------------------------------------------------ v4: where expired rewards go
 
-    function _fillBuyback(uint256 amt) internal {
-        imd.mint(address(buyback), amt);
-    }
-
-    function test_buyback_anyoneBurnsPepes() public {
-        PadToken t = _launch();
-        _buy(bob, t, 10e18);
-        _buy(carol, t, 10e18);
-        vm.warp(block.timestamp + 8 days);
-        uint256 expired = t.recycle(bob);
-        vm.prank(alice);
-        uint256 burned = buyback.buybackAndBurnPepes(1, block.timestamp);
-        assertEq(burned, expired * 1000); // the mock router sells 1,000 $Pepes per IMD
-        assertEq(pepes.balanceOf(DEAD), burned);
-        assertEq(pepes.balanceOf(address(buyback)), 0);
-        assertEq(imd.balanceOf(address(buyback)), 0);
-        assertEq(buyback.totalImdSpent(), expired);
-        assertEq(buyback.totalPepesBurned(), burned);
-        assertEq(imd.allowance(address(buyback), address(pepesRouter)), 0);
-    }
-
-    function test_buyback_cappedPerCallAndHourly() public {
-        assertEq(buyback.maxBuyback(), 10e18, "1% of the 1,000 IMD depth");
-        _fillBuyback(25e18);
-        uint256 cap = buyback.maxBuyback();
-        buyback.buybackAndBurnPepes(0, block.timestamp);
-        assertEq(imd.balanceOf(address(buyback)), 25e18 - cap);
-        vm.expectRevert(PepesBuyback.TooSoon.selector);
-        buyback.buybackAndBurnPepes(0, block.timestamp);
-        vm.warp(block.timestamp + 1 hours);
-        buyback.buybackAndBurnPepes(0, block.timestamp);
-        vm.warp(block.timestamp + 1 hours);
-        buyback.buybackAndBurnPepes(0, block.timestamp);
-        assertEq(imd.balanceOf(address(buyback)), 0);
-        vm.warp(block.timestamp + 1 hours);
-        vm.expectRevert(PepesBuyback.BadAmount.selector);
-        buyback.buybackAndBurnPepes(0, block.timestamp);
-    }
-
-    function test_buyback_respectsMinOut() public {
-        _fillBuyback(1e18);
-        vm.expectRevert(bytes("slippage"));
-        buyback.buybackAndBurnPepes(type(uint256).max, block.timestamp);
-    }
-
-    function test_buyback_sharedByAllTokens() public {
+    /// Expired rewards of every v4 token go to the protocol address, and follow it when the owner changes it.
+    function test_expiry_goesToCurrentFeeRecipient() public {
         PadToken t1 = _launch();
         PadToken t2 = _launch();
         _buy(bob, t1, 10e18);
@@ -951,45 +880,18 @@ contract PepesFamilyTest is Test {
         _buy(bob, t2, 10e18);
         _buy(carol, t2, 10e18);
         vm.warp(block.timestamp + 8 days);
-        uint256 e = t1.recycle(bob) + t2.recycle(bob);
-        assertEq(t1.buyback(), t2.buyback());
-        assertEq(imd.balanceOf(address(buyback)), e);
+        uint256 e1 = t1.recycle(bob);
+        assertEq(imd.balanceOf(FEE_RECIPIENT), e1);
+        address treasury = makeAddr("treasury");
+        vm.prank(owner);
+        pad.setFeeRecipient(treasury);
+        uint256 e2 = t2.recycle(bob);
+        assertGt(e2, 0);
+        assertEq(imd.balanceOf(treasury), e2, "follows setFeeRecipient");
+        assertEq(imd.balanceOf(FEE_RECIPIENT), e1);
     }
 
-    // ------------------------------------------------------------ v4 audit (ec4e3ea7)
-
-    /// Finding 2: $Pepes sent to the buyback directly is burned with the next buyback, not locked.
-    function test_buyback_burnsStrayPepesToo() public {
-        pepes.mint(address(buyback), 5e18);
-        _fillBuyback(1e18);
-        uint256 burned = buyback.buybackAndBurnPepes(0, block.timestamp);
-        assertEq(burned, 5e18 + 1_000e18);
-        assertEq(pepes.balanceOf(address(buyback)), 0);
-        assertEq(pepes.balanceOf(DEAD), burned);
-    }
-
-    /// Finding 5: a launchpad wired to a wrong $Pepes or router can't be deployed (no IMD sink).
-    function test_buyback_rejectsBadWiring() public {
-        vm.expectRevert(); // an EOA router has no pad()
-        new PepesBuyback(address(imd), address(0xCAFE), address(0xBEEF), address(pm));
-        vm.expectRevert(PepesBuyback.BadWiring.selector); // the router's pool isn't a pool of this token
-        new PepesBuyback(address(imd), address(0xCAFE), address(pepesRouter), address(pm));
-        MockIMD otherQuote = new MockIMD();
-        vm.expectRevert(PepesBuyback.BadWiring.selector); // the pool isn't paired with IMD
-        new PepesBuyback(address(otherQuote), address(pepes), address(pepesRouter), address(pm));
-        bytes memory initCode = abi.encodePacked(
-            type(PepesFamily).creationCode,
-            abi.encode(
-                pm, address(imd), owner, FEE_RECIPIENT, DeployLib.startTickForMarketCap(START_MCAP),
-                PepesFamily.ImdEthPool(10_000, 100, address(0)), address(0xCAFE), address(0xBEEF)
-            )
-        );
-        address deployed;
-        assembly {
-            deployed := create(0, add(initCode, 0x20), mload(initCode))
-        }
-        assertEq(deployed, address(0), "the launchpad deployment reverts");
-    }
+    // ------------------------------------------------------------ v4 audits (ec4e3ea7, b803125e)
 
     /// Finding 7: recycling twice only ever takes rewards that have aged past 7 days.
     function test_expiry_secondRecycleOnlyTakesAgedRewards() public {
