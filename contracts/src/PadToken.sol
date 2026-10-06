@@ -14,11 +14,11 @@ interface IPadFlush {
 /// @notice Fixed-supply ERC20 launched by PepesFamily, paired with IMD. Holders earn a pro-rata share of the 3%
 ///         holder fee charged on every Uniswap v4 swap of this token, paid in IMD and claimed manually.
 ///
-///         Rewards are meant to be claimed: a wallet is active when it claims, sends tokens, pulls tokens itself,
-///         receives at least `ACTIVITY_MIN` tokens (a real buy), or receives tokens for the first time. Rewards of
-///         a wallet inactive for more than 7 days expire, except what it earned during those last 7 days. Anyone
-///         may send expired rewards to `buyback` (PepesBuyback), which can only spend them buying $Pepes and
-///         burning it.
+///         Rewards are meant to be claimed: a wallet is active when it claims, buys (any amount, through any
+///         router: the pad's hook records the buyer), sends tokens, pulls tokens itself, receives tokens for the
+///         first time, or is sent at least a tenth of what it already holds. Rewards of a wallet inactive for more
+///         than 7 days expire, except what it earned during those last 7 days. Anyone may send expired rewards to
+///         `buyback` (PepesBuyback), which can only spend them buying $Pepes and burning it.
 /// @dev Dividends use the "magnified dividend per share" pattern: accrual is O(1) and automatic for every
 ///      holder on each distribution; holders withdraw with `claim()`. The pad, the router, the v4
 ///      PoolManager (which holds the pool's tokens), this contract and burn addresses are excluded.
@@ -34,6 +34,7 @@ contract PadToken {
     error PermitExpired();
     error InvalidSignature();
     error NotEligible();
+    error NotPad();
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -47,9 +48,10 @@ contract PadToken {
     uint256 public constant MIN_ELIGIBLE_SUPPLY = 1e18;
     /// @notice Rewards of a wallet inactive for longer than this expire (except those earned within it).
     uint256 public constant INACTIVITY_PERIOD = 7 days;
-    /// @notice Smallest receipt that counts as activity when the recipient didn't initiate it (0.001% of supply).
-    ///         Keeps dust gifts from holding off someone else's expiry for free.
-    uint256 public constant ACTIVITY_MIN = 10_000e18;
+    /// @notice A receipt the recipient didn't initiate counts as activity only when it is at least 1/10 of what the
+    ///         recipient already holds: holding off someone's expiry costs a tenth of their bag each time, whatever
+    ///         the token's price (audit finding 3). Buys are recorded by the hook instead, whatever their size.
+    uint256 public constant GIFT_ACTIVITY_DIVISOR = 10;
     uint256 internal constant MAGNITUDE = 2 ** 128;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
@@ -222,16 +224,29 @@ contract PadToken {
 
         // Activity (a zero-amount transferFrom needs no allowance, so it never counts). Sending, directly or through
         // an allowance the holder gave, is the holder's own act. Receiving counts when the recipient initiated it,
-        // for a real amount (a buy from the pool arrives from the PoolManager), or the first time. An unrecorded
-        // small receipt only raises the balance, which over-estimates "recent" rewards in the holder's favour.
+        // the first time, or when it is at least a tenth of what the recipient held (buys are recorded by the hook
+        // through `markActive`). An unrecorded small receipt only raises the balance, which over-estimates
+        // "recent" rewards in the holder's favour.
         if (amount != 0) {
             if (!fromExcluded) lastActive[from] = block.timestamp;
-            if (!toExcluded && (msg.sender == to || amount >= ACTIVITY_MIN || lastActive[to] == 0)) {
-                lastActive[to] = block.timestamp;
-            }
+            if (
+                !toExcluded
+                    && (
+                        msg.sender == to || lastActive[to] == 0
+                            || amount * GIFT_ACTIVITY_DIVISOR >= balanceOf[to] - amount
+                    )
+            ) lastActive[to] = block.timestamp;
         }
 
         emit Transfer(from, to, amount);
+    }
+
+    /// @notice Records a buy as activity of the buyer. Only the pad (the pools' hook) calls it, for every buy of this
+    ///         token: the buyer is the user our router reports, otherwise the transaction's signer, which nobody
+    ///         can set for someone else.
+    function markActive(address buyer) external {
+        if (msg.sender != pad) revert NotPad();
+        if (!isExcluded(buyer)) lastActive[buyer] = block.timestamp;
     }
 
     // ------------------------------------------------------------ Dividends

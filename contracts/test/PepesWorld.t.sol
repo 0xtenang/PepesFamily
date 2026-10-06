@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {PepesWorldVault} from "../src/world/PepesWorldVault.sol";
 import {PadTokenV1} from "../src/v1/PadTokenV1.sol";
 import {SafeTransfer} from "../src/lib/SafeTransfer.sol";
-import {MockIMD} from "./PepesFamily.t.sol";
+import {MockIMD} from "./Mocks.sol";
 
 /// @dev Stands in for $EARN: 2,000 tokens of 18 decimals; balances set freely.
 contract MockEarn {

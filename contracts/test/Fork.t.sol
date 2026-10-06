@@ -152,8 +152,8 @@ interface IV1Router {
     function sell(address token, uint256 tokenAmount, uint256 minQuoteOut, uint256 deadline) external returns (uint256);
 }
 
-/// @notice Sandwiching the v4 buyback on the real $Pepes pool: buy $Pepes, trigger the buyback, sell. With the cap
-///         (1% of the pool's IMD depth) and the $Pepes pool's 4% fee each way, the attacker loses.
+/// @notice Front-running the v4 buyback on the real $Pepes pool: buy $Pepes, trigger the buyback, sell. The price guard
+///         refuses to buy into the pump, so the attacker only pays the $Pepes pool's 4% fee each way.
 contract BuybackSandwichForkTest is ForkTest {
     function test_fork_buybackSandwichDoesNotPay() public {
         // a large reserve (as if many holders' rewards expired)
@@ -168,11 +168,14 @@ contract BuybackSandwichForkTest is ForkTest {
         vm.startPrank(eve);
         IERC20(IMD).approve(V1_ROUTER, type(uint256).max);
         uint256 bought = IV1Router(V1_ROUTER).buy(PEPES, 3_000e18, 0, deadline);
-        uint256 burned = buyback.buybackAndBurnPepes(0, deadline);
+        // the pump trips the price guard: no buyback into it (audit ec4e3ea7, finding 1)
+        vm.expectRevert(PepesBuyback.PriceRisen.selector);
+        buyback.buybackAndBurnPepes(0, deadline);
         IERC20(PEPES).approve(V1_ROUTER, bought);
         IV1Router(V1_ROUTER).sell(PEPES, bought, 0, deadline);
         vm.stopPrank();
-        assertGt(burned, 0);
+        // with the price back, the buyback runs
+        assertGt(buyback.buybackAndBurnPepes(0, deadline), 0);
         uint256 imd1 = IERC20(IMD).balanceOf(eve);
         emit log_named_decimal_uint("attacker IMD lost", imd0 > imd1 ? imd0 - imd1 : 0, 18);
         assertLt(imd1, imd0, "sandwiching the buyback must lose money");

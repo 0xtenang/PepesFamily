@@ -19,42 +19,8 @@ import {PepesBuyback} from "../src/PepesBuyback.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 import {FlashHolder} from "./FlashHolder.sol";
-import {MockPepes, MockPepesRouter} from "./PepesEarn.t.sol";
+import {MockIMD, MockPepes, MockPepesRouter} from "./Mocks.sol";
 
-contract MockIMD {
-    string public name = "Identity.md";
-    string public symbol = "IMD";
-    uint8 public decimals = 18;
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    function mint(address to, uint256 amt) external {
-        balanceOf[to] += amt;
-    }
-
-    /// @dev Simulates a balance dropping outside a transfer (e.g. a rebasing or seized balance).
-    function slash(address who, uint256 amt) external {
-        balanceOf[who] -= amt;
-    }
-
-    function approve(address s, uint256 amt) external returns (bool) {
-        allowance[msg.sender][s] = amt;
-        return true;
-    }
-
-    function transfer(address to, uint256 amt) external returns (bool) {
-        balanceOf[msg.sender] -= amt;
-        balanceOf[to] += amt;
-        return true;
-    }
-
-    function transferFrom(address f, address to, uint256 amt) external returns (bool) {
-        if (allowance[f][msg.sender] != type(uint256).max) allowance[f][msg.sender] -= amt;
-        balanceOf[f] -= amt;
-        balanceOf[to] += amt;
-        return true;
-    }
-}
 
 /// @notice PepesFamily v4: IMD-only launches, 4% hook fee, and expiry of rewards a wallet leaves unclaimed for
 ///         more than 7 days, which go to the shared $Pepes buyback-and-burn.
@@ -770,25 +736,58 @@ contract PepesFamilyTest is Test {
         _buy(bob, t, 10e18);
         _buy(carol, t, 10e18);
         vm.warp(block.timestamp + 6 days);
-        _buy(bob, t, 1e18); // a real buy (well over ACTIVITY_MIN tokens)
+        _buy(bob, t, 1e18);
         vm.warp(block.timestamp + 6 days);
         assertEq(t.expiredRewardsOf(bob), 0);
     }
 
-    /// A dust gift can't hold off someone else's expiry; a real amount can (the chain can't tell gift from purchase).
-    function test_expiry_dustGiftDoesNotResetTimer() public {
+    /// Audit finding 3: a small buy at a high market cap is still the buyer's activity (the hook records it).
+    function test_expiry_tinyBuyAtHighMarketCapCounts() public {
         PadToken t = _launch();
         _buy(bob, t, 10e18);
-        _buy(carol, t, 10e18);
+        _buy(carol, t, 5_000e18); // market cap now far above the start
+        uint256 bought = 0;
+        vm.warp(block.timestamp + 6 days);
+        bought = _buy(bob, t, 1e15); // 0.001 IMD: a few hundred tokens
+        assertLt(bought * 10, t.balanceOf(bob), "small next to bob's bag");
+        assertEq(t.lastActive(bob), block.timestamp);
+        vm.warp(block.timestamp + 1 days + 1);
+        assertEq(t.expiredRewardsOf(bob), 0, "bob bought a day ago");
+    }
+
+    /// A buy through a third-party router marks the transaction's signer, who can only be the buyer themselves.
+    function test_expiry_externalRouterBuyCountsForTheSigner() public {
+        PadToken t = _launchWithOrder(true);
+        _buy(bob, t, 10e18);
+        PoolKey memory key = pad.poolKey(address(t));
+        vm.warp(block.timestamp + 6 days);
+        vm.prank(bob, bob);
+        extRouter.swap(key, SwapParams(true, -1e15, TickMath.MIN_SQRT_PRICE + 1), settings, "");
+        assertEq(t.lastActive(bob), block.timestamp);
+    }
+
+    function test_markActive_onlyPad() public {
+        PadToken t = _launch();
+        vm.prank(carol);
+        vm.expectRevert(PadToken.NotPad.selector);
+        t.markActive(bob);
+    }
+
+    /// A gift counts only when it is at least a tenth of what the recipient holds, whatever the token's price.
+    function test_expiry_smallGiftDoesNotResetTimer() public {
+        PadToken t = _launch();
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 50e18);
         uint256 last = t.lastActive(bob);
-        uint256 min = t.ACTIVITY_MIN();
+        uint256 tenth = t.balanceOf(bob) / 10;
         vm.warp(block.timestamp + 6 days);
         vm.prank(carol);
-        t.transfer(bob, min - 1);
-        assertEq(t.lastActive(bob), last, "dust doesn't count");
+        t.transfer(bob, tenth - 1);
+        assertEq(t.lastActive(bob), last, "less than a tenth of the bag doesn't count");
+        uint256 tenthNow = t.balanceOf(bob) / 10;
         vm.prank(carol);
-        t.transfer(bob, min);
-        assertEq(t.lastActive(bob), block.timestamp, "a real amount counts");
+        t.transfer(bob, tenthNow + 1);
+        assertEq(t.lastActive(bob), block.timestamp, "a tenth of the bag counts");
     }
 
     function test_expiry_firstReceiptStartsTheTimer() public {
@@ -914,5 +913,95 @@ contract PepesFamilyTest is Test {
         uint256 e = t1.recycle(bob) + t2.recycle(bob);
         assertEq(t1.buyback(), t2.buyback());
         assertEq(imd.balanceOf(address(buyback)), e);
+    }
+
+    // ------------------------------------------------------------ v4 audit (ec4e3ea7)
+
+    /// Finding 2: $Pepes sent to the buyback directly is burned with the next buyback, not locked.
+    function test_buyback_burnsStrayPepesToo() public {
+        pepes.mint(address(buyback), 5e18);
+        _fillBuyback(1e18);
+        uint256 burned = buyback.buybackAndBurnPepes(0, block.timestamp);
+        assertEq(burned, 5e18 + 1_000e18);
+        assertEq(pepes.balanceOf(address(buyback)), 0);
+        assertEq(pepes.balanceOf(DEAD), burned);
+    }
+
+    /// Finding 5: a launchpad wired to a wrong $Pepes or router can't be deployed (no IMD sink).
+    function test_buyback_rejectsBadWiring() public {
+        vm.expectRevert(); // an EOA router has no pad()
+        new PepesBuyback(address(imd), address(0xCAFE), address(0xBEEF), address(pm));
+        vm.expectRevert(PepesBuyback.BadWiring.selector); // the router's pool isn't a pool of this token
+        new PepesBuyback(address(imd), address(0xCAFE), address(pepesRouter), address(pm));
+        MockIMD otherQuote = new MockIMD();
+        vm.expectRevert(PepesBuyback.BadWiring.selector); // the pool isn't paired with IMD
+        new PepesBuyback(address(otherQuote), address(pepes), address(pepesRouter), address(pm));
+        bytes memory initCode = abi.encodePacked(
+            type(PepesFamily).creationCode,
+            abi.encode(
+                pm, address(imd), owner, FEE_RECIPIENT, DeployLib.startTickForMarketCap(START_MCAP),
+                PepesFamily.ImdEthPool(10_000, 100, address(0)), address(0xCAFE), address(0xBEEF)
+            )
+        );
+        address deployed;
+        assembly {
+            deployed := create(0, add(initCode, 0x20), mload(initCode))
+        }
+        assertEq(deployed, address(0), "the launchpad deployment reverts");
+    }
+
+    /// Finding 7: recycling twice only ever takes rewards that have aged past 7 days.
+    function test_expiry_secondRecycleOnlyTakesAgedRewards() public {
+        PadToken t = _launch();
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 10e18); // day 0: R1
+        uint256 r1 = t.withdrawableDividendOf(bob);
+        vm.warp(block.timestamp + 5 days);
+        _buy(alice, t, 10e18); // day 5: R2
+        uint256 r2 = t.withdrawableDividendOf(bob) - r1;
+        vm.warp(block.timestamp + 3 days); // day 8
+        assertApproxEqAbs(t.recycle(bob), r1, 1e6);
+        vm.warp(block.timestamp + 2 days); // day 10: R2 is 5 days old
+        assertEq(t.recycle(bob), 0);
+        _buy(carol, t, 10e18); // day 10: R3
+        uint256 r3 = t.withdrawableDividendOf(bob) - r2;
+        vm.warp(block.timestamp + 3 days); // day 13
+        assertApproxEqAbs(t.recycle(bob), r2, 1e6);
+        assertApproxEqAbs(t.withdrawableDividendOf(bob), r3, 1e6);
+        assertGe(imd.balanceOf(address(t)), t.accountedBalance());
+    }
+
+    /// Finding 7: a holder who sold everything keeps nothing older than 7 days and earns nothing new.
+    function test_expiry_zeroBalanceHolderLosesEverythingOld() public {
+        PadToken t = _launch();
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 10e18);
+        uint256 owed = t.withdrawableDividendOf(bob);
+        vm.warp(block.timestamp + 1 days);
+        _sell(bob, t, t.balanceOf(bob)); // activity on day 1
+        vm.warp(block.timestamp + 2 days);
+        _buy(alice, t, 10e18);
+        vm.warp(block.timestamp + 5 days + 1); // 7 days + 1 s after the sale
+        assertEq(t.recycle(bob), owed);
+        assertEq(t.withdrawableDividendOf(bob), 0);
+    }
+
+    /// Finding 7: fees left pending by a third-party router, recycled around, still reach the right holders.
+    function test_expiry_pendingFeesAndRecycleStaySolvent() public {
+        PadToken t = _launchWithOrder(true);
+        _buy(bob, t, 10e18);
+        _buy(carol, t, 10e18);
+        vm.warp(block.timestamp + 8 days);
+        PoolKey memory key = pad.poolKey(address(t));
+        vm.prank(alice, alice);
+        extRouter.swap(key, SwapParams(true, -10e18, TickMath.MIN_SQRT_PRICE + 1), settings, "");
+        assertGt(pad.pendingHolderFees(address(t)), 0);
+        uint256 expired = t.recycle(bob); // pending fees are not bob's yet
+        pad.flush(address(t)); // now they are spread, partly to bob as a current holder
+        uint256 recent = t.withdrawableDividendOf(bob);
+        assertGt(expired, 0);
+        assertGt(recent, 0, "fresh fees are recent, they never expire");
+        assertEq(t.expiredRewardsOf(bob), 0);
+        assertGe(imd.balanceOf(address(t)), t.accountedBalance());
     }
 }

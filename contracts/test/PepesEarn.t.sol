@@ -21,43 +21,7 @@ import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../src/PepesFamilyEthRouter.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 import {LibEarnString} from "../src/earn/LibEarnString.sol";
-import {MockIMD} from "./PepesFamily.t.sol";
-
-/// @dev Stands in for $Pepes: any ERC20 the buyback router can mint.
-contract MockPepes is MockIMD {}
-
-/// @dev Stands in for the PepesFamily v1 router and pad: buys "Pepes" with IMD at 1,000 Pepes per IMD for
-///      msg.sender, and reports a real (plain) $Pepes/IMD pool so the buyback cap can read its depth.
-contract MockPepesRouter {
-    MockIMD immutable imd;
-    MockPepes immutable pepes;
-    PoolKey key;
-
-    constructor(MockIMD imd_, MockPepes pepes_) {
-        imd = imd_;
-        pepes = pepes_;
-    }
-
-    function setKey(PoolKey memory k) external {
-        key = k;
-    }
-
-    function pad() external view returns (address) {
-        return address(this);
-    }
-
-    function poolKey(address) external view returns (PoolKey memory) {
-        return key;
-    }
-
-    function buy(address token, uint256 amountIn, uint256 minOut, uint256 deadline) external payable returns (uint256 out) {
-        require(token == address(pepes) && block.timestamp <= deadline, "bad");
-        imd.transferFrom(msg.sender, address(this), amountIn);
-        out = amountIn * 1000;
-        require(out >= minOut, "slippage");
-        pepes.mint(msg.sender, out);
-    }
-}
+import {MockIMD, MockPepes, MockPepesRouter} from "./Mocks.sol";
 
 /// @dev Final check, low 1: moves 1 wei of $EARN out of the PoolManager to `victim` and repays the pool with its own.
 contract DustTaker is IUnlockCallback {
