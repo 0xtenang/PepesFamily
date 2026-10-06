@@ -399,6 +399,7 @@ const TOKEN_ABI = [
   "function lastActive(address) view returns (uint256)",
   "function expiredRewardsOf(address) view returns (uint256)",
   "function totalRecycled() view returns (uint256)",
+  "function recycleMany(address[]) returns (uint256)",
 ];
 /// v4: rewards of a wallet inactive for more than 7 days expire (except those earned in its last 7 days).
 const EXPIRY_PERIOD = 7 * 24 * 3600;
@@ -1297,7 +1298,13 @@ async function renderAdmin() {
           <tr><td class="muted">Contract</td><td class="mono"><a href="${CONFIG.explorer}/address/${r.P.pad}" target="_blank" rel="noopener">${r.P.pad}</a></td></tr>
         </table>
       </div>`).join("")}
-    <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. Paying out always pays the token's holders. The signer only pays gas.</p>`;
+    ${rows.some((r) => r.P.expiry) ? `${sec(rows.length + 1, "Expired rewards (v4)")}
+      <div class="card">
+        <p class="stat" style="margin:0 0 10px">Rewards of wallets inactive for more than 7 days (no claim, buy, sell or send), except what they earned in their last 7 days. Sending them moves the IMD from each token to the fee address, for the $PEPES buyback and burn. Wallets that claim send their own expired part automatically; this finds the ones that never come back.</p>
+        <div id="rcy" class="stat">Not checked yet.</div>
+        <div class="row" style="margin-top:10px"><button id="rcyscan">Find expired rewards</button><button class="primary" id="rcysend" hidden></button></div>
+      </div>` : ""}
+    <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. Paying out always pays the token's holders. Sending expired rewards always pays the fee address. The signer only pays gas.</p>`;
   app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     const r = rows[Number(b.dataset.r)];
@@ -1312,6 +1319,60 @@ async function renderAdmin() {
       renderAdmin();
     } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
   });
+  // v4: find wallets with expired rewards (every address that ever sent or received the token, from Blockscout)
+  // and send them to the fee address with recycleMany, in batches.
+  let found = [];
+  if ($("#rcyscan")) $("#rcyscan").onclick = async () => {
+    const b = $("#rcyscan");
+    b.disabled = true; $("#rcysend").hidden = true;
+    try {
+      const v4 = rows.filter((r) => r.P.expiry).flatMap((r) => r.tokens.map((x) => x.t));
+      found = [];
+      for (const [i, t] of v4.entries()) {
+        $("#rcy").textContent = `Checking $${t.symbol} (${i + 1} of ${v4.length})…`;
+        const tok = new ethers.Contract(t.token, TOKEN_ABI, reader);
+        const who = await tokenParticipants(t.token);
+        const hits = [];
+        for (let k = 0; k < who.length; k += 25) {
+          const part = who.slice(k, k + 25);
+          const ex = await Promise.all(part.map((a) => tok.expiredRewardsOf(a).catch(() => 0n)));
+          part.forEach((a, j) => { if (ex[j] > 0n) hits.push({ a, ex: ex[j] }); });
+        }
+        if (hits.length) found.push({ t, hits, total: hits.reduce((s, h) => s + h.ex, 0n) });
+      }
+      const total = found.reduce((s, f) => s + f.total, 0n);
+      $("#rcy").innerHTML = found.length
+        ? `<div class="scroll-x"><table><thead><tr><th>Token</th><th>Wallets</th><th>Expired</th></tr></thead><tbody>${found.map((f) => `
+            <tr><td><a href="#/t/${f.t.token}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} IMD</div></td></tr>`).join("")}</tbody></table></div>`
+        : "No expired rewards right now.";
+      if (found.length) {
+        const txs = found.reduce((n, f) => n + Math.ceil(f.hits.length / 50), 0);
+        $("#rcysend").textContent = `Send ${fmt(total, 4)} IMD to the fee address${txs > 1 ? ` (${txs} transactions)` : ""}`;
+        $("#rcysend").hidden = false;
+      }
+    } catch (e) { $("#rcy").textContent = "Couldn't check: " + errMsg(e); }
+    b.disabled = false;
+  };
+  if ($("#rcysend")) $("#rcysend").onclick = async () => {
+    const b = $("#rcysend");
+    b.disabled = true;
+    let sent = 0n;
+    try {
+      await requireWallet();
+      for (const f of found) {
+        const tok = new ethers.Contract(f.t.token, TOKEN_ABI, signer);
+        for (let k = 0; k < f.hits.length; k += 50) {
+          toast(`Confirm sending $${f.t.symbol} expired rewards in your wallet…`, 8000);
+          const tx = await tok.recycleMany(f.hits.slice(k, k + 50).map((h) => h.a));
+          toast("Sending…", 15000);
+          await tx.wait();
+          sent += f.hits.slice(k, k + 50).reduce((s, h) => s + h.ex, 0n);
+        }
+      }
+      toast(`About ${fmt(sent, 4)} IMD sent to the fee address`);
+      renderAdmin();
+    } catch (e) { toast((sent ? `Sent about ${fmt(sent, 4)} IMD before stopping. ` : "") + errMsg(e), 7000); b.disabled = false; }
+  };
   // Paying out from a wallet transaction runs outside any PoolManager unlock, which is the safe way to distribute.
   // flush() sends the launchpad's pending fees and distributes them; when only quote already sitting in the token
   // is left, distribute() on the token does it directly.
@@ -1330,6 +1391,23 @@ async function renderAdmin() {
       renderAdmin();
     } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
   });
+}
+
+/// v4 admin: every address that ever sent or received `token` (Blockscout token transfers), so wallets that sold
+/// everything but left rewards unclaimed are found too. Excluded system accounts report 0 expired and drop out.
+async function tokenParticipants(token) {
+  const seen = new Set();
+  let next = null;
+  for (let page = 0; page < 200; page++) {
+    const r = await fetch(`${CONFIG.blockscoutApi}/tokens/${token}/transfers` + (next ? "?" + new URLSearchParams(next) : ""),
+      { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error(`Blockscout answered ${r.status}`);
+    const j = await r.json();
+    for (const it of j.items || []) for (const a of [it.from?.hash, it.to?.hash]) if (a && ethers.isAddress(a)) seen.add(ethers.getAddress(a));
+    next = j.next_page_params;
+    if (!next) break;
+  }
+  return [...seen];
 }
 
 // ---------------------------------------------------------------- My rewards
