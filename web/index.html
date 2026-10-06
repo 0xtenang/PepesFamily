@@ -181,6 +181,7 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .imgprev img { width: 100%; height: 100%; object-fit: cover; }
 .imgrow.drag .imgprev { border-color: var(--accent); }
 .stat.ok { color: var(--accent); } .stat.warn { color: var(--warn); }
+.card.warnbox { border-color: var(--warn); }
 .sharegrid { grid-template-columns: minmax(0, 600px) 1fr; }
 @media (max-width: 860px) { .sharegrid { grid-template-columns: 1fr; } }
 .h { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
@@ -272,7 +273,9 @@ const CONFIG = {
   // Launchpads, newest first. New tokens launch on the first one that is live on-chain; tokens from every
   // version stay listed and tradable. v2+: owner() = 0x0 (renounced), standard approvals + permit; v3 also blocks flash-held reward capture.
   // admin: false hides a version on the Admin page (v2 only has a test token, with no fees).
+  // v4: rewards a wallet leaves unclaimed for more than 7 days of inactivity expire (expiry: true).
   pads: [
+    { version: 4, pad: "0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc", router: "0xDB202196E62413c0eFB59e926EA1BD4817dB7226", ethRouter: "0x19f112328cFb44191704Dba441050008Fe85C361", permit: true, expiry: true },
     { version: 3, pad: "0xC5a1f48C03635b83D79667463785bC2c6BcE28cC", router: "0x8A9b6A990d13f25F6393aCacfB013F980c763a27", ethRouter: "0x891B710b36D0bDb1D6B53CB979696EbE43c2d129", permit: true },
     { version: 2, pad: "0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC", router: "0x85D6695CBE0BaF221a4BBd39F0b368B893e70D4b", ethRouter: "0xce3540Bf1D4b219B7B2055508A83B09A0e1df9eF", permit: true, admin: false },
     { version: 1, pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC", router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", permit: false },
@@ -294,6 +297,11 @@ const CONFIG = {
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
   // Independent audits by the IMD Swarm (reports are public on explorer.imd.fun).
   audits: {
+    launchpadV4: {
+      url: "https://explorer.imd.fun/jobs/cbe092d6-65c8-4742-ada8-22bc471cbe91",
+      title: "PepesFamily launchpad v4",
+      result: "4 rounds (ec4e3ea7, b803125e, 348884ab, cbe092d6): all findings fixed or documented",
+    },
     launchpad: {
       url: "https://explorer.imd.fun/jobs/a3e708e2-fb57-43ea-a163-d93b916694a2",
       title: "PepesFamily launchpad",
@@ -387,7 +395,25 @@ const TOKEN_ABI = [
   "function claim() returns (uint256)",
   "function accountedBalance() view returns (uint256)",
   "function distribute() returns (uint256)",
+  // v4 only (expiry of unclaimed rewards)
+  "function lastActive(address) view returns (uint256)",
+  "function expiredRewardsOf(address) view returns (uint256)",
+  "function totalRecycled() view returns (uint256)",
 ];
+/// v4: rewards of a wallet inactive for more than 7 days expire (except those earned in its last 7 days).
+const EXPIRY_PERIOD = 7 * 24 * 3600;
+/// "3d 4h", "5h 12m", "9m" for a number of seconds.
+const dur = (s) => {
+  s = Math.max(0, Math.floor(s));
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+};
+/// Expiry status of a v4 holding: { expired (wei), left (seconds until older rewards start expiring) }.
+async function expiryOf(token, who) {
+  const t = new ethers.Contract(token, TOKEN_ABI, reader);
+  const [last, expired] = await Promise.all([t.lastActive(who), t.expiredRewardsOf(who)]);
+  return { expired, last: Number(last), left: Number(last) ? Number(last) + EXPIRY_PERIOD - Date.now() / 1000 : null };
+}
 const ERC20_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address, address) view returns (uint256)",
@@ -1218,12 +1244,13 @@ async function renderAdmin() {
       // and holder fees not yet paid out (pending in the launchpad + any quote in the token not yet distributed).
       const tokens = await Promise.all(infos.map(async (t) => {
         const tok = new ethers.Contract(t.token, TOKEN_ABI, reader);
-        const [unclaimed, bal] = await Promise.all([
+        const [unclaimed, bal, recycled] = await Promise.all([
           tok.accountedBalance(),
           t.quote === ZERO ? reader.getBalance(t.token) : new ethers.Contract(t.quote, ERC20_ABI, reader).balanceOf(t.token),
+          P.expiry ? tok.totalRecycled() : 0n,
         ]);
         const inToken = bal > unclaimed ? bal - unclaimed : 0n;
-        return { t, unclaimed, inToken, waiting: t.pendingHolderFees + inToken };
+        return { t, unclaimed, inToken, recycled, waiting: t.pendingHolderFees + inToken };
       }));
       return { P, owner, feeTo, pending, tokens };
     }));
@@ -1252,7 +1279,7 @@ async function renderAdmin() {
       </div>
       <div class="card" style="margin-top:10px">
         <span class="h">Holder rewards</span>
-        <p class="stat" style="margin:4px 0 8px"><b>Unclaimed</b>: already paid out to holders, waiting for them to press Claim (safe, nothing to do). <b>Not paid out</b>: fees from trades through other routers (GMGN, aggregators) not yet sent to holders.${r.P.version < 3 ? ` On v${r.P.version} these can be partly captured by a flash-borrow trick, so pay them out regularly (costs only gas).` : ""}</p>
+        <p class="stat" style="margin:4px 0 8px">${r.P.expiry ? `<b>Expired</b>: rewards holders left unclaimed for more than 7 days, already sent to the fee address for the $PEPES buyback and burn (total ${fmt(r.tokens.reduce((s, x) => s + x.recycled, 0n), 4)} IMD). Anyone can send a holder's expired rewards with <span class="mono">recycle(holder)</span> on the token; claims do it automatically. ` : ""}<b>Unclaimed</b>: already paid out to holders, waiting for them to press Claim (safe, nothing to do). <b>Not paid out</b>: fees from trades through other routers (GMGN, aggregators) not yet sent to holders.${r.P.version < 3 ? ` On v${r.P.version} these can be partly captured by a flash-borrow trick, so pay them out regularly (costs only gas).` : ""}</p>
         ${r.tokens.length ? `<div class="scroll-x"><table>
           <thead><tr><th>Token</th><th>Unclaimed</th><th>Not paid out</th><th></th></tr></thead>
           <tbody>${r.tokens.map((x) => `
@@ -1352,8 +1379,11 @@ async function renderRewards(who) {
   try {
     rows = await Promise.all((await allTokenInfos()).map(async ({ t, P }) => {
       const tok = new ethers.Contract(t.token, TOKEN_ABI, reader);
-      const [bal, claimable, claimed] = await Promise.all([tok.balanceOf(addr), tok.withdrawableDividendOf(addr), tok.withdrawnDividends(addr)]);
-      return { t, P, bal, claimable, claimed, earned: claimable + claimed };
+      const [bal, owed, claimed] = await Promise.all([tok.balanceOf(addr), tok.withdrawableDividendOf(addr), tok.withdrawnDividends(addr)]);
+      // v4: the expired part goes to the protocol on claim, so it is not "ready" for the holder.
+      const ex = P.expiry && owed > 0n ? await expiryOf(t.token, addr) : null;
+      const expired = ex ? ex.expired : 0n;
+      return { t, P, bal, claimable: owed - expired, expired, ex, claimed, earned: owed + claimed };
     }));
   } catch (e) {
     if (seq === rewardsSeq && $("#rw")) $("#rw").innerHTML = `<div class="card" style="margin-top:16px">Couldn't load rewards: ${esc(errMsg(e))}</div>`;
@@ -1368,10 +1398,13 @@ async function renderRewards(who) {
   const priced = prices.ethUsd > 0;
   const big = (k) => (priced ? fmtUsd(usdSum(k)) : assetParts(sum(k)));
   const claimables = rows.filter((r) => r.claimable > 0n);
+  // v4 holdings whose older rewards expire within 2 days (or already started to)
+  const soon = rows.filter((r) => r.ex && r.claimable > 0n && r.ex.left !== null && r.ex.left < 2 * 86400);
   const earnedAny = rows.some((r) => r.earned > 0n);
 
   $("#rw").innerHTML = `
     ${mine ? "" : `<p class="stat" style="margin:10px 0 0">Viewing <a class="mono" href="${CONFIG.explorer}/address/${addr}" target="_blank" rel="noopener">${short(addr)}</a>. ${account ? "Connect this wallet to claim." : `<a href="#/rewards" style="text-decoration:underline">Connect yours</a> to claim.`}</p>`}
+    ${soon.length ? `<div class="card warnbox" style="margin-top:16px"><b>⏳ Claim soon:</b> unclaimed rewards on ${soon.map((r) => "$" + esc(r.t.symbol)).join(", ")} start expiring ${soon.some((r) => r.ex.left <= 0) ? "now" : "within 2 days"}. On newer tokens (launchpad v4), rewards left unclaimed for more than 7 days without any activity (claim, buy, sell or send) go to a $PEPES buyback and burn.</div>` : ""}
     <div class="stats" style="margin-top:16px">
       <div class="card"><div class="k">Total earned</div><div class="v">${big("earned")}</div><div class="stat">${priced ? assetParts(sum("earned")) : "all time"}</div></div>
       <div class="card"><div class="k">Claimed</div><div class="v">${big("claimed")}</div><div class="stat">${priced ? assetParts(sum("claimed")) : "sent to the wallet"}</div></div>
@@ -1388,10 +1421,10 @@ async function renderRewards(who) {
           <td>${fmt(r.bal)}<div class="stat">${Number((r.bal * 1000000n) / SUPPLY) / 10000}%</div></td>
           <td>${usd(r.earned, r.t.quote)}<div class="stat">${fmt(r.earned, 6)} ${qsym(r.t.quote)}</div></td>
           <td>${usd(r.claimed, r.t.quote)}</td>
-          <td>${usd(r.claimable, r.t.quote)}</td>
+          <td>${usd(r.claimable, r.t.quote)}${r.ex && r.claimable > 0n ? `<div class="stat ${r.ex.left !== null && r.ex.left < 2 * 86400 ? "warn" : ""}">${r.ex.left === null ? "" : r.ex.left > 0 ? `⏳ claim within ${dur(r.ex.left)}` : "⏳ older rewards expiring: claim now"}</div>` : ""}${r.expired > 0n ? `<div class="stat">${fmt(r.expired, 4)} ${qsym(r.t.quote)} expired</div>` : ""}</td>
           ${mine ? `<td>${r.claimable > 0n ? `<button data-claim="${i}">Claim</button>` : ""}</td>` : ""}
         </tr>`).join("")}</tbody></table>
-      <p class="stat" style="margin:10px 0 0">Claiming also pays out any fees still waiting for that token, so you may receive slightly more than shown.</p></div>`
+      <p class="stat" style="margin:10px 0 0">Claiming also pays out any fees still waiting for that token, so you may receive slightly more than shown.${rows.some((r) => r.P.expiry) ? " Launchpad v4 tokens: rewards expire after more than 7 days without a claim, buy, sell or send (only what was earned in the last 7 days is kept); expired rewards go to a $PEPES buyback and burn." : ""}</p></div>`
       : `<div class="card empty">No PepesFamily tokens in this wallet yet. Holders of any token launched here earn 3% of every trade. <a href="#/" style="color:var(--accent)">Browse tokens →</a></div>`}
     ${earnedAny ? `${sec(2, "Share")}
     <div class="two sharegrid">
@@ -2023,7 +2056,7 @@ async function renderCreate() {
     <div class="two">
       <form id="cf">
         ${sec(1, "Pair")}
-        <div class="row"><span class="pill imd">IMD</span><span class="stat">Every token is paired with $IMD. Holders earn their 3% in IMD; buyers can pay with ETH or IMD.</span></div>
+        <div class="row"><span class="pill imd">IMD</span><span class="stat">Every token is paired with $IMD. Holders earn their 3% in IMD; buyers can pay with ETH or IMD.${LAUNCH?.expiry ? " Rewards a holder leaves unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
         ${sec(2, "Describe")}
         <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
@@ -2177,7 +2210,7 @@ async function renderToken(addr) {
               <div class="row ext" style="margin-top:8px">
                 <a class="btn" href="https://gmgn.ai/robinhood/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>
                 <a class="btn" href="https://dexscreener.com/robinhood/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
-                <a class="btn" href="${(CONFIG.audits.tokens[addr.toLowerCase()] || CONFIG.audits.launchpad).url}" target="_blank" rel="noopener noreferrer" title="${esc((CONFIG.audits.tokens[addr.toLowerCase()] || CONFIG.audits.launchpad).result)}">Audit ↗</a>
+                <a class="btn" href="${(CONFIG.audits.tokens[addr.toLowerCase()] || (P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad)).url}" target="_blank" rel="noopener noreferrer" title="${esc((CONFIG.audits.tokens[addr.toLowerCase()] || (P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad)).result)}">Audit ↗</a>
               </div>
             </div>
           </div>
@@ -2211,7 +2244,7 @@ async function renderToken(addr) {
           <div class="preview" id="pv">&nbsp;</div>
           <label for="slip">Max slippage (%)</label><input id="slip" value="5" inputmode="decimal" />
           <button class="primary full" id="trade" style="margin-top:14px"></button>
-          <div class="fees">4% fee: 1% protocol, 3% to holders of $${esc(info.symbol)}.</div>
+          <div class="fees">4% fee: 1% protocol, 3% to holders of $${esc(info.symbol)}.${P.expiry ? " Claim at least weekly: rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</div>
         </div>
         <div class="card" style="margin-top:14px">
           <span class="h">Your holder rewards</span>
@@ -2238,9 +2271,11 @@ async function renderToken(addr) {
     const [b, d, w, qb, eb] = await Promise.all([tokR.balanceOf(account), tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), qBalP, reader.getBalance(account)]);
     tokBal = b; quoteBal = qb; ethBal = eb;
     const share = Number((b * 1000000n) / SUPPLY) / 10000;
+    const ex = P.expiry && d > 0n ? await expiryOf(addr, account) : null;
+    const ready = ex ? d - ex.expired : d;
     $("#pos").innerHTML = `Holding <b>${fmt(b)}</b> $${esc(info.symbol)} (${share}% of supply)<br/>
-      Claimable: <b>${fmt(d, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}`;
-    $("#claim").disabled = d === 0n;
+      Claimable: <b>${fmt(ready, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}${ex ? `<br/>${ex.left === null ? "" : ex.left > 0 ? `⏳ Claim within <b>${dur(ex.left)}</b> to keep all of it.` : "⏳ Your older rewards are expiring: claim now to keep the rest."}${ex.expired > 0n ? ` ${fmt(ex.expired, 6)} ${Q} already expired (goes to the $PEPES buyback).` : ""}` : ""}`;
+    $("#claim").disabled = ready === 0n;
     setSide(tradeSide);
   }
 

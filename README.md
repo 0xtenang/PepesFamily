@@ -8,7 +8,17 @@ A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663), bu
 
 Owner and fee recipient for every version: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
 
-**v3: current. All new launches go here.** Same as v2, plus a fix for an audit finding: rewards are never distributed while the Uniswap PoolManager is unlocked by an outside caller, so pool tokens borrowed through v4 flash accounting can't be counted as held (see `AUDIT.md`).
+**v4: current. All new launches go here.** v3 plus expiry of unclaimed holder rewards: a wallet inactive for more than 7 days loses rewards older than 7 days to the protocol address, which uses them to buy back and burn $Pepes (see "Launchpad v4" below). IMD-only launches.
+
+| Contract | Address |
+| --- | --- |
+| PepesFamily v4 (launchpad + v4 hook) | [`0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc`](https://robinhoodchain.blockscout.com/address/0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc) |
+| PepesFamilyRouter v4 | [`0xDB202196E62413c0eFB59e926EA1BD4817dB7226`](https://robinhoodchain.blockscout.com/address/0xDB202196E62413c0eFB59e926EA1BD4817dB7226) |
+| PepesFamilyEthRouter v4 | [`0x19f112328cFb44191704Dba441050008Fe85C361`](https://robinhoodchain.blockscout.com/address/0x19f112328cFb44191704Dba441050008Fe85C361) |
+
+v4 was deployed at block 82010056 from commit `92aae9f` (recorded in `contracts/deployments/robinhood-v4.json`) and its source is verified on Sourcify.
+
+**v3: still live.** Its tokens keep trading; its token source is kept in `src/v3/PadTokenV3.sol`. Same as v2, plus a fix for an audit finding: rewards are never distributed while the Uniswap PoolManager is unlocked by an outside caller, so pool tokens borrowed through v4 flash accounting can't be counted as held (see `AUDIT.md`).
 
 | Contract | Address |
 | --- | --- |
@@ -74,7 +84,7 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards (v4: with 7-day expiry, see below). |
 | `src/v1`, `src/v2`, `src/v3` | Exact token sources of earlier launchpad versions, kept so their tokens can be source-verified. |
 
-### Launchpad v4 (in review, not deployed)
+### Launchpad v4
 
 v4 is v3 with one addition: **holder rewards are meant to be claimed.** Launches are IMD-only.
 

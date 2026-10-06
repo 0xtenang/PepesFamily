@@ -15,7 +15,7 @@ PepesFamily is a fixed-supply token launchpad on **Robinhood Chain** (chain ID 4
 
 ## 2. Scope
 
-### In scope: v4 (in review, not deployed; will receive all new launches)
+### In scope: v4 (receives all new launches, `0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc`)
 
 v4 is v3 (below) with IMD-only launches and **expiry of unclaimed holder rewards**; same files, same deployment shape:
 
@@ -24,7 +24,7 @@ v4 is v3 (below) with IMD-only launches and **expiry of unclaimed holder rewards
 - The team buys back and burns $Pepes with that IMD manually: a trust assumption, not enforced on-chain. The on-chain buyback tried in earlier rounds was removed (IMD Swarm ec4e3ea7, b803125e, 348884ab, cbe092d6).
 - Known limit: "recent" rewards are estimated from the current balance, so tokens received during the last 7 days can delay the expiry of older rewards by up to 7 days (cbe092d6, finding 1); `recycle` never exceeds `expiredRewardsOf`.
 
-### Live: v3 (until v4 is deployed)
+### Also live: v3
 
 | File | Deployed at |
 | --- | --- |
