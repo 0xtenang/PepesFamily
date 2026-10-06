@@ -350,7 +350,10 @@ contract PepesFamily is IHooks, IUnlockCallback {
         }
 
         bool isBuy = params.zeroForOne == quoteIs0;
-        address trader = sender == router && hookData.length == 32 ? abi.decode(hookData, (address)) : tx.origin;
+        // Our two routers report their user; for any other router the best we know is the transaction's signer.
+        address trader = (sender == router || sender == ethRouter) && hookData.length == 32
+            ? abi.decode(hookData, (address))
+            : tx.origin;
         // A buy of any size, through any router, is the buyer's own activity (v4 reward expiry, see PadToken).
         if (isBuy) PadToken(payable(token)).markActive(trader);
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(key.toId());

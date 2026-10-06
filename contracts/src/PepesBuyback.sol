@@ -28,17 +28,20 @@ interface IPepesPadV1 {
 ///         sent here as IMD; anyone can spend them buying $Pepes, and every $Pepes this contract holds is sent to
 ///         the burn address.
 ///
-///         Pace and price guard. Each buyback spends at most 1% of the $Pepes pool's IMD depth, at most once an
-///         hour, so a single-transaction sandwich costs more in the $Pepes pool's 4% fee each way than it moves the
-///         price. A predictable series of buybacks could still be front-run by buying first and selling after
-///         several of them, so a buyback only runs while the $Pepes price (in IMD) is at most 2% above the price
-///         right after the previous buyback, plus 2% for every day since. A pump stalls the buyback (the IMD
-///         waits) instead of selling into it; an organic rise only delays it by days.
+///         Pace: each buyback spends at most 1% of the $Pepes pool's IMD depth (and at least 0.1 IMD), at most once
+///         an hour, so a single-transaction sandwich costs more in the $Pepes pool's 4% fee each way than it moves
+///         the price.
 ///
-///         One contract for all v4 tokens, so the cap and the pace cover every v4 buyback together. Together with
-///         the $EARN buyback (2% cap, its own contract) one transaction can buy at most 3% of depth, below the ~4%
-///         at which a sandwich starts to pay (IMD Swarm audit ec4e3ea7); and once the $EARN buyback has moved the
-///         price more than 2%, this one won't run until the next day's allowance.
+///         Price guard: a buyback only runs while the $Pepes price is at most 2% above a slow reference price. The
+///         reference follows the buybacks' own price impact exactly, and otherwise drifts toward the market by at
+///         most 2% per day, counting at most one day per update (`poke`, also run by every recycle and buyback). So
+///         third-party buys between buybacks, a pump after an idle period, or a dip bracketed around a buyback move
+///         the reference by at most 2% a day: a pump stalls the buyback until it is undone or has held for days,
+///         and an organic rise or fall is followed at 2% a day (IMD Swarm audits ec4e3ea7 and b803125e).
+///
+///         One contract for all v4 tokens, so the cap, pace and guard cover every v4 buyback together. With the
+///         $EARN buyback (2% cap, its own contract) one transaction can buy at most 3% of depth, below the ~4% at
+///         which a sandwich starts to pay.
 /// @dev No owner and no privileged function: the IMD here can only ever leave through the burn swap.
 contract PepesBuyback {
     using SafeTransfer for address;
@@ -53,14 +56,19 @@ contract PepesBuyback {
     error PriceRisen();
 
     event PepesBoughtAndBurned(uint256 imdIn, uint256 pepesBurned);
+    event ReferenceUpdated(uint160 refSqrtPrice);
 
-    /// @notice IMD spent per buyback: at most 1% of the $Pepes pool's IMD depth.
+    /// @notice IMD spent per buyback: at most 1% of the $Pepes pool's IMD depth ...
     uint256 public constant MAX_BUYBACK_BPS = 100;
+    /// @notice ... and at least this much (smaller reserves wait), so dust can't take the hourly slot.
+    uint256 public constant MIN_BUYBACK = 0.1e18;
     uint256 public constant BUYBACK_INTERVAL = 1 hours;
-    /// @notice The $Pepes price may be at most this much above the reference price ...
+    /// @notice A buyback runs only while the $Pepes price is at most this far above the reference.
     uint256 public constant MAX_PRICE_RISE_BPS = 200;
-    /// @notice ... plus this much for every day since the reference was set.
-    uint256 public constant PRICE_RISE_PER_DAY_BPS = 200;
+    /// @notice The reference moves toward the market price by at most this much (price) per day ...
+    uint256 public constant REF_STEP_PER_DAY_BPS = 200;
+    /// @notice ... counting at most this much time per update, so idle time doesn't build up tolerance.
+    uint256 public constant MAX_REF_ELAPSED = 1 days;
     uint256 internal constant Q96 = 2 ** 96;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
@@ -75,14 +83,14 @@ contract PepesBuyback {
     uint256 public lastBuyback;
     uint256 public totalImdSpent;
     uint256 public totalPepesBurned;
-    /// @notice Pool sqrtPrice right after the last buyback (at deployment before the first), and when it was set.
+    /// @notice Reference pool sqrtPrice for the price guard, and when it was last moved toward the market.
     uint160 public refSqrtPrice;
     uint64 public refTime;
 
     uint256 private _locked = 1;
 
     /// @dev Resolves the $Pepes pool through the router's launchpad and requires it to be an initialised IMD pair, so
-    ///      a mis-wired deployment reverts instead of creating a sink the IMD could never leave (audit finding 5).
+    ///      a mis-wired deployment reverts instead of creating a sink the IMD could never leave.
     constructor(address imd_, address pepes_, address pepesRouter_, address poolManager_) {
         if (imd_ == address(0) || pepes_ == address(0) || pepesRouter_ == address(0) || poolManager_ == address(0)) {
             revert ZeroAddress();
@@ -107,6 +115,26 @@ contract PepesBuyback {
         return imd.balanceOf(address(this));
     }
 
+    /// @notice Moves the reference toward the current price by at most 2% per day since the last update (at most
+    ///         one day counted). Anyone may call it; every recycle and buyback does.
+    function poke() public {
+        uint256 dt = block.timestamp - refTime;
+        if (dt == 0) return;
+        if (dt > MAX_REF_ELAPSED) dt = MAX_REF_ELAPSED;
+        refTime = uint64(block.timestamp);
+        uint256 cur = _sqrtPrice();
+        uint256 ref = refSqrtPrice;
+        // A price step of b bps is about b/2 bps in sqrtPrice; the same bound applies in both directions.
+        uint256 h = (REF_STEP_PER_DAY_BPS * dt) / (2 * 1 days);
+        uint256 lo = (ref * (10_000 - h)) / 10_000;
+        uint256 hi = (ref * (10_000 + h)) / 10_000;
+        uint256 next = cur < lo ? lo : cur > hi ? hi : cur;
+        if (next != ref) {
+            refSqrtPrice = uint160(next);
+            emit ReferenceUpdated(uint160(next));
+        }
+    }
+
     /// @notice Spends up to `maxBuyback()` of the IMD here on $Pepes and sends all $Pepes held here to the burn
     ///         address. Callable by anyone, at most once an hour and only within the price guard; larger reserves
     ///         burn over several calls.
@@ -115,22 +143,26 @@ contract PepesBuyback {
         if (_locked != 1) revert Reentrancy();
         _locked = 2;
         if (block.timestamp < lastBuyback + BUYBACK_INTERVAL) revert TooSoon();
-        if (priceRiseBps() > allowedPriceRiseBps()) revert PriceRisen();
+        poke();
+        if (priceRiseBps() > MAX_PRICE_RISE_BPS) revert PriceRisen();
         uint256 imdIn = imd.balanceOf(address(this));
         uint256 cap = maxBuyback();
         if (imdIn > cap) imdIn = cap;
-        if (imdIn == 0) revert BadAmount();
+        if (imdIn < MIN_BUYBACK) revert BadAmount();
         lastBuyback = block.timestamp;
+        uint160 before = _sqrtPrice();
         _approve(imd, pepesRouter, imdIn);
         IPepesRouterV1(pepesRouter).buy(pepes, imdIn, minPepesOut, deadline);
         _approve(imd, pepesRouter, 0);
-        // Everything held is burned, including $Pepes sent here directly (audit finding 2).
+        // Everything held is burned, including $Pepes sent here directly.
         burned = pepes.balanceOf(address(this));
         pepes.transferOut(DEAD, burned);
         totalImdSpent += imdIn;
         totalPepesBurned += burned;
-        refSqrtPrice = _sqrtPrice();
-        refTime = uint64(block.timestamp);
+        // The reference follows this buyback's own price impact, and nothing else.
+        uint160 next = uint160(FullMath.mulDiv(refSqrtPrice, _sqrtPrice(), before));
+        refSqrtPrice = next;
+        emit ReferenceUpdated(next);
         emit PepesBoughtAndBurned(imdIn, burned);
         _locked = 1;
     }
@@ -147,14 +179,9 @@ contract PepesBuyback {
         return (ratio - 1e18) / 1e14;
     }
 
-    /// @notice The price rise the next buyback tolerates: 2% plus 2% per day since the reference was set.
-    function allowedPriceRiseBps() public view returns (uint256) {
-        return MAX_PRICE_RISE_BPS + (PRICE_RISE_PER_DAY_BPS * (block.timestamp - refTime)) / 1 days;
-    }
-
     /// @notice Most IMD one buyback spends: 1% of the $Pepes pool's (virtual) IMD reserve at the current price,
     ///         read from the PepesFamily v1 pool through the PoolManager. Zero only when the pool's position is out
-    ///         of range, i.e. every $Pepes has been sold back to the pool; the IMD then waits (audit finding 6).
+    ///         of range, i.e. every $Pepes has been sold back to the pool; the IMD then waits.
     function maxBuyback() public view returns (uint256) {
         PoolId id = _poolId();
         (uint160 sqrtP,,,) = IPoolManager(poolManager).getSlot0(id);

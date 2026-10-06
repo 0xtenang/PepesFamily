@@ -100,6 +100,8 @@ contract PepesFamilyTest is Test {
         }
     }
 
+    receive() external payable {}
+
     function pad_flags() internal pure returns (uint160) {
         return uint160((1 << 13) | (1 << 11) | (1 << 7) | (1 << 6) | (1 << 3) | (1 << 2));
     }
@@ -773,21 +775,60 @@ contract PepesFamilyTest is Test {
         t.markActive(bob);
     }
 
-    /// A gift counts only when it is at least a tenth of what the recipient holds, whatever the token's price.
-    function test_expiry_smallGiftDoesNotResetTimer() public {
+    /// Audit b803125e finding 3: tokens someone else sends never count as the recipient's activity, so a gift
+    /// (even 1 wei to a wallet that sold everything) can't keep its rewards from expiring.
+    function test_expiry_giftsNeverResetTheTimer() public {
         PadToken t = _launch();
         _buy(bob, t, 10e18);
         _buy(carol, t, 50e18);
         uint256 last = t.lastActive(bob);
-        uint256 tenth = t.balanceOf(bob) / 10;
+        vm.warp(block.timestamp + 6 days);
+        uint256 big = t.balanceOf(carol) / 2;
+        vm.prank(carol);
+        t.transfer(bob, big);
+        assertEq(t.lastActive(bob), last, "a gift isn't bob's act");
+        vm.warp(block.timestamp + 1 days + 1);
+        assertGt(t.expiredRewardsOf(bob), 0);
+    }
+
+    function test_expiry_oneWeiGiftToExitedHolder() public {
+        PadToken t = _launch();
+        _buy(bob, t, 100e18);
+        _buy(carol, t, 500e18);
+        uint256 owed = t.withdrawableDividendOf(bob);
+        _sell(bob, t, t.balanceOf(bob));
         vm.warp(block.timestamp + 6 days);
         vm.prank(carol);
-        t.transfer(bob, tenth - 1);
-        assertEq(t.lastActive(bob), last, "less than a tenth of the bag doesn't count");
-        uint256 tenthNow = t.balanceOf(bob) / 10;
-        vm.prank(carol);
-        t.transfer(bob, tenthNow + 1);
-        assertEq(t.lastActive(bob), block.timestamp, "a tenth of the bag counts");
+        t.transfer(bob, 1);
+        vm.warp(block.timestamp + 1 days + 1);
+        assertEq(t.recycle(bob), owed);
+    }
+
+    /// Audit b803125e finding 4: a contract wallet buying through the launchpad's ETH router is credited, not the
+    /// key that signed for it.
+    function test_expiry_ethRouterCreditsTheBuyerNotTheSigner() public {
+        PoolModifyLiquidityTest lp = new PoolModifyLiquidityTest(pm);
+        PoolKey memory imdEth =
+            PoolKey(Currency.wrap(address(0)), Currency.wrap(address(imd)), 10_000, 100, IHooks(address(0)));
+        pm.initialize(imdEth, TickMath.getSqrtPriceAtTick(0));
+        imd.approve(address(lp), type(uint256).max);
+        lp.modifyLiquidity{value: 500 ether}(imdEth, ModifyLiquidityParams(-887200, 887200, 100e18, 0), "");
+
+        PadToken t = _launch();
+        PepesFamilyEthRouter eth = PepesFamilyEthRouter(payable(pad.ethRouter()));
+        address wallet = makeAddr("contractWallet");
+        address signer = makeAddr("ownerKey");
+        vm.deal(wallet, 10 ether);
+        vm.prank(wallet, signer);
+        eth.buyWithEth{value: 1 ether}(address(t), 1, block.timestamp);
+        _buy(carol, t, 10e18);
+        vm.warp(block.timestamp + 6 days);
+        vm.prank(wallet, signer);
+        eth.buyWithEth{value: 0.001 ether}(address(t), 1, block.timestamp);
+        assertEq(t.lastActive(wallet), block.timestamp, "the wallet that bought is active");
+        assertEq(t.lastActive(signer), 0, "the signer holds nothing and isn't marked");
+        vm.warp(block.timestamp + 1 days + 1);
+        assertEq(t.expiredRewardsOf(wallet), 0);
     }
 
     function test_expiry_firstReceiptStartsTheTimer() public {

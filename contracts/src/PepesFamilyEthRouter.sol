@@ -128,11 +128,11 @@ contract PepesFamilyEthRouter is IUnlockCallback {
         uint256 out;
         if (r.isBuy) {
             // ETH -> IMD
-            BalanceDelta d1 = _swap(imdEthKey(), true, r.amountIn);
+            BalanceDelta d1 = _swap(imdEthKey(), true, r.amountIn, "");
             uint256 ethIn = uint256(int256(-d1.amount0()));
             uint256 imdOut = uint256(int256(d1.amount1()));
             // IMD -> token (the PepesFamily hook takes its fee here)
-            BalanceDelta d2 = _swap(tokenKey, imdIs0, imdOut);
+            BalanceDelta d2 = _swap(tokenKey, imdIs0, imdOut, abi.encode(r.user));
             (int128 imdDelta, int128 tokDelta) = imdIs0 ? (d2.amount0(), d2.amount1()) : (d2.amount1(), d2.amount0());
             out = uint256(int256(tokDelta));
             if (out < r.minOut || out == 0) revert Slippage();
@@ -146,7 +146,7 @@ contract PepesFamilyEthRouter is IUnlockCallback {
             poolManager.take(Currency.wrap(r.token), r.user, out);
         } else {
             // token -> IMD
-            BalanceDelta d1 = _swap(tokenKey, !imdIs0, r.amountIn);
+            BalanceDelta d1 = _swap(tokenKey, !imdIs0, r.amountIn, abi.encode(r.user));
             (int128 imdDelta, int128 tokDelta) = imdIs0 ? (d1.amount0(), d1.amount1()) : (d1.amount1(), d1.amount0());
             uint256 imdOut = uint256(int256(imdDelta));
             uint256 tokIn = uint256(int256(-tokDelta));
@@ -157,7 +157,7 @@ contract PepesFamilyEthRouter is IUnlockCallback {
             pad.flush(r.token); // seller's tokens have left; credit holders
 
             // IMD -> ETH
-            BalanceDelta d2 = _swap(imdEthKey(), false, imdOut);
+            BalanceDelta d2 = _swap(imdEthKey(), false, imdOut, "");
             out = uint256(int256(d2.amount0()));
             if (out < r.minOut || out == 0) revert Slippage();
             uint256 imdLeft = imdOut - uint256(int256(-d2.amount1()));
@@ -167,7 +167,11 @@ contract PepesFamilyEthRouter is IUnlockCallback {
         return abi.encode(out);
     }
 
-    function _swap(PoolKey memory key, bool zeroForOne, uint256 amountIn) internal returns (BalanceDelta) {
+    /// @dev `hookData` carries the user on the token pool's swap, so the PepesFamily hook credits the right buyer.
+    function _swap(PoolKey memory key, bool zeroForOne, uint256 amountIn, bytes memory hookData)
+        internal
+        returns (BalanceDelta)
+    {
         return poolManager.swap(
             key,
             SwapParams({
@@ -175,7 +179,7 @@ contract PepesFamilyEthRouter is IUnlockCallback {
                 amountSpecified: -int256(amountIn),
                 sqrtPriceLimitX96: zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1
             }),
-            ""
+            hookData
         );
     }
 }

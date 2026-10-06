@@ -101,16 +101,17 @@ contract PepesBuybackGuardTest is Test {
         } catch {}
     }
 
-    /// The audit's proof: eve buys 40% of depth, calls the buyback every hour for 8 hours, then sells. The pump
-    /// stalls the buyback (PriceRisen), so she only pays the round trip.
-    function test_pacedFrontRunStallsTheBuyback() public {
-        uint256 depth = buyback.maxBuyback() * 100;
+    function _depth() internal view returns (uint256) {
+        return buyback.maxBuyback() * 100;
+    }
+
+    /// Audit ec4e3ea7 finding 1: eve buys 40% of depth, calls the buyback every hour for 8 hours, then sells.
+    function test_pumpThenSeriesStalls() public {
+        uint256 depth = _depth();
         imd.mint(address(buyback), depth / 5);
         uint256 start = imd.balanceOf(eve);
-
         vm.startPrank(eve);
         uint256 got = routerA.buy(address(pepes), (depth * 40) / 100, 0, block.timestamp);
-        assertGt(buyback.priceRiseBps(), buyback.allowedPriceRiseBps());
         uint256 runs;
         for (uint256 h; h < 8; h++) {
             vm.warp(block.timestamp + 1 hours);
@@ -118,25 +119,85 @@ contract PepesBuybackGuardTest is Test {
         }
         routerA.sell(address(pepes), got, 0, block.timestamp);
         vm.stopPrank();
-
         assertEq(runs, 0, "no buyback into the pump");
-        assertLe(imd.balanceOf(eve), start, "front-running the paced buyback must not be profitable");
-        // once the price is back, the buyback runs again
-        assertTrue(_tryBuyback());
-        assertGt(buyback.totalPepesBurned(), 0);
+        assertLe(imd.balanceOf(eve), start, "front-running the buyback must not pay");
+        assertTrue(_tryBuyback(), "runs again once the price is back");
     }
 
-    /// Without outside trades the hourly series runs: each buyback resets the reference to its own result.
+    /// Audit b803125e finding 1: before every hourly buyback eve buys 1% of depth, for 24 hours, then sells.
+    function test_pacedPreBuysDoNotPay() public {
+        uint256 depth = _depth();
+        imd.mint(address(buyback), (depth * 40) / 100);
+        vm.warp(block.timestamp + 1 hours);
+        assertTrue(_tryBuyback()); // a fresh reference
+        uint256 start = imd.balanceOf(eve);
+        uint256 got;
+        uint256 runs;
+        vm.startPrank(eve);
+        for (uint256 h; h < 24; h++) {
+            vm.warp(block.timestamp + 1 hours);
+            got += routerA.buy(address(pepes), buyback.maxBuyback(), 0, block.timestamp);
+            if (_tryBuyback()) runs++;
+        }
+        routerA.sell(address(pepes), got, 0, block.timestamp);
+        vm.stopPrank();
+        emit log_named_uint("buybacks that ran", runs);
+        emit log_named_decimal_int("eve P&L (IMD)", int256(imd.balanceOf(eve)) - int256(start), 18);
+        assertLe(imd.balanceOf(eve), start, "riding the hourly series must not pay");
+    }
+
+    /// Audit b803125e finding 2: after 48 idle days a 40%-of-depth pump still stalls the buyback.
+    function test_idleTimeDoesNotLoosenTheGuard() public {
+        vm.warp(block.timestamp + 48 days);
+        uint256 depth = _depth();
+        imd.mint(address(buyback), depth / 5);
+        uint256 start = imd.balanceOf(eve);
+        vm.startPrank(eve);
+        uint256 got = routerA.buy(address(pepes), (depth * 40) / 100, 0, block.timestamp);
+        uint256 runs;
+        for (uint256 h; h < 8; h++) {
+            vm.warp(block.timestamp + 1 hours);
+            if (_tryBuyback()) runs++;
+        }
+        routerA.sell(address(pepes), got, 0, block.timestamp);
+        vm.stopPrank();
+        assertEq(runs, 0);
+        assertLe(imd.balanceOf(eve), start);
+    }
+
+    /// Audit b803125e finding 5: sell, buyback, rebuy in one transaction no longer pins the reference low.
+    function test_dumpBracketDoesNotStall() public {
+        vm.warp(block.timestamp + 1 hours);
+        uint256 bag = pepes.balanceOf(bob);
+        vm.startPrank(bob);
+        imd.transfer(address(buyback), 0.1e18);
+        pepes.approve(address(routerA), type(uint256).max);
+        uint256 out = routerA.sell(address(pepes), bag / 20, 0, block.timestamp);
+        buyback.buybackAndBurnPepes(0, block.timestamp);
+        routerA.buy(address(pepes), out, 0, block.timestamp);
+        vm.stopPrank();
+        assertLe(buyback.priceRiseBps(), buyback.MAX_PRICE_RISE_BPS(), "the reference wasn't dragged down");
+        imd.mint(address(buyback), 100e18);
+        vm.warp(block.timestamp + 1 hours);
+        assertTrue(_tryBuyback(), "the next buyback runs on time");
+    }
+
+    function test_dustCannotTakeTheSlot() public {
+        imd.mint(address(buyback), 0.1e18 - 1);
+        vm.expectRevert(PepesBuyback.BadAmount.selector);
+        buyback.buybackAndBurnPepes(0, block.timestamp);
+    }
+
+    /// Without outside trades the hourly series runs: the reference follows each buyback's own impact.
     function test_hourlySeriesRuns() public {
         imd.mint(address(buyback), 1_000e18);
         for (uint256 h; h < 5; h++) {
             assertTrue(_tryBuyback(), "buyback runs");
             vm.warp(block.timestamp + 1 hours);
         }
-        assertEq(buyback.refTime(), block.timestamp - 1 hours);
     }
 
-    /// An organic rise only delays the buyback: the tolerance grows 2% a day.
+    /// An organic rise is followed at 2% a day through pokes (anyone, or every recycle and buyback attempt).
     function test_organicRiseOnlyDelays() public {
         imd.mint(address(buyback), 100e18);
         vm.prank(eve);
@@ -144,9 +205,14 @@ contract PepesBuybackGuardTest is Test {
         uint256 rise = buyback.priceRiseBps();
         assertGt(rise, 1_000);
         assertFalse(_tryBuyback());
-        uint256 days_ = (rise - buyback.MAX_PRICE_RISE_BPS()) / buyback.PRICE_RISE_PER_DAY_BPS() + 1;
-        vm.warp(block.timestamp + days_ * 1 days);
-        assertTrue(_tryBuyback(), "runs once the tolerance has caught up");
+        uint256 days_;
+        while (!_tryBuyback()) {
+            vm.warp(block.timestamp + 1 days);
+            buyback.poke();
+            days_++;
+            assertLt(days_, 30, "follows the market within weeks");
+        }
+        emit log_named_uint("days until the buyback resumed", days_);
     }
 
     /// A falling price never blocks the buyback.
