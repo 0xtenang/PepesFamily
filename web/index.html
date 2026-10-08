@@ -176,6 +176,11 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .koth-rest { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; border-top: 1px solid var(--line); padding: 8px 16px; font-size: 12px; }
 .koth-rest a:hover { text-decoration: underline; }
 @media (max-width: 600px) { .koth-main { flex-wrap: wrap; } .koth-main .btn { width: 100%; text-align: center; } }
+.official .crown { background: var(--strong); color: var(--inv); }
+.official .ca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
+.official .ca code { font-family: inherit; color: var(--muted); word-break: break-all; }
+.official .ca button { padding: 2px 8px; font-size: 11px; }
+.sortbar { display: flex; align-items: center; gap: 10px; margin: -4px 0 12px; }
 .imgrow { display: flex; gap: 12px; align-items: flex-start; }
 .imgprev { width: 60px; height: 60px; flex: none; border: 1px dashed var(--line); display: grid; place-items: center; color: var(--dim); overflow: hidden; }
 .imgprev img { width: 100%; height: 100%; object-fit: cover; }
@@ -1015,6 +1020,7 @@ const Feed = (() => {
 async function renderHome() {
   const app = $("#app");
   app.innerHTML = `
+    <div id="official"></div>
     <div id="koth"></div>
     <div class="scene" id="scene">
       <canvas class="wall" aria-hidden="true"></canvas>
@@ -1037,6 +1043,7 @@ async function renderHome() {
       <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
     </div>
     ${sec(2, "Tokens")}
+    <div class="sortbar"><span class="stat">Sort by</span><div class="seg" id="sort"><button type="button" data-s="new">Newest</button><button type="button" data-s="mc">Highest market cap</button></div></div>
     <div class="grid" id="list"><div class="card muted">Loading…</div></div>
     ${sec(3, "Audits")}
     <div class="grid audits">
@@ -1059,29 +1066,74 @@ async function renderHome() {
   Scene.mount($("#scene"));
   Feed.start();
   loadTotals().catch((e) => console.warn("totals", e));
-  try {
-    // newest 60 tokens from every live launchpad version, merged newest first
-    const lists = await Promise.all(livePads().map(async (P) => {
-      const n = Number(await P.c.tokenCount());
-      const limit = 60, offset = Math.max(0, n - limit);
-      return n ? [...(await P.c.getTokens(offset, limit))] : [];
-    }));
-    const infos = lists.flat().sort((a, b) => Number(b.createdAt) - Number(a.createdAt)).slice(0, 60);
-    const shown = infos.filter(isListed);
-    $("#list").innerHTML = shown.length ? shown.map((i) => {
-      const m = meta(i.metadata);
-      return `<a class="card tcard" href="#/t/${i.token}">
+  loadOfficial().catch((e) => console.warn("official token", e));
+  // every listed token from every live launchpad version; shown newest first or by market cap (remembered)
+  let sortMode = "new";
+  try { if (localStorage.getItem("tokenSort") === "mc") sortMode = "mc"; } catch {}
+  let listed = null;
+  const card = (i) => {
+    const m = meta(i.metadata);
+    return `<a class="card tcard" href="#/t/${i.token}">
         ${avatar(i)}
         <div style="min-width:0;flex:1">
-          <div class="row"><span class="name">${esc(i.name)}</span>${pill(i.quote)}</div>
+          <div class="row"><span class="name">${esc(i.name)}</span>${pill(i.quote)}${i.token.toLowerCase() === CONFIG.pepes.toLowerCase() ? `<span class="pill">Official</span>` : ""}</div>
           <div class="stat mono">$${esc(i.symbol)}</div>
           <div class="stat">MC <b>${usd(i.marketCap, i.quote)}</b> · ${ago(i.createdAt)}</div>
           ${m.description ? `<div class="stat" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.description)}</div>` : ""}
         </div></a>`;
-    }).join("") : `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a href="#/create" style="color:var(--accent)">Launch the first one →</a></div>`;
+  };
+  const showList = () => {
+    $("#sort")?.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.s === sortMode));
+    if (!listed || !$("#list")) return;
+    const sorted = [...listed].sort(sortMode === "mc"
+      ? (a, b) => toUsdNum(b.marketCap, b.quote) - toUsdNum(a.marketCap, a.quote) || (b.marketCap > a.marketCap ? 1 : -1)
+      : (a, b) => Number(b.createdAt) - Number(a.createdAt)).slice(0, 60);
+    $("#list").innerHTML = sorted.length ? sorted.map(card).join("")
+      : `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a href="#/create" style="color:var(--accent)">Launch the first one →</a></div>`;
+  };
+  $("#sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    sortMode = b.dataset.s;
+    try { localStorage.setItem("tokenSort", sortMode); } catch {}
+    showList();
+  });
+  showList();
+  try {
+    listed = (await allTokenInfos()).map((x) => x.t).filter(isListed);
+    showList();
   } catch (e) {
-    $("#list").innerHTML = `<div class="card">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
+    if ($("#list")) $("#list").innerHTML = `<div class="card">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
   }
+}
+
+// ---------------------------------------------------------------- Official token
+/// $PEPES, the official PepesFamily token, pinned at the top of the home page.
+async function loadOfficial() {
+  const P = PADS.find((p) => p.version === 1 && p.live);
+  if (!P || !$("#official")) return;
+  const t = await P.c.getTokenInfo(CONFIG.pepes);
+  const el = $("#official");
+  if (!el) return;
+  const q = t.quote;
+  el.className = "koth official";
+  el.innerHTML = `
+    <div class="koth-main">
+      <a href="#/t/${t.token}">${avatar(t, "lg")}</a>
+      <div style="min-width:0;flex:1">
+        <span class="crown">✓ Official PepesFamily token</span>
+        <div class="row" style="margin-top:6px"><a class="name" href="#/t/${t.token}">${esc(t.name)}</a><span class="mono muted">$${esc(t.symbol)}</span></div>
+        <div class="koth-stats">
+          <span>MC <b>${usd(t.marketCap, q)}</b></span>
+          <span>Paid to holders <b>${usd(t.totalDividendsDistributed + t.pendingHolderFees, q)}</b></span>
+          <span>Protocol fees buy it back</span>
+        </div>
+        <div class="ca"><span class="muted">CA</span><code class="mono">${t.token}</code><button type="button" id="offcopy">Copy</button></div>
+      </div>
+      <a class="btn primary" href="#/t/${t.token}">Trade $${esc(t.symbol)}</a>
+    </div>`;
+  $("#offcopy").onclick = async () => {
+    try { await navigator.clipboard.writeText(t.token); toast("Contract address copied"); }
+    catch { toast(t.token, 8000); }
+  };
 }
 
 // ---------------------------------------------------------------- King of the hill
