@@ -300,6 +300,11 @@ const CONFIG = {
   },
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
+  // Images shown instead of a token's on-chain metadata image (token address in lower case -> path on this site).
+  // v1 tokens can't change their metadata; $PEPES launched without an image.
+  images: {
+    "0xe2c46c7068566740a33a4c93f5445b07bcfe5644": "/pepes.jpg",
+  },
   // Independent audits by the IMD Swarm (reports are public on explorer.imd.fun).
   audits: {
     launchpadV4: {
@@ -586,9 +591,11 @@ function ipfsPath(u) {
   return /^[A-Za-z0-9]{46,}(\/[A-Za-z0-9._~%-]+)*$/.test(p) ? p : "";
 }
 function avatar(info, cls = "") {
-  const raw = meta(info.metadata).image;
+  // A site-configured image (CONFIG.images, our own files) wins over the creator-supplied metadata image.
+  const own = CONFIG.images[String(info.token || "").toLowerCase()];
+  const raw = own ? "" : meta(info.metadata).image;
   const ipfs = typeof raw === "string" ? ipfsPath(raw.trim()) : "";
-  const img = ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw);
+  const img = own || (ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw));
   const letter = esc((info.symbol || "?").slice(0, 2));
   return img ? `<img class="avatar ${cls}" src="${esc(img)}" alt="${letter}" loading="lazy" referrerpolicy="no-referrer"${ipfs ? ` data-ipfs="${esc(ipfs)}" data-gw="0"` : ""}>`
              : `<div class="avatar ${cls}">${letter}</div>`;
