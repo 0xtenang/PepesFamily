@@ -632,20 +632,48 @@ window.dispatchEvent(new Event("eip6963:requestProvider"));
 
 let WALLET = null, walletName = "Your wallet", listening = null;
 
-function pickWallet() {
-  if (WALLETS.length === 0) return Promise.resolve(window.ethereum ? { provider: window.ethereum, info: { name: "Your wallet" } } : null);
-  if (WALLETS.length === 1) return Promise.resolve(WALLETS[0]);
+/// Name of an injected (pre-EIP-6963) provider from its flags.
+function legacyName(p) {
+  if (p.isRabby) return "Rabby";
+  if (p.isPhantom) return "Phantom";
+  if (p.isOkxWallet || p.isOKExWallet) return "OKX Wallet";
+  if (p.isCoinbaseWallet) return "Coinbase Wallet";
+  if (p.isBraveWallet) return "Brave Wallet";
+  if (p.isTrust || p.isTrustWallet) return "Trust Wallet";
+  if (p.isMetaMask) return "MetaMask";
+  return "Browser wallet";
+}
+/// Every wallet we can offer: EIP-6963 announcements first, then injected providers that didn't announce themselves
+/// (window.ethereum and the `providers` list some extensions add), so older or late-loading wallets still show up.
+async function walletOptions() {
+  window.dispatchEvent(new Event("eip6963:requestProvider")); // wallets that loaded after the page
+  await new Promise((ok) => setTimeout(ok, 250));
+  const out = [...WALLETS];
+  const injected = [...(Array.isArray(window.ethereum?.providers) ? window.ethereum.providers : []), window.ethereum].filter(Boolean);
+  for (const p of injected) {
+    if (out.some((w) => w.provider === p)) continue;
+    const name = legacyName(p);
+    // a wallet that announced itself under the same name is the same wallet (its injected object can differ)
+    if (name !== "Browser wallet" && out.some((w) => w.info.name.toLowerCase().includes(name.toLowerCase()))) continue;
+    out.push({ provider: p, info: { name, icon: "" } });
+  }
+  return out;
+}
+
+async function pickWallet() {
+  const opts = await walletOptions();
+  if (opts.length <= 1) return opts[0] || null;
   return new Promise((resolve) => {
     const m = document.createElement("div");
     m.className = "modal";
     m.innerHTML = `<div class="card"><span class="h">Connect a wallet</span>
-      ${WALLETS.map((w, i) => `<button class="wopt" data-i="${i}">${/^data:image\//.test(w.info.icon || "") ? `<img src="${esc(w.info.icon)}" alt="" />` : ""}<span>${esc(w.info.name)}</span></button>`).join("")}
+      ${opts.map((w, i) => `<button class="wopt" data-i="${i}">${/^data:image\//.test(w.info.icon || "") ? `<img src="${esc(w.info.icon)}" alt="" />` : ""}<span>${esc(w.info.name)}</span></button>`).join("")}
       <button class="wopt" data-cancel="1">Cancel</button></div>`;
     m.onclick = (ev) => {
       const b = ev.target.closest("button");
       if (!b && ev.target !== m) return; // click inside the card, not on a button
       m.remove();
-      resolve(b && b.dataset.i != null ? WALLETS[Number(b.dataset.i)] : null);
+      resolve(b && b.dataset.i != null ? opts[Number(b.dataset.i)] : null);
     };
     document.body.appendChild(m);
   });
