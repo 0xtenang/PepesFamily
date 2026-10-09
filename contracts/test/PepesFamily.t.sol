@@ -13,7 +13,7 @@ import {Currency} from "v4-core/src/types/Currency.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
 
 import {PepesFamily} from "../src/PepesFamily.sol";
-import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
+import {PepesFamilyRouter, FeeSplit as RouterSplit} from "../src/PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../src/PepesFamilyEthRouter.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
@@ -86,9 +86,13 @@ contract PepesFamilyTest is Test {
 
     // ------------------------------------------------------------ helpers
 
+    function _diamond() internal pure returns (PepesFamily.FeeSplit memory) {
+        return PepesFamily.FeeSplit(0, 300, 0);
+    }
+
     function _launch() internal returns (PadToken t) {
         vm.prank(alice);
-        t = PadToken(payable(pad.launch("Test", "TST", '{"image":""}', address(imd))));
+        t = PadToken(payable(pad.launchWithSplit("Test", "TST", '{"image":""}', address(imd), _diamond())));
     }
 
     function _buy(address who, PadToken t, uint256 amt) internal returns (uint256) {
@@ -124,9 +128,9 @@ contract PepesFamilyTest is Test {
 
     function test_onlyImd() public {
         vm.expectRevert(PepesFamily.UnsupportedQuote.selector);
-        pad.launch("X", "X", "", address(0));
+        pad.launchWithSplit("X", "X", "", address(0), _diamond());
         vm.expectRevert(PepesFamily.UnsupportedQuote.selector);
-        pad.launch("X", "X", "", address(0xBEEF));
+        pad.launchWithSplit("X", "X", "", address(0xBEEF), _diamond());
         vm.prank(bob);
         vm.expectRevert(PepesFamily.UnsupportedQuote.selector);
         router.launch{value: 0.5 ether}("E", "E", "", address(0), 0.5 ether, 1);
@@ -406,7 +410,7 @@ contract PepesFamilyTest is Test {
         vm.expectRevert(PepesFamilyRouter.NotPoolManager.selector);
         router.unlockCallback("");
         vm.expectRevert(PepesFamily.NotRouter.selector);
-        pad.launchFor(alice, "X", "X", "", address(imd));
+        pad.launchForWithSplit(alice, "X", "X", "", address(imd), _diamond());
         vm.stopPrank();
     }
 
@@ -1100,5 +1104,197 @@ contract PepesFamilyTest is Test {
             }
             _record(t);
         }
+    }
+
+    // ------------------------------------------------------------ v5: the creator's split of the 3%
+
+    function _launchSplit(uint16 c, uint16 h, uint16 b, bool quoteIsCurrency0) internal returns (PadToken t) {
+        for (uint256 i; i < 40; i++) {
+            vm.prank(alice);
+            t = PadToken(payable(pad.launchWithSplit("Split", "SPL", "", address(imd), PepesFamily.FeeSplit(c, h, b))));
+            (,,,, bool q0) = pad.launches(address(t));
+            if (q0 == quoteIsCurrency0) return t;
+        }
+        revert("ordering not found");
+    }
+
+    function test_split_rejectsBadSplits() public {
+        uint16[3][6] memory bad = [
+            [uint16(0), 300, 50], // sum 350
+            [uint16(0), 250, 0], // sum 250
+            [uint16(250), 50, 0], // creator above 2%
+            [uint16(300), 0, 0], // creator above 2%
+            [uint16(25), 275, 0], // not a 0.5% step
+            [uint16(100), 100, 75] // not a 0.5% step, sum 275
+        ];
+        for (uint256 i; i < bad.length; i++) {
+            vm.expectRevert(PepesFamily.BadSplit.selector);
+            pad.launchWithSplit("X", "X", "", address(imd), PepesFamily.FeeSplit(bad[i][0], bad[i][1], bad[i][2]));
+        }
+        // every preset and a custom split are accepted and recorded
+        uint16[3][5] memory ok = [[uint16(0), 300, 0], [uint16(200), 100, 0], [uint16(0), 0, 300], [uint16(100), 100, 100], [uint16(50), 150, 100]];
+        for (uint256 i; i < ok.length; i++) {
+            address tok = pad.launchWithSplit("X", "X", "", address(imd), PepesFamily.FeeSplit(ok[i][0], ok[i][1], ok[i][2]));
+            (uint16 c, uint16 h, uint16 b) = pad.feeSplit(tok);
+            assertEq(c, ok[i][0]);
+            assertEq(h, ok[i][1]);
+            assertEq(b, ok[i][2]);
+            assertEq(pad.creatorPayout(tok), address(this));
+        }
+    }
+
+    function test_split_routerLaunchDefaultsToHolders() public {
+        vm.prank(bob);
+        (address token,) = router.launch("D", "D", "", address(imd), 10e18, 1);
+        (uint16 c, uint16 h, uint16 b) = pad.feeSplit(token);
+        assertEq(c, 0);
+        assertEq(h, 300);
+        assertEq(b, 0);
+        vm.prank(bob);
+        (address t2, uint256 out) = router.launchWithSplit("F", "F", "", address(imd), RouterSplit(0, 0, 300), 10e18, 1);
+        (,, b) = pad.feeSplit(t2);
+        assertEq(b, 300);
+        assertEq(PadToken(payable(t2)).balanceOf(bob), out);
+        assertEq(pad.creatorPayout(t2), bob);
+    }
+
+    struct Moved {
+        uint256 quote; // IMD the trader paid / received
+        uint256 tokens; // tokens the trader received / paid
+        uint256 proto;
+        uint256 creator;
+        uint256 holders;
+        uint256 burned;
+    }
+
+    /// Third-party router swap; returns what moved, from the trader's side and from the pad's books.
+    function _swapExt(PadToken t, bool isBuy, int256 amountSpecified) internal returns (Moved memory m) {
+        (,,,, bool quoteIs0) = pad.launches(address(t));
+        bool zeroForOne = isBuy == quoteIs0;
+        PoolKey memory key = pad.poolKey(address(t));
+        uint256 q0 = imd.balanceOf(bob);
+        uint256 t0 = t.balanceOf(bob);
+        uint256 p0 = pad.pendingProtocolFees(address(imd));
+        uint256 c0 = pad.pendingCreatorFees(address(t));
+        uint256 h0 = pad.pendingHolderFees(address(t));
+        uint256 d0 = t.balanceOf(DEAD);
+        vm.prank(bob);
+        extRouter.swap(
+            key,
+            SwapParams(zeroForOne, amountSpecified, zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1),
+            settings,
+            ""
+        );
+        m.quote = isBuy ? q0 - imd.balanceOf(bob) : imd.balanceOf(bob) - q0;
+        m.tokens = isBuy ? t.balanceOf(bob) - t0 : t0 - t.balanceOf(bob);
+        m.proto = pad.pendingProtocolFees(address(imd)) - p0;
+        m.creator = pad.pendingCreatorFees(address(t)) - c0;
+        m.holders = pad.pendingHolderFees(address(t)) - h0;
+        m.burned = t.balanceOf(DEAD) - d0;
+        assertEq(pad.totalBurned(address(t)) >= m.burned, true);
+    }
+
+    /// For every split and all four swap kinds, both currency orders: 1% protocol, the creator and holder shares of
+    /// the trader's gross IMD, and the burn share of the trader's gross tokens burned.
+    function test_split_feesForEverySwapKind() public {
+        uint16[3][5] memory splits = [[uint16(0), 300, 0], [uint16(200), 100, 0], [uint16(0), 0, 300], [uint16(100), 100, 100], [uint16(50), 150, 100]];
+        for (uint256 i; i < splits.length; i++) {
+            for (uint256 o; o < 2; o++) {
+                PadToken t = _launchSplit(splits[i][0], splits[i][1], splits[i][2], o == 0);
+                _buy(alice, t, 20e18);
+                vm.prank(bob);
+                t.approve(address(extRouter), type(uint256).max);
+                _checkSplit(t, splits[i], _swapExt(t, true, -5e18), true); // exact-in buy
+                _checkSplit(t, splits[i], _swapExt(t, true, 1_000_000e18), true); // exact-out buy
+                _checkSplit(t, splits[i], _swapExt(t, false, -500_000e18), false); // exact-in sell
+                _checkSplit(t, splits[i], _swapExt(t, false, 0.5e18), false); // exact-out sell
+                _assertClaimsBacked();
+            }
+        }
+    }
+
+    function _checkSplit(PadToken, uint16[3] memory sp, Moved memory m, bool isBuy) internal pure {
+        uint256 fee = m.proto + m.creator + m.holders;
+        // gross IMD: a buyer pays pool + fee; a seller gets pool - fee
+        uint256 grossQ = isBuy ? m.quote : m.quote + fee;
+        // gross tokens: a buyer gets pool - burn; a seller pays pool + burn
+        uint256 grossT = isBuy ? m.tokens + m.burned : m.tokens;
+        assertApproxEqAbs(m.proto, grossQ / 100, 3, "protocol 1%");
+        assertApproxEqAbs(m.creator, (grossQ * sp[0]) / 10_000, 3, "creator share");
+        assertApproxEqAbs(m.holders, (grossQ * sp[1]) / 10_000, 3, "holder share");
+        assertApproxEqAbs(m.burned, (grossT * sp[2]) / 10_000, 3, "burn share");
+    }
+
+    /// The pad's ERC-6909 IMD claims always equal what it owes: protocol + every token's holder and creator fees.
+    function _assertClaimsBacked() internal view {
+        uint256 owed = pad.pendingProtocolFees(address(imd));
+        for (uint256 i; i < pad.tokenCount(); i++) {
+            address tok = pad.allTokens(i);
+            owed += pad.pendingHolderFees(tok) + pad.pendingCreatorFees(tok);
+        }
+        assertEq(pm.balanceOf(address(pad), uint256(uint160(address(imd)))), owed, "claims backed");
+    }
+
+    function test_split_creatorFeesCollectAndPayout() public {
+        vm.prank(alice);
+        address tok = pad.launchWithSplit("C", "C", "", address(imd), PepesFamily.FeeSplit(200, 100, 0));
+        PadToken t = PadToken(payable(tok));
+        _buy(bob, t, 100e18);
+        assertEq(pad.pendingCreatorFees(tok), 2e18, "2% of 100 IMD");
+        vm.prank(carol); // anyone can trigger, it always pays the payout address
+        pad.collectCreatorFees(tok);
+        assertEq(imd.balanceOf(alice), 1_000_000e18 + 2e18);
+        assertEq(pad.pendingCreatorFees(tok), 0);
+
+        vm.prank(carol);
+        vm.expectRevert(PepesFamily.NotCreator.selector);
+        pad.setCreatorPayout(tok, carol);
+        address treasury = makeAddr("creatorTreasury");
+        vm.prank(alice);
+        pad.setCreatorPayout(tok, treasury);
+        _buy(bob, t, 50e18);
+        pad.collectCreatorFees(tok);
+        assertEq(imd.balanceOf(treasury), 1e18);
+        vm.prank(alice);
+        vm.expectRevert(PepesFamily.NotCreator.selector);
+        pad.setCreatorPayout(tok, alice); // the old payout address lost the role
+        _assertClaimsBacked();
+    }
+
+    function test_split_deflationaryBurnsAndEveryoneCanExit() public {
+        PadToken t = _launchSplit(0, 0, 300, true);
+        uint256 dead0 = t.balanceOf(DEAD);
+        _buy(bob, t, 30e18);
+        _buy(carol, t, 50e18);
+        assertEq(pad.pendingHolderFees(address(t)), 0, "no holder share");
+        _sell(carol, t, t.balanceOf(carol));
+        _sell(bob, t, t.balanceOf(bob));
+        uint256 burned = t.balanceOf(DEAD) - dead0;
+        assertGt(burned, 0);
+        assertEq(burned, pad.totalBurned(address(t)));
+        assertEq(t.balanceOf(address(pm)) + t.balanceOf(DEAD), SUPPLY, "every token is in the pool or burned");
+        assertEq(pad.pendingProtocolFees(address(imd)) > 0, true);
+        _assertClaimsBacked();
+    }
+
+    /// Random splits and trades: the pad's claims stay backed and fees + burn match the split.
+    function testFuzz_split(uint8 cSteps, uint8 bSteps, uint96 a, uint96 b) public {
+        uint16 c = uint16(bound(cSteps, 0, 4)) * 50;
+        uint16 bu = uint16(bound(bSteps, 0, (300 - c) / 50)) * 50;
+        uint16 h = 300 - c - bu;
+        PadToken t = _launchSplit(c, h, bu, uint256(a) % 2 == 0);
+        _buy(alice, t, bound(a, 1e15, 500e18));
+        vm.prank(bob);
+        t.approve(address(extRouter), type(uint256).max);
+        uint16[3] memory sp = [c, h, bu];
+        _checkSplit(t, sp, _swapExt(t, true, -int256(bound(b, 1e15, 300e18))), true);
+        uint256 bal = t.balanceOf(bob);
+        if (bal > 1e18) _checkSplit(t, sp, _swapExt(t, false, -int256(bal / 2)), false);
+        _sell(alice, t, t.balanceOf(alice));
+        pad.collectProtocolFees(address(imd));
+        pad.collectCreatorFees(address(t));
+        pad.flush(address(t));
+        _assertClaimsBacked();
+        assertGe(imd.balanceOf(address(t)), t.accountedBalance());
     }
 }

@@ -84,6 +84,23 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards (v4: with 7-day expiry, see below). |
 | `src/v1`, `src/v2`, `src/v3` | Exact token sources of earlier launchpad versions, kept so their tokens can be source-verified. |
 
+### Launchpad v5 (in review, not deployed)
+
+v5 keeps v4 (IMD pairs, 7-day reward expiry) and lets each creator choose, at launch and forever, where the 3% goes. The 1% protocol fee is unchanged.
+
+| Preset | Creator | Holders | Burn |
+| --- | --- | --- | --- |
+| Diamond hands (default) | 0% | 3% | 0% |
+| Creator-backed | 2% | 1% | 0% |
+| Deflationary | 0% | 0% | 3% |
+| Custom | any mix in 0.5% steps, creator at most 2%, total 3% | | |
+
+- **Creator share:** paid in IMD, held as PoolManager claims until anyone calls `collectCreatorFees(token)`, which always pays the token's `creatorPayout` (the creator; the payout address can hand it on with `setCreatorPayout`). Creator fees don't expire.
+- **Holder share:** as in v4, including the 7-day expiry.
+- **Burn share:** taken in the token itself from every swap, through any router, and sent to `0x…dEaD` inside the swap: a buyer receives that share less, a seller pays it on top. Nothing is bought on the market, so there is nothing to front-run. The IMD fee is 4% minus the burn share (1% protocol + creator + holders).
+- The hook takes the fee of the swap's specified currency in `beforeSwap` and the other one in `afterSwap`, for all four swap kinds. `getTokenInfo` / `getTokens` moved to `PepesFamilyLens` (deployed by the launchpad, `lens()`) to keep the launchpad under the contract size limit.
+- Tests: every split for all four swap kinds in both currency orders, creator fee collection and payout hand-over, a deflationary token with full exits, a split fuzz, claim backing, and a mainnet-fork check that Uniswap's V4Quoter matches the router with the burn included.
+
 ### Launchpad v4
 
 v4 is v3 with one addition: **holder rewards are meant to be claimed.** Launches are IMD-only.

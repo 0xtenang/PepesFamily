@@ -6,7 +6,7 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 
 import {PepesFamily} from "../src/PepesFamily.sol";
-import {PepesFamilyRouter} from "../src/PepesFamilyRouter.sol";
+import {PepesFamilyRouter, FeeSplit} from "../src/PepesFamilyRouter.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 
@@ -108,6 +108,28 @@ contract ForkTest is Test {
         uint256 feeBefore = IERC20(IMD).balanceOf(FEE_RECIPIENT);
         pad.collectProtocolFees(IMD);
         assertGt(IERC20(IMD).balanceOf(FEE_RECIPIENT) - feeBefore, 1.5e18);
+    }
+
+    /// v5 split on mainnet state: a custom 1% creator / 1% holders / 1% burn token. Uniswap's deployed V4Quoter
+    /// predicts exactly what the router delivers (burn included), and the shares land where they should.
+    function test_fork_customSplit() public {
+        vm.prank(bob);
+        (address token,) = router.launchWithSplit("Fork Split", "FSPL", "{}", IMD, FeeSplit(100, 100, 100), 50e18, 1);
+        PadToken t = PadToken(payable(token));
+        PoolKey memory key = pad.poolKey(token);
+        (,,,, bool quoteIs0) = pad.launches(token);
+        (uint256 quoted,) = QUOTER.quoteExactInputSingle(IV4Quoter.QuoteExactSingleParams(key, quoteIs0, 100e18, ""));
+        uint256 dead0 = t.balanceOf(0x000000000000000000000000000000000000dEaD);
+        uint256 creator0 = pad.pendingCreatorFees(token);
+        vm.prank(carol);
+        uint256 out = router.buy(token, 100e18, quoted, block.timestamp);
+        assertEq(out, quoted, "quoter matches the router, burn included");
+        uint256 burned = t.balanceOf(0x000000000000000000000000000000000000dEaD) - dead0;
+        assertApproxEqAbs(burned, ((out + burned) * 100) / 10_000, 2, "1% of the tokens burned");
+        assertEq(pad.pendingCreatorFees(token) - creator0, 1e18, "1% of 100 IMD to the creator");
+        uint256 before = IERC20(IMD).balanceOf(bob);
+        pad.collectCreatorFees(token);
+        assertEq(IERC20(IMD).balanceOf(bob) - before, 1.5e18, "creator: 1% of the 50 IMD launch buy and of the 100 IMD buy");
     }
 
     /// Bob launches and never claims; after more than 7 days his rewards go to the protocol address.

@@ -237,8 +237,12 @@ contract PepesEarnTest is Test {
         vm.prank(bob);
         vm.expectRevert(PepesEarnIMD.NotOwner.selector);
         hook.openPool(address(earn));
-        vm.expectRevert(PepesEarnIMD.NotSupported.selector);
+        // launching through the collection's router fails (the live router calls launchFor, which reverts
+        // NotSupported; this repo's router calls the v5 launchForWithSplit, which the hook doesn't have)
+        vm.expectRevert();
         router.launch("x", "x", "", address(imd), 0, 0);
+        vm.expectRevert(PepesEarnIMD.NotSupported.selector);
+        hook.launchFor(address(this), "x", "x", "", address(imd));
     }
 
     // ------------------------------------------------------------ trading and NFTs

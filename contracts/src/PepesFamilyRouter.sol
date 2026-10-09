@@ -11,18 +11,26 @@ import {SwapParams} from "v4-core/src/types/PoolOperation.sol";
 
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 
+/// @dev PepesFamily v5's split of the 3% (creator / holders / burn, basis points of the trade, sum 300).
+struct FeeSplit {
+    uint16 creatorBps;
+    uint16 holderBps;
+    uint16 burnBps;
+}
+
 interface IPepesFamily {
     function poolKey(address token) external view returns (PoolKey memory);
     function launches(address token)
         external
         view
         returns (address quote, address creator, uint64 createdAt, uint64 createdBlock, bool quoteIsCurrency0);
-    function launchFor(
+    function launchForWithSplit(
         address creator,
         string calldata name,
         string calldata symbol,
         string calldata metadata,
-        address quote
+        address quote,
+        FeeSplit calldata split
     ) external returns (address token);
     function flush(address token) external;
 }
@@ -80,8 +88,8 @@ contract PepesFamilyRouter is IUnlockCallback {
         _;
     }
 
-    /// @notice Launches a token (creator = msg.sender) and optionally buys `initialBuy` of quote in the same tx.
-    ///         For IMD launches approve this router for `initialBuy` IMD first.
+    /// @notice Launches a token (creator = msg.sender) with the default split (all 3% to holders) and optionally buys
+    ///         `initialBuy` of quote in the same tx. For IMD launches approve this router for `initialBuy` IMD first.
     function launch(
         string calldata name,
         string calldata symbol,
@@ -90,7 +98,22 @@ contract PepesFamilyRouter is IUnlockCallback {
         uint256 initialBuy,
         uint256 minTokensOut
     ) external payable returns (address token, uint256 tokensOut) {
-        token = pad.launchFor(msg.sender, name, symbol, metadata, quote);
+        token = pad.launchForWithSplit(msg.sender, name, symbol, metadata, quote, FeeSplit(0, 300, 0));
+        if (initialBuy > 0) tokensOut = _swap(token, true, initialBuy, minTokensOut);
+        else if (msg.value != 0) revert BadAmount();
+    }
+
+    /// @notice Same as `launch`, with the creator's split of the 3% (PepesFamily v5).
+    function launchWithSplit(
+        string calldata name,
+        string calldata symbol,
+        string calldata metadata,
+        address quote,
+        FeeSplit calldata split,
+        uint256 initialBuy,
+        uint256 minTokensOut
+    ) external payable returns (address token, uint256 tokensOut) {
+        token = pad.launchForWithSplit(msg.sender, name, symbol, metadata, quote, split);
         if (initialBuy > 0) tokensOut = _swap(token, true, initialBuy, minTokensOut);
         else if (msg.value != 0) revert BadAmount();
     }
