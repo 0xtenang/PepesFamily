@@ -95,6 +95,19 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards (v4: with 7-day expiry, see below). |
 | `src/v1`, `src/v2`, `src/v3` | Exact token sources of earlier launchpad versions, kept so their tokens can be source-verified. |
 
+### Multichain: Ethereum (in preparation)
+
+The same v5 contracts are being deployed on Ethereum, IMD's home chain, so creators can launch on Robinhood Chain or Ethereum. Per-chain settings live in `contracts/script/Chains.sol`:
+
+| | Robinhood Chain (4663) | Ethereum (1) |
+| --- | --- | --- |
+| IMD | `0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127` | `0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7` |
+| Uniswap v4 PoolManager | `0x8366a39CC670B4001A1121B8F6A443A643e40951` | `0x000000000004444c5dc75cB358380D2e3dE08A90` |
+| ETH/IMD pool used by the ETH router | 1% fee, tick spacing 100, no hooks | 1% fee, tick spacing 200, no hooks (`0xb07d640f…bfb3`) |
+| Launchpad v5 (CREATE2, hook flags `0x28CC`) | `0xC26003787503b978033427F77047fAF5551Ca8CC` | `0xa89083083119B70c06b372dC85Dc6155a8F568CC` (not deployed yet) |
+
+Owner and fee recipient are `0x3c8A…691C` on both. `CHAIN_ID=1 forge script script/PadDeployData.s.sol` prints Ethereum's deployment data; `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc EthereumForkTest` runs launch, split, quoter, ETH-router and expiry tests on Ethereum state. Base will follow once IMD is available there.
+
 ### Launchpad v5
 
 v5 keeps v4 (IMD pairs, 7-day reward expiry) and lets each creator choose, at launch and forever, where the 3% goes. The 1% protocol fee is unchanged.
