@@ -154,6 +154,7 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .links a { text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
 .ext .btn { padding: 4px 10px; font-size: 11px; }
 .scroll-x { overflow-x: auto; }
+.sharebtn { margin-top: 4px; padding: 2px 8px; font-size: 11px; }
 .share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border: 1px solid var(--line); background: #000; }
 #rf input { flex: 1; min-width: 0; }
 /* Pepes Earn IMD NFT */
@@ -1696,7 +1697,7 @@ async function renderRewards(who) {
       <thead><tr><th>Token</th><th>Holding</th><th>Earned</th><th>Claimed</th><th>Ready</th>${mine ? "<th></th>" : ""}</tr></thead>
       <tbody>${rows.map((r, i) => `
         <tr>
-          <td><a href="#/t/${r.t.token}">$${esc(r.t.symbol)}</a> ${pill(r.t.quote)}${chainBadge(r.P)}</td>
+          <td><a href="#/t/${r.t.token}">$${esc(r.t.symbol)}</a> ${pill(r.t.quote)}${chainBadge(r.P)}${r.earned > 0n ? `<div><button class="sharebtn" data-share="${i}" title="Make a share card for $${esc(r.t.symbol)}">Share card</button></div>` : ""}</td>
           <td>${fmt(r.bal)}<div class="stat">${Number((r.bal * 1000000n) / SUPPLY) / 10000}%</div></td>
           <td>${usd(r.earned, r.t.quote)}<div class="stat">${fmt(r.earned, 6)} ${qsym(r.t.quote)}</div></td>
           <td>${usd(r.claimed, r.t.quote)}</td>
@@ -1722,6 +1723,11 @@ async function renderRewards(who) {
       <div class="card">
         <span class="h">Show your rewards</span>
         <p class="stat" style="margin:4px 0 12px">The card shows totals and tokens only, never your address.</p>
+        <label for="sharepick" style="margin-top:0">Card</label>
+        <select id="sharepick" style="margin-bottom:12px">
+          <option value="all">All tokens</option>
+          ${rows.map((r, i) => (r.earned > 0n ? `<option value="${i}">$${esc(r.t.symbol)}${r.P.ch.key === "robinhood" ? "" : ` (${esc(r.P.ch.short)})`}</option>` : "")).join("")}
+        </select>
         <div style="display:flex;flex-direction:column;gap:8px">
           <button class="primary" id="sx">Post on X</button>
           <button id="sdl">Download image</button>
@@ -1769,29 +1775,75 @@ async function renderRewards(who) {
     sym: "$" + r.t.symbol,
     amt: priced ? usdLong(toUsdNum(r.earned, r.t.quote)) : `${fmt(r.earned)} ${qsym(r.t.quote)}`,
   }));
-  const url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
-  if (seq !== rewardsSeq || !$("#card")) return;
-  $("#card").src = url;
-  const blob = () => fetch(url).then((x) => x.blob());
-  const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-  const text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays 3% to holders, in ETH or IMD.\n\n${tags}\nhttps://pepesfamily.fun`;
-  $("#sx").onclick = () => window.open("https://x.com/intent/tweet?text=" + encodeURIComponent(text), "_blank", "noopener,noreferrer");
-  $("#sdl").onclick = () => { const a = document.createElement("a"); a.href = url; a.download = "pepesfamily-rewards.png"; a.click(); };
-  if ($("#scp")) $("#scp").onclick = async () => {
-    try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob() })]); toast("Image copied: paste it into your post"); }
-    catch { toast("Your browser blocked copying: use Download image instead"); }
-  };
-  try {
-    const file = new File([await blob()], "pepesfamily-rewards.png", { type: "image/png" });
-    if (navigator.canShare?.({ files: [file] })) {
-      $("#ssh").style.display = "";
-      $("#ssh").onclick = () => navigator.share({ files: [file], text }).catch(() => {});
+  let cardSeq = 0;
+  /// Draws the chosen card ("all", or a row index for one token) and wires the share buttons to it.
+  async function showCard(pick) {
+    const mySeq = ++cardSeq;
+    let url, text, file = "pepesfamily-rewards.png";
+    if (pick === "all") {
+      url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
+      const tags = [...new Set(top.map((t) => t.sym))].join(" ");
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in ETH or IMD.\n\n${tags}\nhttps://pepesfamily.fun`;
+    } else {
+      const r = rows[Number(pick)];
+      const sp = await splitOf(r.P, r.t.token).catch(() => null);
+      const holderPct = sp ? sp.h / 100 : 3;
+      const amt = priced ? usdLong(toUsdNum(r.earned, r.t.quote)) : `${fmt(r.earned)} ${qsym(r.t.quote)}`;
+      url = await tokenShareCard(r, amt, holderPct);
+      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesfamily.fun/#/t/${r.t.token}`;
+      file = `pepesfamily-${r.t.symbol.replace(/[^a-z0-9]/gi, "").toLowerCase() || "token"}.png`;
     }
-  } catch {}
+    if (mySeq !== cardSeq || seq !== rewardsSeq || !$("#card")) return;
+    $("#card").src = url;
+    const blob = () => fetch(url).then((x) => x.blob());
+    $("#sx").onclick = () => window.open("https://x.com/intent/tweet?text=" + encodeURIComponent(text), "_blank", "noopener,noreferrer");
+    $("#sdl").onclick = () => { const a = document.createElement("a"); a.href = url; a.download = file; a.click(); };
+    if ($("#scp")) $("#scp").onclick = async () => {
+      try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob() })]); toast("Image copied: paste it into your post"); }
+      catch { toast("Your browser blocked copying: use Download image instead"); }
+    };
+    $("#ssh").style.display = "none";
+    try {
+      const f = new File([await blob()], file, { type: "image/png" });
+      if (navigator.canShare?.({ files: [f] })) {
+        $("#ssh").style.display = "";
+        $("#ssh").onclick = () => navigator.share({ files: [f], text }).catch(() => {});
+      }
+    } catch {}
+  }
+  $("#sharepick").onchange = () => showCard($("#sharepick").value);
+  $("#rw").querySelectorAll("button[data-share]").forEach((b) => b.onclick = () => {
+    $("#sharepick").value = b.dataset.share;
+    showCard(b.dataset.share);
+    $("#card").scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  await showCard("all");
 }
 
-/// 1200×675 PNG (X's large-image size) as a data: URL: big total, top tokens, and the frog crowd from behind.
-async function shareCard(total, sub, top) {
+/// A token's logo for drawing on a canvas: the site's own image, else its IPFS image through each gateway, else its
+/// https image. Loaded with CORS so the canvas stays exportable; null when none loads (the card shows the ticker).
+async function cardLogo(info) {
+  const own = CONFIG.images[String(info.token || "").toLowerCase()];
+  const raw = own ? "" : meta(info.metadata).image;
+  const ipfs = typeof raw === "string" ? ipfsPath(raw.trim()) : "";
+  const urls = own ? [own] : ipfs ? IPFS_GATEWAYS.map((g) => g + ipfs) : safeUrl(raw) ? [safeUrl(raw)] : [];
+  for (const u of urls) {
+    const im = await new Promise((res) => {
+      const i = new Image();
+      const t = setTimeout(() => res(null), 7000);
+      i.crossOrigin = "anonymous";
+      i.referrerPolicy = "no-referrer";
+      i.onload = () => { clearTimeout(t); res(i); };
+      i.onerror = () => { clearTimeout(t); res(null); };
+      i.src = u;
+    });
+    if (im && im.naturalWidth) return im;
+  }
+  return null;
+}
+
+/// Black grid, floor and the frog crowd: the background every share card shares. Returns the drawing helpers.
+async function cardBase() {
   const W = 1200, H = 675, c = document.createElement("canvas");
   c.width = W; c.height = H;
   const g = c.getContext("2d");
@@ -1802,7 +1854,6 @@ async function shareCard(total, sub, top) {
   g.strokeStyle = "#0d170d"; g.lineWidth = 1;
   for (let x = 40; x < W; x += 40) { g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, H); g.stroke(); }
   for (let y = 40; y < H; y += 40) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(W, y + 0.5); g.stroke(); }
-  // floor and the crowd, bottom right
   const floor = H - 70;
   g.fillStyle = "#0b0f0b"; g.fillRect(0, floor, W, H - floor);
   g.fillStyle = "#3ddc84"; g.fillRect(0, floor, W, 2);
@@ -1817,12 +1868,57 @@ async function shareCard(total, sub, top) {
     }
   }
   g.textBaseline = "middle";
-  // logo
   g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(60, 56, 44, 44);
   g.fillStyle = "#fff"; g.fillRect(104, 56, 214, 44);
   g.font = F(600, 22); g.textAlign = "center"; g.fillText("P", 82, 79);
   g.fillStyle = "#000"; g.font = F(500, 18); g.fillText("PEPESFAMILY", 211, 79);
   g.textAlign = "left";
+  return { c, g, F, fit, W, H, floor };
+}
+
+/// One token's card: its launch logo, ticker, what this wallet earned holding it, and its share of the supply.
+async function tokenShareCard(r, amt, holderPct) {
+  const { c, g, F, fit, W, floor } = await cardBase();
+  const x0 = 60, y0 = 150, S = 230;
+  const logo = await cardLogo(r.t);
+  g.save();
+  g.beginPath(); g.roundRect(x0, y0, S, S, 28); g.clip();
+  if (logo) {
+    // cover-fit the logo into the square
+    const k = Math.max(S / logo.naturalWidth, S / logo.naturalHeight), w = logo.naturalWidth * k, h = logo.naturalHeight * k;
+    g.drawImage(logo, x0 + (S - w) / 2, y0 + (S - h) / 2, w, h);
+  } else {
+    g.fillStyle = "#16301a"; g.fillRect(x0, y0, S, S);
+    g.fillStyle = "#3ddc84"; g.font = F(600, 96); g.textAlign = "center";
+    g.fillText((r.t.symbol || "?").slice(0, 2).toUpperCase(), x0 + S / 2, y0 + S / 2 + 4);
+    g.textAlign = "left";
+  }
+  g.restore();
+  g.strokeStyle = "#3ddc84"; g.lineWidth = 3; g.beginPath(); g.roundRect(x0, y0, S, S, 28); g.stroke();
+
+  const tx = x0 + S + 44, maxW = W - tx - 60;
+  g.fillStyle = "#fff"; fit("$" + r.t.symbol, 600, 56, maxW); g.fillText("$" + r.t.symbol, tx, y0 + 30);
+  g.fillStyle = "#8c8c8c"; fit(r.t.name, 400, 24, maxW); g.fillText(r.t.name, tx, y0 + 78);
+  g.fillStyle = "#8c8c8c"; g.font = F(500, 20); g.fillText("HOLDER REWARDS EARNED", tx, y0 + 132);
+  g.fillStyle = "#3ddc84"; fit(amt, 600, 76, maxW); g.fillText(amt, tx, y0 + 188);
+  const parts = [`${fmt(r.earned, 4)} ${qsym(r.t.quote)}`];
+  const pct = Number((r.bal * 1000000n) / SUPPLY) / 10000;
+  if (pct > 0) parts.push(`holding ${pct}% of supply`);
+  g.fillStyle = "#fff"; fit(parts.join(" · "), 400, 22, maxW); g.fillText(parts.join(" · "), tx, y0 + 244);
+  const chain = r.P.ch.name.toUpperCase();
+  g.font = F(500, 16); const cw = g.measureText(chain).width + 24;
+  g.strokeStyle = "#3ddc84"; g.lineWidth = 1.5; g.strokeRect(x0, y0 + S + 34, cw, 32);
+  g.fillStyle = "#3ddc84"; g.fillText(chain, x0 + 12, y0 + S + 51);
+
+  g.fillStyle = "#8c8c8c"; fit(`${holderPct}% of every $${r.t.symbol} trade goes to holders`, 400, 20, 640);
+  g.fillText(`${holderPct}% of every $${r.t.symbol} trade goes to holders`, 60, floor + 36);
+  g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesfamily.fun", W - 60, floor + 36);
+  return c.toDataURL("image/png");
+}
+
+/// 1200×675 PNG (X's large-image size) as a data: URL: big total, top tokens, and the frog crowd from behind.
+async function shareCard(total, sub, top) {
+  const { c, g, F, fit, W, floor } = await cardBase();
   g.fillStyle = "#8c8c8c"; g.font = F(500, 22); g.fillText("HOLDER REWARDS EARNED", 60, 172);
   g.fillStyle = "#3ddc84"; fit(total, 600, 128, W - 120); g.fillText(total, 54, 252);
   g.fillStyle = "#fff"; fit(sub, 400, 26, W - 120); g.fillText(sub, 60, 336);
@@ -1833,7 +1929,7 @@ async function shareCard(total, sub, top) {
     g.fillStyle = "#fff"; fit(t.sym, 500, 26, 250); g.fillText(t.sym, 92, y);
     g.fillStyle = "#8c8c8c"; g.font = F(400, 26); g.fillText(t.amt, 360, y);
   });
-  g.fillStyle = "#8c8c8c"; g.font = F(400, 20); g.fillText("3% of every trade goes to holders", 60, floor + 36);
+  g.fillStyle = "#8c8c8c"; g.font = F(400, 20); g.fillText("Every trade pays its holders", 60, floor + 36);
   g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesfamily.fun", W - 60, floor + 36);
   return c.toDataURL("image/png");
 }
