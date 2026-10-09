@@ -2,19 +2,29 @@
 # Verifies the source code of every token launched on PepesFamily (all launchpad versions) that isn't verified yet,
 # so explorers and scanners (Blockscout, DexScreener, GMGN, ...) show it as open source. Safe to run repeatedly.
 # Needs Foundry and the git submodules. Usage: ./script/verify-tokens.sh   (from contracts/)
+# Ethereum launches: CHAIN_ID=1 ./script/verify-tokens.sh
 set -uo pipefail
 
-RPC="${RPC_URL:-https://robinhood.drpc.org}"
-CHAIN=4663
-BLOCKSCOUT="https://robinhoodchain.blockscout.com/api/"
-# launchpad address -> the token contract it deploys (each version's exact source is kept in the repo)
-PADS=(
-  "0xC26003787503b978033427F77047fAF5551Ca8CC src/PadToken.sol:PadToken"        # v5 (same token source as v4)
-  "0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc src/PadToken.sol:PadToken"        # v4
-  "0xC5a1f48C03635b83D79667463785bC2c6BcE28cC src/v3/PadTokenV3.sol:PadTokenV3" # v3
-  "0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC src/v2/PadTokenV2.sol:PadTokenV2" # v2
-  "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC src/v1/PadTokenV1.sol:PadTokenV1" # v1
-)
+CHAIN="${CHAIN_ID:-4663}"
+if [ "$CHAIN" = "1" ]; then
+  RPC="${RPC_URL:-https://ethereum-rpc.publicnode.com}"
+  BLOCKSCOUT="https://eth.blockscout.com/api/"
+  # launchpad address -> the token contract it deploys
+  PADS=(
+    "0xa89083083119B70c06b372dC85Dc6155a8F568CC src/PadToken.sol:PadToken"        # v5 on Ethereum
+  )
+else
+  RPC="${RPC_URL:-https://robinhood.drpc.org}"
+  BLOCKSCOUT="https://robinhoodchain.blockscout.com/api/"
+  # launchpad address -> the token contract it deploys (each version's exact source is kept in the repo)
+  PADS=(
+    "0xC26003787503b978033427F77047fAF5551Ca8CC src/PadToken.sol:PadToken"        # v5 (same token source as v4)
+    "0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc src/PadToken.sol:PadToken"        # v4
+    "0xC5a1f48C03635b83D79667463785bC2c6BcE28cC src/v3/PadTokenV3.sol:PadTokenV3" # v3
+    "0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC src/v2/PadTokenV2.sol:PadTokenV2" # v2
+    "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC src/v1/PadTokenV1.sol:PadTokenV1" # v1
+  )
+fi
 
 for entry in "${PADS[@]}"; do
   read -r PAD CONTRACT <<<"$entry"
