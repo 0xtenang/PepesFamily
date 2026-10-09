@@ -1240,7 +1240,9 @@ contract PepesFamilyTest is Test {
             address tok = pad.allTokens(i);
             owed += pad.pendingHolderFees(tok) + pad.pendingCreatorFees(tok);
         }
-        assertEq(pm.balanceOf(address(pad), uint256(uint160(address(imd)))), owed, "claims backed");
+        // claims are at least what is owed (anyone can donate claims to the launchpad); here nobody donates
+        assertGe(pm.balanceOf(address(pad), uint256(uint160(address(imd)))), owed, "claims backed");
+        assertEq(pm.balanceOf(address(pad), uint256(uint160(address(imd)))), owed, "no donations in these tests");
         for (uint256 i; i < pad.tokenCount(); i++) {
             address tok = pad.allTokens(i);
             assertEq(pm.balanceOf(address(pad), uint256(uint160(tok))), pad.pendingBurn(tok), "burn claims backed");
@@ -1324,28 +1326,40 @@ contract PepesFamilyTest is Test {
         return zeroForOne ? uint160((uint256(p) * 9_990) / 10_000) : uint160((uint256(p) * 10_010) / 10_000);
     }
 
-    /// Finding 1: a swap stopped early by its price limit reverts, in every swap kind, instead of paying the fee
-    /// or burn of the whole requested amount.
+    /// Finding 1 (8f96baf6) and re-check f963ea4d, 3: in both currency orders, a swap stopped early by its price
+    /// limit reverts in every swap kind, and full fills of every kind (including exact-out) go through.
     function test_v5audit_partialFillsRevert() public {
-        PadToken t = _launchSplit(0, 150, 150, true);
-        _buy(alice, t, 20e18);
-        _buy(bob, t, 20e18);
-        vm.prank(bob);
-        t.approve(address(extRouter), type(uint256).max);
-        PoolKey memory key = pad.poolKey(address(t));
-        bool[2] memory zfo = [true, false]; // quote is currency0: true = buy, false = sell
-        int256[2][2] memory amounts = [[int256(-100e18), int256(1_000_000_000e18)], [int256(-int256(t.balanceOf(bob))), int256(100e18)]];
-        for (uint256 side; side < 2; side++) {
-            for (uint256 kind; kind < 2; kind++) {
-                uint160 lim = _limitPast(t, zfo[side]);
-                vm.prank(bob);
-                vm.expectRevert(); // PartialFill, wrapped by the PoolManager
-                extRouter.swap(key, SwapParams(zfo[side], amounts[side][kind], lim), settings, "");
+        for (uint256 o; o < 2; o++) {
+            bool quoteIs0 = o == 0;
+            PadToken t = _launchSplit(0, 150, 150, quoteIs0);
+            _buy(alice, t, 20e18);
+            _buy(bob, t, 20e18);
+            vm.prank(bob);
+            t.approve(address(extRouter), type(uint256).max);
+            PoolKey memory key = pad.poolKey(address(t));
+            bool buyZfo = quoteIs0; // buying = paying IMD in
+            bool[2] memory zfo = [buyZfo, !buyZfo]; // [buy, sell]
+            int256[2][2] memory amounts =
+                [[int256(-100e18), int256(1_000_000_000e18)], [-int256(t.balanceOf(bob)), int256(100e18)]];
+            for (uint256 side; side < 2; side++) {
+                for (uint256 kind; kind < 2; kind++) {
+                    uint160 lim = _limitPast(t, zfo[side]);
+                    vm.prank(bob);
+                    vm.expectRevert(); // PartialFill, wrapped by the PoolManager
+                    extRouter.swap(key, SwapParams(zfo[side], amounts[side][kind], lim), settings, "");
+                }
             }
+            // full fills with open limits: exact-in and exact-out, buy and sell
+            uint160[2] memory open = [TickMath.MIN_SQRT_PRICE + 1, TickMath.MAX_SQRT_PRICE - 1];
+            int256[4] memory fills = [int256(-1e18), int256(100_000e18), int256(-50_000e18), int256(0.01e18)];
+            bool[4] memory isBuy = [true, true, false, false];
+            for (uint256 k; k < 4; k++) {
+                bool z = isBuy[k] ? buyZfo : !buyZfo;
+                vm.prank(bob);
+                extRouter.swap(key, SwapParams(z, fills[k], z ? open[0] : open[1]), settings, "");
+            }
+            _assertClaimsBacked();
         }
-        // a limit that is never reached still trades
-        vm.prank(bob);
-        extRouter.swap(key, SwapParams(true, -1e18, _limitPast(t, true) / 2), settings, "");
     }
 
     /// Finding 2: one huge sell on a burn token, whose burn exceeds the pool's remaining tokens, goes through.

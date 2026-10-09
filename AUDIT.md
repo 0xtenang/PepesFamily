@@ -21,7 +21,7 @@ v5 = v4 + a per-token split of the 3% chosen at launch (`FeeSplit{creatorBps, ho
 - IMD fee per swap = (400 − burnBps) bps of the trader's gross IMD: 100 protocol, creatorBps to `pendingCreatorFees[token]` (collected by anyone to `creatorPayout[token]`, which only the payout address can change), holderBps to `pendingHolderFees[token]` (as v4).
 - Burn: burnBps of the trader's gross token amount, minted as ERC-6909 token claims to the launchpad during the swap (`pendingBurn`), burned to `0x…dEaD` by `flush`. Swaps must fill completely (`PartialFill` otherwise). Creator payout handover is two-step. The specified currency's fee is taken in `beforeSwap` (positive specified delta), the unspecified currency's in `afterSwap` (hook delta), so a swap can pay IMD and burn at the same time.
 - Launch only through `launchWithSplit` / router `launchWithSplit`; router `launch` uses the default (0, 300, 0). `getTokenInfo` / `getTokens` live in `PepesFamilyLens` (`lens()`).
-- Invariants: the launchpad's ERC-6909 IMD claims = `pendingProtocolFees` + Σ `pendingHolderFees` + Σ `pendingCreatorFees`; its claims of each token = `pendingBurn[token]`.
+- Invariants: the launchpad's ERC-6909 IMD claims ≥ `pendingProtocolFees` + Σ `pendingHolderFees` + Σ `pendingCreatorFees`, and its claims of each token ≥ `pendingBurn[token]`; both are equalities unless someone donates claims to the launchpad (`PoolManager.mint`/transfer to it), which only strands the donor's claims (re-check f963ea4d, 1).
 
 ### Live: v4 (receives all new launches until v5 is deployed, `0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc`)
 

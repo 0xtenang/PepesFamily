@@ -89,7 +89,8 @@ contract PepesFamilyRouter is IUnlockCallback {
     }
 
     /// @notice Launches a token (creator = msg.sender) with the default split (all 3% to holders) and optionally buys
-    ///         `initialBuy` of quote in the same tx. For IMD launches approve this router for `initialBuy` IMD first.
+    ///         `initialBuy` IMD in the same tx (approve this router for `initialBuy` IMD first). v5 launches are
+    ///         IMD-only, so msg.value must be 0.
     function launch(
         string calldata name,
         string calldata symbol,
@@ -118,7 +119,8 @@ contract PepesFamilyRouter is IUnlockCallback {
         else if (msg.value != 0) revert BadAmount();
     }
 
-    /// @notice Buy with the pool's quote asset: send ETH as msg.value, or approve this router for IMD.
+    /// @notice Buy with IMD (approve this router first). To pay with ETH use PepesFamilyEthRouter. The ETH branches
+    ///         below are kept from the two-quote launchpads and never run on v5, whose launches are IMD-only.
     function buy(address token, uint256 amountIn, uint256 minTokensOut, uint256 deadline)
         external
         payable
@@ -168,7 +170,7 @@ contract PepesFamilyRouter is IUnlockCallback {
         });
         out = abi.decode(poolManager.unlock(abi.encode(data)), (uint256));
 
-        // Refund unspent ETH (only possible if the swap hit the end of the curve).
+        // Never runs on v5 (IMD-only; a swap stopped at the end of the curve reverts PartialFill instead).
         if (payingEth && address(this).balance > 0) address(0).transferOut(msg.sender, address(this).balance);
     }
 
