@@ -6,8 +6,9 @@ import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {DeployLib} from "./DeployLib.sol";
 
-/// @notice Prints the PepesFamily v4 CREATE2 deployment data (salt, address, init code) for the browser deploy page.
-contract V4DeployData is Script {
+/// @notice Prints the CREATE2 deployment data (salt, address, init code) of the current PepesFamily version for the
+///         browser deploy page.
+contract PadDeployData is Script {
     function run() external view {
         int24 tick = DeployLib.startTickForMarketCap(635e18);
         bytes memory initCode = abi.encodePacked(

@@ -9,6 +9,7 @@ CHAIN=4663
 BLOCKSCOUT="https://robinhoodchain.blockscout.com/api/"
 # launchpad address -> the token contract it deploys (each version's exact source is kept in the repo)
 PADS=(
+  "0xC26003787503b978033427F77047fAF5551Ca8CC src/PadToken.sol:PadToken"        # v5 (same token source as v4)
   "0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc src/PadToken.sol:PadToken"        # v4
   "0xC5a1f48C03635b83D79667463785bC2c6BcE28cC src/v3/PadTokenV3.sol:PadTokenV3" # v3
   "0x072Fb5A1B65F30d59BcD11BEeD99803675bCE8CC src/v2/PadTokenV2.sol:PadTokenV2" # v2

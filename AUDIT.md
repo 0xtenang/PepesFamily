@@ -15,7 +15,7 @@ PepesFamily is a fixed-supply token launchpad on **Robinhood Chain** (chain ID 4
 
 ## 2. Scope
 
-### In scope: v5 (in review, not deployed)
+### In scope: v5 (receives all new launches, `0xC26003787503b978033427F77047fAF5551Ca8CC`)
 
 v5 = v4 + a per-token split of the 3% chosen at launch (`FeeSplit{creatorBps, holderBps, burnBps}`, sum 300, 0.5% steps, creator ≤ 200, immutable):
 - IMD fee per swap = (400 − burnBps) bps of the trader's gross IMD: 100 protocol, creatorBps to `pendingCreatorFees[token]` (collected by anyone to `creatorPayout[token]`, which only the payout address can change), holderBps to `pendingHolderFees[token]` (as v4).
@@ -23,7 +23,7 @@ v5 = v4 + a per-token split of the 3% chosen at launch (`FeeSplit{creatorBps, ho
 - Launch only through `launchWithSplit` / router `launchWithSplit`; router `launch` uses the default (0, 300, 0). `getTokenInfo` / `getTokens` live in `PepesFamilyLens` (`lens()`).
 - Invariants: the launchpad's ERC-6909 IMD claims ≥ `pendingProtocolFees` + Σ `pendingHolderFees` + Σ `pendingCreatorFees`, and its claims of each token ≥ `pendingBurn[token]`; both are equalities unless someone donates claims to the launchpad (`PoolManager.mint`/transfer to it), which only strands the donor's claims (re-check f963ea4d, 1).
 
-### Live: v4 (receives all new launches until v5 is deployed, `0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc`)
+### Also live: v4 (`0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc`)
 
 v4 is v3 (below) with IMD-only launches and **expiry of unclaimed holder rewards**; same files, same deployment shape:
 

@@ -8,7 +8,18 @@ A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663), bu
 
 Owner and fee recipient for every version: `0x3c8A4d94B3219F6633F2cC94094f4765b30c691C`.
 
-**v4: current. All new launches go here.** v3 plus expiry of unclaimed holder rewards: a wallet inactive for more than 7 days loses rewards older than 7 days to the protocol address, which uses them to buy back and burn $Pepes (see "Launchpad v4" below). IMD-only launches.
+**v5: current. All new launches go here.** v4 plus the creator's choice of where the 3% goes (creator / holders / burn, see "Launchpad v5" below).
+
+| Contract | Address |
+| --- | --- |
+| PepesFamily v5 (launchpad + v4 hook) | [`0xC26003787503b978033427F77047fAF5551Ca8CC`](https://robinhoodchain.blockscout.com/address/0xC26003787503b978033427F77047fAF5551Ca8CC) |
+| PepesFamilyRouter v5 | [`0x515aC666729a73761DA06b323133286C8a968CDf`](https://robinhoodchain.blockscout.com/address/0x515aC666729a73761DA06b323133286C8a968CDf) |
+| PepesFamilyEthRouter v5 | [`0x349059fc128bEe463C1Ee6a732F8201907a78035`](https://robinhoodchain.blockscout.com/address/0x349059fc128bEe463C1Ee6a732F8201907a78035) |
+| PepesFamilyLens v5 (token list) | [`0xd43CE11019393b4C60304978E3d789D316414B20`](https://robinhoodchain.blockscout.com/address/0xd43CE11019393b4C60304978E3d789D316414B20) |
+
+v5 was deployed at block 83983028 from commit `070e0e7` (recorded in `contracts/deployments/robinhood-v5.json`); all four contracts are verified on Sourcify. v5 tokens use the same `PadToken` source as v4.
+
+**v4: still live.** v3 plus expiry of unclaimed holder rewards: a wallet inactive for more than 7 days loses rewards older than 7 days to the protocol address, which uses them to buy back and burn $Pepes (see "Launchpad v4" below). IMD-only launches.
 
 | Contract | Address |
 | --- | --- |
@@ -84,7 +95,7 @@ Pushing rewards into every holder's wallet on every trade isn't possible on-chai
 | `src/PadToken.sol` | The launched ERC20, with pro-rata holder rewards (v4: with 7-day expiry, see below). |
 | `src/v1`, `src/v2`, `src/v3` | Exact token sources of earlier launchpad versions, kept so their tokens can be source-verified. |
 
-### Launchpad v5 (in review, not deployed)
+### Launchpad v5
 
 v5 keeps v4 (IMD pairs, 7-day reward expiry) and lets each creator choose, at launch and forever, where the 3% goes. The 1% protocol fee is unchanged.
 
