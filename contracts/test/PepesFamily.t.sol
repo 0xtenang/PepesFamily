@@ -8,6 +8,10 @@ import {IHooks} from "v4-core/src/interfaces/IHooks.sol";
 import {PoolSwapTest} from "v4-core/src/test/PoolSwapTest.sol";
 import {PoolModifyLiquidityTest} from "v4-core/src/test/PoolModifyLiquidityTest.sol";
 import {TickMath} from "v4-core/src/libraries/TickMath.sol";
+import {FullMath} from "v4-core/src/libraries/FullMath.sol";
+import {StateLibrary} from "v4-core/src/libraries/StateLibrary.sol";
+import {IUnlockCallback} from "v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
 import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {Currency} from "v4-core/src/types/Currency.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation.sol";
@@ -15,6 +19,7 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {PepesFamilyRouter, FeeSplit as RouterSplit} from "../src/PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "../src/PepesFamilyEthRouter.sol";
+import {PepesFamilyLens} from "../src/PepesFamilyLens.sol";
 import {PadToken} from "../src/PadToken.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 import {FlashHolder} from "./FlashHolder.sol";
@@ -24,6 +29,8 @@ import {MockIMD} from "./Mocks.sol";
 /// @notice PepesFamily v4: IMD-only launches, 4% hook fee, and expiry of rewards a wallet leaves unclaimed for
 ///         more than 7 days, which go to the protocol address for a manual $Pepes buyback-and-burn.
 contract PepesFamilyTest is Test {
+    using StateLibrary for IPoolManager;
+
     address constant FEE_RECIPIENT = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
     address constant DEAD = 0x000000000000000000000000000000000000dEaD;
     uint256 constant SUPPLY = 1_000_000_000e18;
@@ -32,6 +39,7 @@ contract PepesFamilyTest is Test {
     PoolManager pm;
     PepesFamily pad;
     PepesFamilyRouter router;
+    PepesFamilyLens lens;
     MockIMD imd;
     PoolSwapTest extRouter; // stands in for Universal Router / aggregators
     PoolSwapTest.TestSettings settings = PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
@@ -66,6 +74,7 @@ contract PepesFamilyTest is Test {
         require(deployed == expected, "hook address");
         pad = PepesFamily(deployed);
         router = PepesFamilyRouter(payable(pad.router()));
+        lens = PepesFamilyLens(pad.lens());
 
         address[4] memory users = [alice, bob, carol, address(this)];
         for (uint256 i; i < users.length; i++) {
@@ -143,7 +152,7 @@ contract PepesFamilyTest is Test {
         assertEq(t.balanceOf(address(pad)), 0);
         assertEq(t.creator(), alice);
         assertEq(t.quote(), address(imd));
-        uint256 mc = pad.marketCap(address(t));
+        uint256 mc = lens.marketCap(address(t));
         assertApproxEqRel(mc, START_MCAP, 0.025e18);
         assertGe(mc, START_MCAP);
     }
@@ -151,14 +160,14 @@ contract PepesFamilyTest is Test {
     function test_launchBothOrderings() public {
         PadToken a = _launchWithOrder(true);
         PadToken b = _launchWithOrder(false);
-        assertApproxEqRel(pad.marketCap(address(a)), START_MCAP, 0.025e18);
-        assertApproxEqRel(pad.marketCap(address(b)), START_MCAP, 0.025e18);
-        uint256 mcA = pad.marketCap(address(a));
-        uint256 mcB = pad.marketCap(address(b));
+        assertApproxEqRel(lens.marketCap(address(a)), START_MCAP, 0.025e18);
+        assertApproxEqRel(lens.marketCap(address(b)), START_MCAP, 0.025e18);
+        uint256 mcA = lens.marketCap(address(a));
+        uint256 mcB = lens.marketCap(address(b));
         _buy(bob, a, 10e18);
         _buy(bob, b, 10e18);
-        assertGt(pad.marketCap(address(a)), mcA);
-        assertGt(pad.marketCap(address(b)), mcB);
+        assertGt(lens.marketCap(address(a)), mcA);
+        assertGt(lens.marketCap(address(b)), mcB);
         _sell(bob, a, a.balanceOf(bob));
         _sell(bob, b, b.balanceOf(bob));
     }
@@ -365,7 +374,7 @@ contract PepesFamilyTest is Test {
         vm.prank(owner);
         pad.setStartTick(address(imd), DeployLib.startTickForMarketCap(300e18));
         PadToken t = _launch();
-        assertApproxEqRel(pad.marketCap(address(t)), 300e18, 0.025e18);
+        assertApproxEqRel(lens.marketCap(address(t)), 300e18, 0.025e18);
 
         vm.startPrank(owner);
         vm.expectRevert(PepesFamily.BadTick.selector);
@@ -1177,7 +1186,7 @@ contract PepesFamilyTest is Test {
         uint256 p0 = pad.pendingProtocolFees(address(imd));
         uint256 c0 = pad.pendingCreatorFees(address(t));
         uint256 h0 = pad.pendingHolderFees(address(t));
-        uint256 d0 = t.balanceOf(DEAD);
+        uint256 d0 = t.balanceOf(DEAD) + pad.pendingBurn(address(t));
         vm.prank(bob);
         extRouter.swap(
             key,
@@ -1190,8 +1199,7 @@ contract PepesFamilyTest is Test {
         m.proto = pad.pendingProtocolFees(address(imd)) - p0;
         m.creator = pad.pendingCreatorFees(address(t)) - c0;
         m.holders = pad.pendingHolderFees(address(t)) - h0;
-        m.burned = t.balanceOf(DEAD) - d0;
-        assertEq(pad.totalBurned(address(t)) >= m.burned, true);
+        m.burned = t.balanceOf(DEAD) + pad.pendingBurn(address(t)) - d0; // burned at the next flush
     }
 
     /// For every split and all four swap kinds, both currency orders: 1% protocol, the creator and holder shares of
@@ -1233,6 +1241,10 @@ contract PepesFamilyTest is Test {
             owed += pad.pendingHolderFees(tok) + pad.pendingCreatorFees(tok);
         }
         assertEq(pm.balanceOf(address(pad), uint256(uint160(address(imd)))), owed, "claims backed");
+        for (uint256 i; i < pad.tokenCount(); i++) {
+            address tok = pad.allTokens(i);
+            assertEq(pm.balanceOf(address(pad), uint256(uint160(tok))), pad.pendingBurn(tok), "burn claims backed");
+        }
     }
 
     function test_split_creatorFeesCollectAndPayout() public {
@@ -1252,6 +1264,12 @@ contract PepesFamilyTest is Test {
         address treasury = makeAddr("creatorTreasury");
         vm.prank(alice);
         pad.setCreatorPayout(tok, treasury);
+        assertEq(pad.creatorPayout(tok), alice, "only proposed");
+        vm.prank(carol);
+        vm.expectRevert(PepesFamily.NotCreator.selector);
+        pad.acceptCreatorPayout(tok);
+        vm.prank(treasury);
+        pad.acceptCreatorPayout(tok);
         _buy(bob, t, 50e18);
         pad.collectCreatorFees(tok);
         assertEq(imd.balanceOf(treasury), 1e18);
@@ -1271,6 +1289,7 @@ contract PepesFamilyTest is Test {
         _sell(bob, t, t.balanceOf(bob));
         uint256 burned = t.balanceOf(DEAD) - dead0;
         assertGt(burned, 0);
+        assertEq(pad.pendingBurn(address(t)), 0, "our router burns on every trade");
         assertEq(burned, pad.totalBurned(address(t)));
         assertEq(t.balanceOf(address(pm)) + t.balanceOf(DEAD), SUPPLY, "every token is in the pool or burned");
         assertEq(pad.pendingProtocolFees(address(imd)) > 0, true);
@@ -1296,5 +1315,142 @@ contract PepesFamilyTest is Test {
         pad.flush(address(t));
         _assertClaimsBacked();
         assertGe(imd.balanceOf(address(t)), t.accountedBalance());
+    }
+
+    // ------------------------------------------------------------ v5 audit (8f96baf6)
+
+    function _limitPast(PadToken t, bool zeroForOne) internal view returns (uint160) {
+        (uint160 p,,,) = IPoolManager(address(pm)).getSlot0(pad.poolKey(address(t)).toId());
+        return zeroForOne ? uint160((uint256(p) * 9_990) / 10_000) : uint160((uint256(p) * 10_010) / 10_000);
+    }
+
+    /// Finding 1: a swap stopped early by its price limit reverts, in every swap kind, instead of paying the fee
+    /// or burn of the whole requested amount.
+    function test_v5audit_partialFillsRevert() public {
+        PadToken t = _launchSplit(0, 150, 150, true);
+        _buy(alice, t, 20e18);
+        _buy(bob, t, 20e18);
+        vm.prank(bob);
+        t.approve(address(extRouter), type(uint256).max);
+        PoolKey memory key = pad.poolKey(address(t));
+        bool[2] memory zfo = [true, false]; // quote is currency0: true = buy, false = sell
+        int256[2][2] memory amounts = [[int256(-100e18), int256(1_000_000_000e18)], [int256(-int256(t.balanceOf(bob))), int256(100e18)]];
+        for (uint256 side; side < 2; side++) {
+            for (uint256 kind; kind < 2; kind++) {
+                uint160 lim = _limitPast(t, zfo[side]);
+                vm.prank(bob);
+                vm.expectRevert(); // PartialFill, wrapped by the PoolManager
+                extRouter.swap(key, SwapParams(zfo[side], amounts[side][kind], lim), settings, "");
+            }
+        }
+        // a limit that is never reached still trades
+        vm.prank(bob);
+        extRouter.swap(key, SwapParams(true, -1e18, _limitPast(t, true) / 2), settings, "");
+    }
+
+    /// Finding 2: one huge sell on a burn token, whose burn exceeds the pool's remaining tokens, goes through.
+    function test_v5audit_hugeSellOnBurnToken() public {
+        PadToken t = _launchSplit(0, 0, 300, true);
+        imd.mint(bob, 10_000e18);
+        _buy(bob, t, 5_000e18);
+        assertGt((t.balanceOf(bob) * 300) / 10_000, t.balanceOf(address(pm)), "the burn is larger than the pool's tokens");
+        _sell(bob, t, t.balanceOf(bob));
+        assertEq(t.balanceOf(bob), 0);
+        assertEq(pad.pendingBurn(address(t)), 0);
+        _assertClaimsBacked();
+    }
+
+    /// Finding 3: a router that syncs the input token before swapping works on burn tokens.
+    function test_v5audit_syncBeforeSwapRouter() public {
+        PadToken t = _launchSplit(0, 0, 300, true);
+        _buy(bob, t, 10e18);
+        SyncFirstRouter sr = new SyncFirstRouter(IPoolManager(address(pm)));
+        vm.startPrank(bob);
+        t.approve(address(sr), type(uint256).max);
+        sr.sellExactIn(pad.poolKey(address(t)), address(t), address(imd), 1e18);
+        vm.stopPrank();
+        assertGt(pad.pendingBurn(address(t)), 0);
+        pad.flush(address(t)); // anyone burns it
+        assertEq(pad.pendingBurn(address(t)), 0);
+        _assertClaimsBacked();
+    }
+
+    /// Finding 4: a token with no holder share never books holder fees, not even rounding dust.
+    function test_v5audit_noHolderDust() public {
+        PadToken t = _launchSplit(200, 0, 100, true);
+        _buy(alice, t, 10e18);
+        vm.prank(bob);
+        extRouter.swap(pad.poolKey(address(t)), SwapParams(true, -1034, TickMath.MIN_SQRT_PRICE + 1), settings, "");
+        assertEq(pad.pendingHolderFees(address(t)), 0);
+        assertGt(pad.pendingCreatorFees(address(t)), 0);
+    }
+
+    /// Finding 5: getTokens(offset, max) returns the tail instead of overflowing.
+    function test_v5audit_lensPaging() public {
+        _launch();
+        _launch();
+        assertEq(lens.getTokens(1, type(uint256).max).length, 1);
+        assertEq(lens.getTokens(0, type(uint256).max).length, 2);
+        assertEq(lens.getTokens(5, 1).length, 0);
+    }
+
+    /// Finding 6: market cap counts the supply that isn't burned.
+    function test_v5audit_marketCapExcludesBurned() public {
+        PadToken t = _launchSplit(0, 0, 300, true);
+        _buy(bob, t, 50e18);
+        _sell(bob, t, t.balanceOf(bob));
+        uint256 burned = pad.totalBurned(address(t));
+        assertGt(burned, 0);
+        (uint160 sqrtP,,,) = IPoolManager(address(pm)).getSlot0(pad.poolKey(address(t)).toId());
+        uint256 full = FullMath.mulDiv(FullMath.mulDiv(SUPPLY, 2 ** 96, sqrtP), 2 ** 96, sqrtP);
+        assertLt(lens.marketCap(address(t)), full);
+        assertApproxEqRel(lens.marketCap(address(t)), (full * (SUPPLY - burned)) / SUPPLY, 1e9);
+    }
+
+    /// Finding 7: a payout typo can be fixed until the new address accepts; proposing 0 cancels.
+    function test_v5audit_payoutTypoRecoverable() public {
+        vm.prank(alice);
+        address tok = pad.launchWithSplit("C", "C", "", address(imd), PepesFamily.FeeSplit(200, 100, 0));
+        vm.prank(alice);
+        pad.setCreatorPayout(tok, address(0xdead0001)); // typo
+        vm.prank(alice);
+        pad.setCreatorPayout(tok, address(0)); // cancel
+        vm.prank(address(0xdead0001));
+        vm.expectRevert(PepesFamily.NotCreator.selector);
+        pad.acceptCreatorPayout(tok);
+        vm.expectRevert(PepesFamily.NotCreator.selector);
+        pad.acceptCreatorPayout(tok); // address(0) can't accept either
+        assertEq(pad.creatorPayout(tok), alice);
+    }
+}
+
+/// @dev A third-party router that syncs the input token before swapping (audit 8f96baf6, finding 3).
+contract SyncFirstRouter is IUnlockCallback {
+    IPoolManager immutable pm;
+
+    constructor(IPoolManager pm_) {
+        pm = pm_;
+    }
+
+    function sellExactIn(PoolKey calldata key, address token, address quote, uint256 amount) external {
+        pm.unlock(abi.encode(msg.sender, key, token, quote, amount));
+    }
+
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        (address user, PoolKey memory key, address token, address quote, uint256 amount) =
+            abi.decode(data, (address, PoolKey, address, address, uint256));
+        bool zeroForOne = Currency.unwrap(key.currency0) == token;
+        pm.sync(Currency.wrap(token));
+        BalanceDelta d = pm.swap(
+            key,
+            SwapParams(zeroForOne, -int256(amount), zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1),
+            ""
+        );
+        int128 tokIn = zeroForOne ? d.amount0() : d.amount1();
+        int128 out = zeroForOne ? d.amount1() : d.amount0();
+        PadToken(payable(token)).transferFrom(user, address(pm), uint256(int256(-tokIn)));
+        pm.settle();
+        pm.take(Currency.wrap(quote), user, uint256(int256(out)));
+        return "";
     }
 }

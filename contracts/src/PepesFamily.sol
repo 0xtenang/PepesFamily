@@ -33,10 +33,12 @@ import {SafeTransfer} from "./lib/SafeTransfer.sol";
 ///           - 3% split as the creator chose at launch (fixed forever), in 0.5% steps:
 ///               creator share, in IMD (at most 2%) -> the token's creator payout address, claimed any time
 ///               holder share, in IMD               -> the token's holders, pro rata (see PadToken)
-///               burn share, in the token itself   -> taken from the token side of the swap and sent to 0x…dEaD
+///               burn share, in the token itself   -> taken from the token side of the swap, burned to 0x…dEaD
 ///         The burn is taken directly from each trade (a buyer receives that share less, a seller pays it on top),
-///         so it needs no market buyer. IMD fees are held as PoolManager ERC-6909 claims until flushed or
-///         collected; PepesFamilyRouter flushes holder fees on every trade.
+///         so it needs no market buyer. During the swap fees and burn are held as PoolManager ERC-6909 claims (no
+///         token balance moves mid-swap); `flush` pays the holder fees and burns the tokens, and PepesFamilyRouter
+///         flushes on every trade. Swaps must fill completely: a swap stopped early by its price limit reverts, so
+///         nobody pays the fee or burn of an amount the pool didn't trade.
 ///         Holder rewards left unclaimed by a wallet inactive for more than 7 days expire and go to
 ///         `feeRecipient`, which uses them to buy back and burn $Pepes (see PadToken).
 /// @dev Must be deployed at an address whose low 14 bits equal `HOOK_FLAGS` (mine a CREATE2 salt).
@@ -57,6 +59,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     error HookNotAllowed();
     error BadSplit();
     error NotCreator();
+    error PartialFill();
 
     event TokenLaunched(
         address indexed token,
@@ -82,6 +85,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     event TokensBurned(address indexed token, uint256 amount);
     event CreatorFeesCollected(address indexed token, address indexed to, uint256 amount);
     event CreatorPayoutUpdated(address indexed token, address payout);
+    event CreatorPayoutProposed(address indexed token, address payout);
     event HolderFeesFlushed(address indexed token, uint256 amount);
     event ProtocolFeesCollected(address indexed quote, address indexed to, uint256 amount);
     event FeeRecipientUpdated(address feeRecipient);
@@ -168,7 +172,11 @@ contract PepesFamily is IHooks, IUnlockCallback {
     mapping(address token => uint256) public pendingCreatorFees;
     /// @notice Where a token's creator fees are paid (the creator at launch; the payout address can hand it on).
     mapping(address token => address) public creatorPayout;
-    /// @notice Tokens burned by trades (the burn share), per token.
+    /// @notice Proposed new creator payout address, which must accept (two-step, so a typo can't lose the fees).
+    mapping(address token => address) public pendingCreatorPayout;
+    /// @notice Burn share taken from trades, held as ERC-6909 claims until `flush` burns it.
+    mapping(address token => uint256) public pendingBurn;
+    /// @notice Tokens burned by trades (the burn share), per token, after `flush`.
     mapping(address token => uint256) public totalBurned;
 
     modifier onlyPoolManager() {
@@ -379,7 +387,19 @@ contract PepesFamily is IHooks, IUnlockCallback {
 
         uint256 fee;
         uint256 burned;
-        if ((exactIn == params.zeroForOne) == quoteIs0) {
+        bool quoteSpecified = (exactIn == params.zeroForOne) == quoteIs0;
+        {
+            // Full fill only: the pool must have traded the whole specified amount (net of the fee taken from it in
+            // beforeSwap), so the specified-side fee and burn always match what was traded (audit 8f96baf6, 1).
+            uint256 spec = quoteSpecified ? poolQuote : poolToken;
+            uint256 specFee;
+            assembly ("memory-safe") {
+                specFee := add(tload(FEE_SLOT), tload(BURN_SLOT))
+            }
+            uint256 amount = exactIn ? uint256(-params.amountSpecified) : uint256(params.amountSpecified);
+            if (exactIn ? spec + specFee < amount : spec < amount + specFee) revert PartialFill();
+        }
+        if (quoteSpecified) {
             assembly ("memory-safe") {
                 fee := tload(FEE_SLOT)
                 tstore(FEE_SLOT, 0)
@@ -428,21 +448,21 @@ contract PepesFamily is IHooks, IUnlockCallback {
         address quote = launches[token].quote;
         FeeSplit memory sp = feeSplit[token];
         uint256 qBps = FEE_BPS - sp.burnBps;
-        uint256 protocolFee = (fee * PROTOCOL_FEE_BPS) / qBps;
         uint256 creatorFee = (fee * sp.creatorBps) / qBps;
-        pendingProtocolFees[quote] += protocolFee;
+        uint256 holderFee = (fee * sp.holderBps) / qBps;
+        // the protocol takes the rounding remainder, so a zero share stays exactly zero (audit 8f96baf6, 4)
+        pendingProtocolFees[quote] += fee - creatorFee - holderFee;
         if (creatorFee != 0) pendingCreatorFees[token] += creatorFee;
-        uint256 holderFee = fee - protocolFee - creatorFee;
         if (holderFee != 0) pendingHolderFees[token] += holderFee;
         poolManager.mint(address(this), Currency.wrap(quote).toId(), fee);
     }
 
-    /// @dev The hook is credited `amount` tokens by the swap; taking them straight to the burn address settles it.
+    /// @dev The hook is credited `amount` tokens by the swap; minting claims settles it without moving any token
+    ///      balance mid-swap. `flush` burns them (audit 8f96baf6, 2 and 3).
     function _burn(address token, uint256 amount) internal {
         if (amount == 0) return;
-        poolManager.take(Currency.wrap(token), DEAD, amount);
-        totalBurned[token] += amount;
-        emit TokensBurned(token, amount);
+        pendingBurn[token] += amount;
+        poolManager.mint(address(this), Currency.wrap(token).toId(), amount);
     }
 
     // ------------------------------------------------------------ Fee flows
@@ -450,7 +470,7 @@ contract PepesFamily is IHooks, IUnlockCallback {
     /// @notice Sends pending holder fees for `token` to the token contract, which spreads them over holders.
     ///         Standalone (opens its own unlock), or inside one of our routers' unlocks (they do it on every trade).
     function flush(address token) external {
-        if (pendingHolderFees[token] == 0) return;
+        if (pendingHolderFees[token] == 0 && pendingBurn[token] == 0) return;
         if (poolManager.isUnlocked()) {
             // Mid-unlock, anyone can flash-borrow the pool's tokens (v4 flash accounting) and would be counted as a
             // holder at distribution time. Only our routers, which control their whole unlock, may distribute here;
@@ -475,12 +495,19 @@ contract PepesFamily is IHooks, IUnlockCallback {
         else poolManager.unlock(abi.encode(ACTION_COLLECT_CREATOR, abi.encode(token)));
     }
 
-    /// @notice The current payout address hands the creator fees of `token` to another address.
+    /// @notice The current payout address proposes another address for the creator fees of `token`; it takes over
+    ///         once it calls `acceptCreatorPayout`. Proposing address(0) cancels.
     function setCreatorPayout(address token, address payout) external {
         if (msg.sender != creatorPayout[token]) revert NotCreator();
-        if (payout == address(0)) revert ZeroAddress();
-        creatorPayout[token] = payout;
-        emit CreatorPayoutUpdated(token, payout);
+        pendingCreatorPayout[token] = payout;
+        emit CreatorPayoutProposed(token, payout);
+    }
+
+    function acceptCreatorPayout(address token) external {
+        if (msg.sender != pendingCreatorPayout[token] || msg.sender == address(0)) revert NotCreator();
+        creatorPayout[token] = msg.sender;
+        pendingCreatorPayout[token] = address(0);
+        emit CreatorPayoutUpdated(token, msg.sender);
     }
 
     function _collectCreator(address token) internal {
@@ -495,6 +522,14 @@ contract PepesFamily is IHooks, IUnlockCallback {
     }
 
     function _flush(address token) internal {
+        uint256 burn = pendingBurn[token];
+        if (burn != 0) {
+            pendingBurn[token] = 0;
+            totalBurned[token] += burn;
+            poolManager.burn(address(this), Currency.wrap(token).toId(), burn);
+            poolManager.take(Currency.wrap(token), DEAD, burn);
+            emit TokensBurned(token, burn);
+        }
         uint256 amount = pendingHolderFees[token];
         if (amount == 0) return;
         pendingHolderFees[token] = 0;
@@ -588,14 +623,6 @@ contract PepesFamily is IHooks, IUnlockCallback {
 
     function tokenCount() external view returns (uint256) {
         return allTokens.length;
-    }
-
-    /// @notice Fully diluted market cap in quote wei at the current pool price.
-    function marketCap(address token) public view returns (uint256) {
-        (uint160 sqrtP,,,) = poolManager.getSlot0(poolKey(token).toId());
-        return launches[token].quoteIsCurrency0
-            ? FullMath.mulDiv(FullMath.mulDiv(TOTAL_SUPPLY, Q96, sqrtP), Q96, sqrtP) // price = tokens per quote
-            : FullMath.mulDiv(FullMath.mulDiv(TOTAL_SUPPLY, sqrtP, Q96), sqrtP, Q96); // price = quote per token
     }
 
     // ------------------------------------------------- Disabled hook paths

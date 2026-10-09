@@ -19,9 +19,9 @@ PepesFamily is a fixed-supply token launchpad on **Robinhood Chain** (chain ID 4
 
 v5 = v4 + a per-token split of the 3% chosen at launch (`FeeSplit{creatorBps, holderBps, burnBps}`, sum 300, 0.5% steps, creator ≤ 200, immutable):
 - IMD fee per swap = (400 − burnBps) bps of the trader's gross IMD: 100 protocol, creatorBps to `pendingCreatorFees[token]` (collected by anyone to `creatorPayout[token]`, which only the payout address can change), holderBps to `pendingHolderFees[token]` (as v4).
-- Burn: burnBps of the trader's gross token amount, taken in the token and sent to `0x…dEaD` with `poolManager.take` during the swap. The specified currency's fee is taken in `beforeSwap` (positive specified delta), the unspecified currency's in `afterSwap` (hook delta), so a swap can pay IMD and burn at the same time.
+- Burn: burnBps of the trader's gross token amount, minted as ERC-6909 token claims to the launchpad during the swap (`pendingBurn`), burned to `0x…dEaD` by `flush`. Swaps must fill completely (`PartialFill` otherwise). Creator payout handover is two-step. The specified currency's fee is taken in `beforeSwap` (positive specified delta), the unspecified currency's in `afterSwap` (hook delta), so a swap can pay IMD and burn at the same time.
 - Launch only through `launchWithSplit` / router `launchWithSplit`; router `launch` uses the default (0, 300, 0). `getTokenInfo` / `getTokens` live in `PepesFamilyLens` (`lens()`).
-- Invariant: the launchpad's ERC-6909 IMD claims = `pendingProtocolFees` + Σ `pendingHolderFees` + Σ `pendingCreatorFees`.
+- Invariants: the launchpad's ERC-6909 IMD claims = `pendingProtocolFees` + Σ `pendingHolderFees` + Σ `pendingCreatorFees`; its claims of each token = `pendingBurn[token]`.
 
 ### Live: v4 (receives all new launches until v5 is deployed, `0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc`)
 

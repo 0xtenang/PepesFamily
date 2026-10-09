@@ -8,6 +8,7 @@ import {PoolKey} from "v4-core/src/types/PoolKey.sol";
 import {PepesFamily} from "../src/PepesFamily.sol";
 import {PepesFamilyRouter, FeeSplit} from "../src/PepesFamilyRouter.sol";
 import {PadToken} from "../src/PadToken.sol";
+import {PepesFamilyLens} from "../src/PepesFamilyLens.sol";
 import {DeployLib} from "../script/DeployLib.sol";
 
 interface IV4Quoter {
@@ -87,7 +88,7 @@ contract ForkTest is Test {
         PadToken t = PadToken(payable(token));
         assertEq(t.balanceOf(bob), out);
         assertEq(pad.pendingProtocolFees(IMD), 1e18);
-        console.log("IMD launch mcap after 100 IMD buy (wei)", pad.marketCap(token));
+        console.log("IMD launch mcap after 100 IMD buy (wei)", PepesFamilyLens(pad.lens()).marketCap(token));
 
         // Uniswap's deployed V4Quoter sees the same price (hook fee included) as our router.
         PoolKey memory key = pad.poolKey(token);

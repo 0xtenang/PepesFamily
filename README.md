@@ -95,10 +95,12 @@ v5 keeps v4 (IMD pairs, 7-day reward expiry) and lets each creator choose, at la
 | Deflationary | 0% | 0% | 3% |
 | Custom | any mix in 0.5% steps, creator at most 2%, total 3% | | |
 
-- **Creator share:** paid in IMD, held as PoolManager claims until anyone calls `collectCreatorFees(token)`, which always pays the token's `creatorPayout` (the creator; the payout address can hand it on with `setCreatorPayout`). Creator fees don't expire.
+- **Creator share:** paid in IMD, held as PoolManager claims until anyone calls `collectCreatorFees(token)`, which always pays the token's `creatorPayout` (the creator). The payout address can hand it on in two steps (`setCreatorPayout`, then `acceptCreatorPayout` by the new address). Creator fees don't expire.
 - **Holder share:** as in v4, including the 7-day expiry.
-- **Burn share:** taken in the token itself from every swap, through any router, and sent to `0x…dEaD` inside the swap: a buyer receives that share less, a seller pays it on top. Nothing is bought on the market, so there is nothing to front-run. The IMD fee is 4% minus the burn share (1% protocol + creator + holders).
-- The hook takes the fee of the swap's specified currency in `beforeSwap` and the other one in `afterSwap`, for all four swap kinds. `getTokenInfo` / `getTokens` moved to `PepesFamilyLens` (deployed by the launchpad, `lens()`) to keep the launchpad under the contract size limit.
+- **Burn share:** taken in the token itself from every swap, through any router: a buyer receives that share less, a seller pays it on top. During the swap it is held as a PoolManager claim; `flush(token)` (run by our routers on every trade, or by anyone) burns it to `0x…dEaD`. Nothing is bought on the market, so there is nothing to front-run. The IMD fee is 4% minus the burn share (1% protocol + creator + holders; rounding goes to the protocol).
+- **Full fills only:** a swap stopped early by its price limit reverts, so nobody pays the fee or burn of an amount the pool didn't trade (this also closes the partial-fill finding open since v3). Our routers always fill completely.
+- The hook takes the fee of the swap's specified currency in `beforeSwap` and the other one in `afterSwap`, for all four swap kinds. `getTokenInfo` / `getTokens` / `marketCap` moved to `PepesFamilyLens` (deployed by the launchpad, `lens()`) to keep the launchpad under the contract size limit; its market cap counts only the supply that isn't burned.
+- IMD Swarm [audit](https://explorer.imd.fun/jobs/8f96baf6-1313-4953-a6ef-e6426feaf795) (1 medium, 2 low, 4 info): all fixed, each with a test.
 - Tests: every split for all four swap kinds in both currency orders, creator fee collection and payout hand-over, a deflationary token with full exits, a split fuzz, claim backing, and a mainnet-fork check that Uniswap's V4Quoter matches the router with the burn included.
 
 ### Launchpad v4
