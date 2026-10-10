@@ -1,0 +1,8 @@
+{
+  "name": "pepesfamily-web",
+  "private": true,
+  "description": "PepesFamily: fair-launch token launchpad on Robinhood Chain and Ethereum (Uniswap v4). The site is static and lives in web/; the build copies it to dist/ for hosts that serve from there.",
+  "scripts": {
+    "build": "node -e \"const fs=require('fs'),path=require('path');fs.rmSync('dist',{recursive:true,force:true});fs.cpSync('web','dist',{recursive:true,filter:(s)=>!['api','vercel.json'].includes(path.basename(s))})\""
+  }
+}
