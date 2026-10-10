@@ -748,6 +748,14 @@ async function ensureChain() {
       chainId: hex, chainName: CONFIG.chainName, rpcUrls: [CONFIG.walletRpc],
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [CONFIG.explorer],
     }] });
+    // Adding a network doesn't always select it (EIP-3085): ask to switch again.
+    if ((await ETH.request({ method: "eth_chainId" })) !== hex) {
+      await ETH.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+    }
+  }
+  // Never continue on another network: the transaction that follows assumes Robinhood Chain.
+  if ((await ETH.request({ method: "eth_chainId" })) !== hex) {
+    throw new Error(`Your wallet is still on another network. Select ${CONFIG.chainName} (chain ID ${CONFIG.chainId}) and try again.`);
   }
 }
 
@@ -818,6 +826,7 @@ async function locked(vault, err) {
 async function enterVault(vault, price) {
   await ensureChain();
   const signer = await new ethers.BrowserProvider(ETH).getSigner();
+  if (Number((await signer.provider.getNetwork()).chainId) !== CONFIG.chainId) throw new Error(`Switch your wallet to ${CONFIG.chainName} and try again.`);
   const pepes = new ethers.Contract(CONFIG.pepes, ERC20_ABI, signer);
   const btn = $("#enter");
   if ((await pepes.allowance(account, CONFIG.vault)) < price) {

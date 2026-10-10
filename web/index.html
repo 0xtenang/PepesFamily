@@ -496,6 +496,36 @@ function feeText(sp) {
   return parts.join(" · ");
 }
 /// Expiry status of a v4 holding: { expired (wei), left (seconds until older rewards start expiring) }.
+/// Rewards of `holder` that expired and were sent away (v4+ tokens and $EARN: RewardsRecycled events). The token's
+/// withdrawnDividends counts them too, so "claimed" = withdrawnDividends - this. Null if the history can't be read.
+const RECYCLED_TOPIC = ethers.id("RewardsRecycled(address,uint256)");
+async function recycledOf(token, holder, ch = CHAINS.robinhood, attempt = 0) {
+  const want = ethers.zeroPadValue(holder, 32).toLowerCase();
+  try {
+    let total = 0n, next = null;
+    for (let page = 0; page < 20; page++) {
+      const r = await fetch(`${ch.blockscoutApi}/addresses/${token}/logs?topic=${RECYCLED_TOPIC}` + (next ? "&" + new URLSearchParams(next) : ""),
+        { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error("blockscout " + r.status);
+      const j = await r.json();
+      for (const i of j.items) if (i.topics[0] === RECYCLED_TOPIC && i.topics[1]?.toLowerCase() === want) total += BigInt(i.data);
+      if (!j.next_page_params) return total;
+      next = j.next_page_params;
+    }
+    return total;
+  } catch {
+    // Blockscout rate-limits bursts (the Rewards page asks for every token at once): retry a couple of times.
+    if (attempt < 2) {
+      await new Promise((r) => setTimeout(r, 800 + Math.random() * 1200));
+      return recycledOf(token, holder, ch, attempt + 1);
+    }
+    // Fallback: the RPC, filtered by holder (works where the node allows the whole range).
+    try {
+      const logs = await ch.reader.getLogs({ address: token, topics: [RECYCLED_TOPIC, want], fromBlock: 0, toBlock: "latest" });
+      return logs.reduce((t, l) => t + BigInt(l.data), 0n);
+    } catch { return null; }
+  }
+}
 async function expiryOf(token, who, ch = CHAINS.robinhood) {
   const t = new ethers.Contract(token, TOKEN_ABI, ch.reader);
   const [last, expired] = await Promise.all([t.lastActive(who), t.expiredRewardsOf(who)]);
@@ -633,7 +663,8 @@ function usd(wei, q) {
 
 // ---------------------------------------------------------------- Helpers
 const $ = (s, el = document) => el.querySelector(s);
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const str = (s) => { try { return typeof s === "string" ? s : String(s ?? ""); } catch { return ""; } };
+const esc = (s) => str(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 const qsym = (q) => (q === ZERO ? "ETH" : "IMD");
 const pill = (q) => `<span class="pill ${q === ZERO ? "eth" : "imd"}">${qsym(q)}</span>`;
@@ -662,7 +693,16 @@ const ago = (ts) => {
   if (s < 86400) return Math.floor(s / 3600) + "h ago";
   return Math.floor(s / 86400) + "d ago";
 };
-function meta(json) { try { const m = JSON.parse(json); return typeof m === "object" && m ? m : {}; } catch { return {}; } }
+/// A token's creator-supplied metadata, keeping only plain string fields: anything else (objects, numbers, arrays)
+/// is dropped, so one odd launch can never break a page.
+function meta(json) {
+  let m;
+  try { m = JSON.parse(json); } catch { return {}; }
+  if (typeof m !== "object" || !m || Array.isArray(m)) return {};
+  const out = {};
+  for (const k of ["image", "description", "website", "x", "telegram"]) if (typeof m[k] === "string") out[k] = m[k];
+  return out;
+}
 function safeUrl(u) {
   if (typeof u !== "string") return "";
   if (u.startsWith("ipfs://")) return IPFS_GATEWAYS[0] + u.slice(7);
@@ -807,10 +847,19 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
           chainId: hex, chainName: ch.name, rpcUrls: [ch.walletRpc],
           nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [ch.explorer],
         }] });
+        // Adding a network doesn't always select it (EIP-3085): ask to switch again.
+        if ((await eth.request({ method: "eth_chainId" })) !== hex) {
+          await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] });
+        }
       } catch (e2) {
         if ((e2?.code ?? 0) === 4001) throw e2;
         throw new Error(`${walletName} couldn't switch to ${ch.name}. Select ${ch.name} in ${walletName} (chain ID ${ch.chainId}) and try again.`);
       }
+    }
+    // Never continue on another network: every wallet write that follows assumes `ch`.
+    if ((await eth.request({ method: "eth_chainId" })) !== hex) {
+      signer = null;
+      throw new Error(`Your wallet is still on another network. Select ${ch.name} in ${walletName} (chain ID ${ch.chainId}) and try again.`);
     }
   }
   WALLET = eth;
@@ -824,12 +873,22 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
   showAdminLink().catch(() => {});
   if (!quiet) route();
 }
-/// Makes sure a wallet is connected on `ch` (switching networks if needed) before an action there.
+/// Makes sure a wallet is connected on `ch` (switching networks if needed) before an action there. Quiet: the page
+/// isn't re-rendered, so the action in progress keeps its form. Ends by asking the wallet itself which network it is
+/// on, and refuses to go on unless it is `ch`, so no transaction is ever requested on the wrong network.
 async function requireWallet(ch = CHAINS.robinhood) {
-  if (!signer) await connect(ch, !!account);
+  if (!signer) await connect(ch, true);
   if (!signer) throw new Error("Connect a wallet first");
-  const net = await signer.provider.getNetwork();
-  if (Number(net.chainId) !== ch.chainId) await connect(ch, true);
+  const want = "0x" + ch.chainId.toString(16);
+  if ((await WALLET.request({ method: "eth_chainId" })) !== want) await connect(ch, true);
+  if (!signer || (await WALLET.request({ method: "eth_chainId" })) !== want) {
+    signer = null;
+    throw new Error(`Switch your wallet to ${ch.name} (chain ID ${ch.chainId}) and try again.`);
+  }
+  // The signer must be bound to `ch` too (it is rebuilt by connect after a switch).
+  if (Number((await signer.provider.getNetwork()).chainId) !== ch.chainId) {
+    signer = await new ethers.BrowserProvider(WALLET).getSigner();
+  }
 }
 $("#connect").onclick = () => connect().catch((e) => toast(errMsg(e), 7000));
 
@@ -1222,7 +1281,9 @@ async function renderHome() {
     const sorted = [...shown].sort(sortMode === "mc"
       ? (a, b) => toUsdNum(b.marketCap, b.quote) - toUsdNum(a.marketCap, a.quote) || (b.marketCap > a.marketCap ? 1 : -1)
       : (a, b) => Number(b.createdAt) - Number(a.createdAt)).slice(0, 60);
-    $("#list").innerHTML = sorted.length ? sorted.map(card).join("")
+    // one card that fails to render (odd creator data) is skipped, never the whole list
+    const safeCard = (i) => { try { return card(i); } catch (e) { console.warn("token card", i.token, e); return ""; } };
+    $("#list").innerHTML = sorted.length ? sorted.map(safeCard).join("")
       : `<div class="card empty" style="grid-column:1/-1">No tokens${chainMode === "all" ? "" : ` on ${esc(CHAINS[chainMode].name)}`} yet. <a href="#/create" style="color:var(--accent)">Launch the first one →</a></div>`;
   };
   $("#sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
@@ -1659,11 +1720,15 @@ async function renderRewards(who) {
     }))).filter(Boolean);
     rows = await Promise.all(infos.map(async ({ t, P }) => {
       const tok = new ethers.Contract(t.token, TOKEN_ABI, P.ch.reader);
-      const [bal, owed, claimed] = await Promise.all([tok.balanceOf(addr), tok.withdrawableDividendOf(addr), tok.withdrawnDividends(addr)]);
+      const [bal, owed, withdrawn] = await Promise.all([tok.balanceOf(addr), tok.withdrawableDividendOf(addr), tok.withdrawnDividends(addr)]);
       // v4: the expired part goes to the protocol on claim, so it is not "ready" for the holder.
       const ex = P.expiry && owed > 0n ? await expiryOf(t.token, addr, P.ch) : null;
       const expired = ex ? ex.expired : 0n;
-      return { t, P, bal, claimable: owed - expired, expired, ex, claimed, earned: owed + claimed };
+      // withdrawnDividends also counts rewards that expired and were sent away: those weren't claimed.
+      const recycled = (P.expiry || P.nft) && withdrawn > 0n ? await recycledOf(t.token, addr, P.ch) : 0n;
+      const lost = recycled ?? 0n;
+      return { t, P, bal, claimable: owed - expired, expired, ex, claimed: withdrawn - lost, lost, lostUnknown: recycled === null,
+        earned: owed + withdrawn };
     }));
   } catch (e) {
     if (seq === rewardsSeq && $("#rw")) $("#rw").innerHTML = `<div class="card" style="margin-top:16px">Couldn't load rewards: ${esc(errMsg(e))}</div>`;
@@ -1700,7 +1765,7 @@ async function renderRewards(who) {
           <td><a href="#/t/${r.t.token}">$${esc(r.t.symbol)}</a> ${pill(r.t.quote)}${chainBadge(r.P)}${r.earned > 0n ? `<div><button class="sharebtn" data-share="${i}" title="Make a share card for $${esc(r.t.symbol)}">Share card</button></div>` : ""}</td>
           <td>${fmt(r.bal)}<div class="stat">${Number((r.bal * 1000000n) / SUPPLY) / 10000}%</div></td>
           <td>${usd(r.earned, r.t.quote)}<div class="stat">${fmt(r.earned, 6)} ${qsym(r.t.quote)}</div></td>
-          <td>${usd(r.claimed, r.t.quote)}</td>
+          <td>${usd(r.claimed, r.t.quote)}${r.lost > 0n ? `<div class="stat">${fmt(r.lost, 4)} ${qsym(r.t.quote)} expired earlier</div>` : ""}${r.lostUnknown ? `<div class="stat">may include expired rewards</div>` : ""}</td>
           <td>${usd(r.claimable, r.t.quote)}${r.ex && r.claimable > 0n ? `<div class="stat ${r.ex.left !== null && r.ex.left < 2 * 86400 ? "warn" : ""}">${r.ex.left === null ? "" : r.ex.left > 0 ? `⏳ claim within ${dur(r.ex.left)}` : "⏳ older rewards expiring: claim now"}</div>` : ""}${r.expired > 0n ? `<div class="stat">${fmt(r.expired, 4)} ${qsym(r.t.quote)} expired</div>` : ""}</td>
           ${mine ? `<td>${r.claimable > 0n ? `<button data-claim="${i}">Claim</button>` : ""}</td>` : ""}
         </tr>`).join("")}</tbody></table>
@@ -2223,6 +2288,9 @@ async function renderNft() {
       : `No NFTs in this wallet yet.${frac ? ` You hold ${fmt(frac)} $EARN: a whole token makes an NFT.` : " Buy one to mint it."}`;
     hydrateNfts($("#mynfts"));
 
+    // withdrawnDividends also counts rewards that expired and were recycled; those weren't claimed
+    const lostN = done > 0n ? await recycledOf(EARN.token, account) : 0n;
+    const claimedN = done - (lostN ?? 0n);
     const now = Date.now() / 1000;
     const expiresAt = Number(last) + 30 * DAY;
     const daysLeft = Math.ceil((expiresAt - now) / DAY);
@@ -2232,7 +2300,7 @@ async function renderNft() {
         ? `<div class="warn-box">${fmt(expired, 6)} IMD (≈ ${usd(expired, q)}) of your rewards expired after 30 days without activity. You can still claim it until someone recycles it into the $Pepes buyback: claim now.</div>`
         : `<div class="stat" style="margin-top:6px">Claim within <b>${daysLeft} day${daysLeft === 1 ? "" : "s"}</b> (or send $EARN, or buy a whole NFT) to keep all of it. After 30 days without activity, older unclaimed rewards buy back and burn $Pepes.</div>`;
     }
-    $("#nrew").innerHTML = `<div style="margin-top:6px">Ready to claim: <b>${fmt(w, 6)} IMD</b>${quoteUsd(q) ? ` (≈ ${usd(w, q)})` : ""}<br>Claimed so far: ${fmt(done, 6)} IMD</div>${clock}
+    $("#nrew").innerHTML = `<div style="margin-top:6px">Ready to claim: <b>${fmt(w, 6)} IMD</b>${quoteUsd(q) ? ` (≈ ${usd(w, q)})` : ""}<br>Claimed so far: ${fmt(claimedN, 6)} IMD${lostN === null ? " (may include expired rewards)" : lostN > 0n ? `<br>Expired earlier: ${fmt(lostN, 6)} IMD (went to the $Pepes buyback)` : ""}</div>${clock}
       <button class="full" id="nclaim" ${w === 0n ? "disabled" : ""} style="margin-top:10px">Claim IMD</button>`;
     $("#nclaim").onclick = async () => {
       try {
@@ -2586,12 +2654,17 @@ async function renderCreate() {
     try {
       const imgErr = await image.ready(); // never launch with an image link that doesn't load: it can't be changed later
       if (imgErr) throw new Error(imgErr);
-      await requireWallet(ch);
+      // Read everything from the form before the wallet is asked anything: connecting must never launch from an
+      // emptied form.
       const m = {};
       const put = (k, id) => { const v = $(id).value.trim(); if (v) m[k] = v; };
       put("image", "#img"); put("description", "#d"); put("website", "#w"); put("x", "#x"); put("telegram", "#tg");
       const amt = ibAmount();
       if ($("#ib").value.trim() && !amt) throw new Error("Enter a valid amount for the initial buy, or leave it empty");
+      const form = { name: $("#n").value.trim(), symbol: $("#s").value.trim() };
+      if (!form.name || !form.symbol) throw new Error("Enter a name and a ticker");
+      await requireWallet(ch);
+      if (!$("#cf")) throw new Error("The page changed. Try again.");
       const ethBuy = pay === "eth" ? amt : 0n, imdBuy = pay === "imd" ? amt : 0n;
       // IMD buy inside the launch: 10% below the previewed amount, so a changed start price can't fill it far worse.
       let minOut = 0n;
@@ -2603,8 +2676,8 @@ async function renderCreate() {
       toast(ethBuy ? "Step 1 of 2: confirm the launch in your wallet…" : "Confirm the launch in your wallet…", 8000);
       if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
       const tx = LAUNCH.split
-        ? await router.launchWithSplit($("#n").value.trim(), $("#s").value.trim(), JSON.stringify(m), quote, [split.c, split.h, split.b], imdBuy, minOut, { value: 0n })
-        : await router.launch($("#n").value.trim(), $("#s").value.trim(), JSON.stringify(m), quote, imdBuy, minOut, { value: 0n });
+        ? await router.launchWithSplit(form.name, form.symbol, JSON.stringify(m), quote, [split.c, split.h, split.b], imdBuy, minOut, { value: 0n })
+        : await router.launch(form.name, form.symbol, JSON.stringify(m), quote, imdBuy, minOut, { value: 0n });
       toast("Launching…", 15000);
       const rc = await tx.wait();
       const ev2 = rc.logs.map((l) => { try { return padR.interface.parseLog(l); } catch { return null; } }).find((l) => l?.name === "TokenLaunched");
@@ -2753,13 +2826,16 @@ async function renderToken(addr) {
   async function loadPosition() {
     if (!account) return;
     const qBalP = q === ZERO ? P.ch.reader.getBalance(account) : new ethers.Contract(q, ERC20_ABI, P.ch.reader).balanceOf(account);
-    const [b, d, w, qb, eb] = await Promise.all([tokR.balanceOf(account), tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), qBalP, P.ch.reader.getBalance(account)]);
+    const [b, d, wd, qb, eb] = await Promise.all([tokR.balanceOf(account), tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), qBalP, P.ch.reader.getBalance(account)]);
+    // withdrawnDividends also counts rewards that expired and were sent away; those weren't claimed
+    const lostR = (P.expiry || P.nft) && wd > 0n ? await recycledOf(addr, account, P.ch) : 0n;
+    const w = wd - (lostR ?? 0n);
     tokBal = b; quoteBal = qb; ethBal = eb;
     const share = Number((b * 1000000n) / SUPPLY) / 10000;
     const ex = P.expiry && d > 0n ? await expiryOf(addr, account, P.ch) : null;
     const ready = ex ? d - ex.expired : d;
     $("#pos").innerHTML = `Holding <b>${fmt(b)}</b> $${esc(info.symbol)} (${share}% of supply)<br/>
-      Claimable: <b>${fmt(ready, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}${ex ? `<br/>${ex.left === null ? "" : ex.left > 0 ? `⏳ Claim within <b>${dur(ex.left)}</b> to keep all of it.` : "⏳ Your older rewards are expiring: claim now to keep the rest."}${ex.expired > 0n ? ` ${fmt(ex.expired, 6)} ${Q} already expired (goes to the $PEPES buyback).` : ""}` : ""}`;
+      Claimable: <b>${fmt(ready, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}${lostR === null ? " (may include expired rewards)" : lostR > 0n ? ` · ${fmt(lostR, 6)} ${Q} expired earlier` : ""}${ex ? `<br/>${ex.left === null ? "" : ex.left > 0 ? `⏳ Claim within <b>${dur(ex.left)}</b> to keep all of it.` : "⏳ Your older rewards are expiring: claim now to keep the rest."}${ex.expired > 0n ? ` ${fmt(ex.expired, 6)} ${Q} already expired (goes to the $PEPES buyback).` : ""}` : ""}`;
     $("#claim").disabled = ready === 0n;
     setSide(tradeSide);
   }
