@@ -122,12 +122,21 @@ h3 { font-weight: 500; font-size: 14px; }
 .avatar.lg { width: 88px; height: 88px; }
 .tcard .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pill { font-size: 10px; letter-spacing: .08em; padding: 1px 6px; border: 1px solid currentColor; text-transform: uppercase; }
-.pill.eth { color: var(--text); } .pill.imd { color: var(--muted); } .pill.chain { color: var(--accent); }
+.pill.eth { color: var(--text); } .pill.imd { color: var(--muted); } .pill.chain { color: var(--text); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .stat { font-size: 12px; color: var(--muted); }
 .stat b { color: var(--text); font-weight: 500; }
 .two { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
 @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+/* Phones: the trade panel comes right after the page header, before stats, charts and lists. */
+@media (max-width: 860px) {
+  .mfirst { display: flex; flex-direction: column; gap: 0; }
+  .mfirst .mflat { display: contents; }
+  .mfirst .mflat > *, .mfirst > .mrest { order: 3; }
+  .mfirst .mflat > .mlead { order: 1; }
+  .mfirst .mside { order: 2; margin: 14px 0; }
+  .mfirst .mside > .card:first-child { margin-top: 0 !important; }
+}
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; margin-top: 16px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
 .stats .card { padding: 14px 16px; border-top: 0; border-left: 0; }
 .stats.q { grid-template-columns: repeat(2, 1fr); }
@@ -218,7 +227,7 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .scr-head b { color: #3ddc84; font-weight: 500; }
 .scr-head .pulse { color: #3ddc84; animation: blink 2s steps(1) infinite; }
 .scr-log { flex: 1; overflow: hidden; padding: 6px 12px; display: flex; flex-direction: column; justify-content: flex-end; }
-.scr-log .ln { display: grid; grid-template-columns: 12px 44px 50px minmax(72px, max-content) 1fr; gap: 8px; white-space: nowrap; line-height: 1.8; color: #8e9b8e; }
+.scr-log .ln { display: grid; grid-template-columns: 12px 44px 50px minmax(72px, max-content) 1fr; gap: 8px; white-space: nowrap; line-height: 24px; min-height: 24px; flex-shrink: 0; align-items: center; color: #8e9b8e; }
 .scr-log a.ln:hover { background: #0e170e; }
 .scr-log .ln > span { overflow: hidden; text-overflow: ellipsis; }
 .scr-log .gt { color: #3ddc84; }
@@ -576,8 +585,8 @@ async function loadPads() {
   await Promise.all(PADS.map(async (P) => {
     try {
       const [a, b] = await Promise.all([P.ch.reader.getCode(P.pad), P.ch.reader.getCode(P.ethRouter)]);
-      P.live = a.length > 2; P.ethLive = b.length > 2;
-    } catch {}
+      P.live = a.length > 2; P.ethLive = b.length > 2; P.readErr = false;
+    } catch { P.readErr = true; } // the chain couldn't be read: unknown, not "not deployed"
   }));
   for (const P of PADS) if (P.live && !P.nft && !LAUNCHES[P.ch.key]) LAUNCHES[P.ch.key] = P;
   LAUNCH = LAUNCHES.robinhood || PADS.find((P) => P.live && !P.nft) || null;
@@ -914,7 +923,9 @@ $("#theme").onclick = () => {
   try { localStorage.setItem("theme", next); } catch {}
 };
 
+let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
 function route() {
+  routeGen++;
   const h = location.hash.slice(1) || "/";
   const navKey = h.startsWith("/t/") ? "/" : h.startsWith("/rewards") ? "/rewards" : h;
   document.querySelectorAll("nav.top a").forEach((a) => a.classList.toggle("on", a.dataset.nav === navKey));
@@ -929,6 +940,18 @@ function route() {
 }
 
 function renderSetup() {
+  // A failed read means the chain's RPC is down or unreachable, which is not the same as no launchpad.
+  if (PADS.some((P) => P.readErr)) {
+    $("#app").innerHTML = `<div class="card empty"><h2>Can't reach the chain right now</h2>
+      <p>The network's public RPC didn't answer, so the launchpad couldn't be loaded. Your tokens and rewards are safe on-chain.</p>
+      <button class="primary" id="reloadchain">Try again</button></div>`;
+    $("#reloadchain").onclick = async () => {
+      $("#reloadchain").disabled = true;
+      await loadPads();
+      route();
+    };
+    return;
+  }
   $("#app").innerHTML = `<div class="card empty"><h2>Not deployed yet</h2>
     <p>No launchpad contract found on-chain. Check <span class="mono">CONFIG.pads</span> and <span class="mono">CONFIG.rpc</span> at the top of this file.</p></div>`;
 }
@@ -1178,6 +1201,14 @@ const Feed = (() => {
     return `<a class="ln${fresh ? " new" : ""}" href="#/t/${t.token}"><span class="gt">&gt;</span><span>${hhmm(e.ts)}</span><span class="ev ${e.kind}">${e.kind}</span><span class="sym">${sym}</span><span>${esc(detail)}</span></a>`;
   }
 
+  /// Shows only the newest rows that fit completely (24px each), so no row is ever cut in half.
+  function wholeRows(log) {
+    const room = Math.max(1, Math.floor((log.clientHeight - 12) / 24));
+    const rows = [...log.children];
+    rows.forEach((el, i) => { el.hidden = i < rows.length - room; });
+  }
+  addEventListener("resize", () => { const log = $("#scr-log"); if (log) wholeRows(log); });
+
   async function tick(first) {
     const log = $("#scr-log");
     if (!log) return stop();
@@ -1195,6 +1226,7 @@ const Feed = (() => {
         log.insertAdjacentHTML("beforeend", fresh.map((e) => line(e, true)).join(""));
         while (log.children.length > 40) log.firstElementChild.remove();
       }
+      wholeRows(log);
     } catch (e) {
       if (first) log.innerHTML = `<div class="ln"><span></span><span></span><span class="ev sell">error</span><span>${esc(errMsg(e))}</span></div>`;
     }
@@ -1221,13 +1253,13 @@ async function renderHome() {
     </div>
     <div class="hero">
       <div><h1>Launch a token on Robinhood Chain or Ethereum</h1>
-      <p>1B fixed supply · liquidity locked forever · paired with $IMD · 3% of every trade paid to holders in IMD</p>
+      <p>1B fixed supply · liquidity locked forever · paired with $IMD · each creator chooses where the 3% fee goes: holders (paid in IMD), creator or burn</p>
       <div class="row" style="margin-top:16px"><a class="btn primary" href="#/create">Launch a token</a><a class="btn" href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source ↗</a></div></div>
     </div>
     ${sec(1, "Platform")}
     <div class="stats" id="totals" style="margin:0">
       <div class="card"><div class="k">Trading volume</div><div class="v" id="tot-volume">…</div><div class="stat" id="tot-volume-sub">all time</div></div>
-      <div class="card"><div class="k">Earned by holders</div><div class="v" id="tot-holders">…</div><div class="stat" id="tot-holders-sub">3% of every trade</div></div>
+      <div class="card"><div class="k">Earned by holders</div><div class="v" id="tot-holders">…</div><div class="stat" id="tot-holders-sub">holders' share of every trade</div></div>
       <div class="card"><div class="k">Protocol fees earned</div><div class="v" id="tot-protocol">…</div><div class="stat" id="tot-protocol-sub">1% of every trade</div></div>
     </div>
     ${sec(2, "Tokens")}
@@ -1451,7 +1483,7 @@ async function loadTotals() {
 
   if (!$("#tot-holders")) return; // not on the home page
   $("#tot-holders").textContent = fmtUsd(toUsd(holders));
-  $("#tot-holders-sub").textContent = `3% of every trade · ${parts(holders)}`;
+  $("#tot-holders-sub").textContent = `holders' share of every trade · ${parts(holders)}`;
   $("#tot-protocol").textContent = approx + fmtUsd(toUsd(proto));
   $("#tot-protocol-sub").textContent = `1% of every trade · ${parts(proto)}`;
   $("#tot-volume").textContent = approx + fmtUsd(toUsd(volume));
@@ -1515,7 +1547,7 @@ async function renderAdmin() {
   const unclaimedUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.unclaimed, x.t.quote), 0), 0);
   const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
-    <div class="hero"><div><h1>Admin</h1><p>Your 1% protocol fees and the holders' 3% rewards, per launchpad version.</p></div></div>
+    <div class="hero"><div><h1>Admin</h1><p>Your 1% protocol fees and the holders' rewards, per launchpad version.</p></div></div>
     <div class="stats" style="margin:0 0 6px">
       <div class="card"><div class="k">Protocol fees to collect</div><div class="v">${fmtUsd(totalUsd)}</div><div class="stat">yours, all versions</div></div>
       <div class="card"><div class="k">Unclaimed by holders</div><div class="v">${fmtUsd(unclaimedUsd)}</div><div class="stat">paid out, holders haven't claimed yet</div></div>
@@ -1691,7 +1723,7 @@ async function renderRewards(who) {
   const mine = !!account && !!addr && addr.toLowerCase() === account.toLowerCase();
   app.innerHTML = `
     <div class="hero"><div><h1>My rewards</h1>
-      <p>Your share of the 3% holder fee on every trade, across every PepesFamily token.</p></div></div>
+      <p>Your share of the holder fee on every trade, across every PepesFamily token. Each token's creator chose how much of its 3% goes to holders.</p></div></div>
     <form class="row" id="rf" style="flex-wrap:nowrap">
       <input id="ra" placeholder="Wallet address 0x…" value="${addr ? esc(addr) : ""}" spellcheck="false" autocomplete="off" aria-label="Wallet address" />
       <button type="submit">View</button>
@@ -1770,7 +1802,7 @@ async function renderRewards(who) {
           ${mine ? `<td>${r.claimable > 0n ? `<button data-claim="${i}">Claim</button>` : ""}</td>` : ""}
         </tr>`).join("")}</tbody></table>
       <p class="stat" style="margin:10px 0 0">Claiming also pays out any fees still waiting for that token, so you may receive slightly more than shown.${rows.some((r) => r.P.expiry) ? " Launchpad v4 tokens: rewards expire after more than 7 days without a claim, buy, sell or send (only what was earned in the last 7 days is kept); expired rewards go to a $PEPES buyback and burn." : ""}</p></div>`
-      : `<div class="card empty">No PepesFamily tokens in this wallet yet. Holders of any token launched here earn 3% of every trade. <a href="#/" style="color:var(--accent)">Browse tokens →</a></div>`}
+      : `<div class="card empty">No PepesFamily tokens in this wallet yet. Holders of tokens launched here earn up to 3% of every trade, depending on the split each creator chose. <a href="#/" style="color:var(--accent)">Browse tokens →</a></div>`}
     ${creatorRows.length ? `${sec(2, "Creator earnings")}
     <div class="card scroll-x"><table>
       <thead><tr><th>Token</th><th>Split</th><th>Waiting</th>${mine ? "<th></th>" : ""}</tr></thead>
@@ -2042,17 +2074,40 @@ function hydrateNfts(root) {
 }
 
 async function showNft(id) {
+  const opener = document.activeElement;
   const m = document.createElement("div");
   m.className = "modal";
-  m.innerHTML = `<div class="card big"><div class="nbig" data-img="${id}"></div><div id="nftinfo" class="stat">Loading…</div><button type="button" data-close="1">Close</button></div>`;
-  m.onclick = (ev) => { if (ev.target === m || ev.target.closest("[data-close]")) m.remove(); };
+  m.innerHTML = `<div class="card big" role="dialog" aria-modal="true" aria-labelledby="nfttitle" tabindex="-1">
+    <span class="h" id="nfttitle" style="margin:0 0 8px">Pepes Earn IMD #${id}</span>
+    <div class="nbig" data-img="${id}"></div><div id="nftinfo" class="stat">Loading…</div><button type="button" data-close="1">Close</button></div>`;
+  const dialog = m.firstElementChild;
+  // Everything behind the dialog is inert while it is open; focus moves in, stays in, and returns on close.
+  const behind = [...document.body.children];
+  behind.forEach((el) => { el.inert = true; });
+  const close = () => {
+    behind.forEach((el) => { el.inert = false; });
+    m.remove();
+    document.removeEventListener("keydown", onKey, true);
+    if (opener && document.contains(opener)) opener.focus();
+  };
+  const onKey = (ev) => {
+    if (ev.key === "Escape") { ev.preventDefault(); return close(); }
+    if (ev.key !== "Tab") return;
+    const f = [...dialog.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (ev.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  };
+  m.onclick = (ev) => { if (ev.target === m || ev.target.closest("[data-close]")) close(); };
+  document.addEventListener("keydown", onKey, true);
   document.body.appendChild(m);
+  dialog.querySelector("[data-close]").focus();
   hydrateNfts(m);
   try {
     const [meta, owner] = await Promise.all([nftMeta(id), new ethers.Contract(EARN.mirror, MIRROR_ABI, reader).ownerAt(id)]);
     const minted = owner !== ZERO;
-    $("#nftinfo", m).innerHTML = `<span class="h" style="margin:4px 0">${esc(meta.name)}</span>
-      <table>${meta.attributes.map((a) => `<tr><td class="muted">${esc(a.trait_type)}</td><td>${esc(a.value)}</td></tr>`).join("")}
+    $("#nftinfo", m).innerHTML = `<table>${meta.attributes.map((a) => `<tr><td class="muted">${esc(a.trait_type)}</td><td>${esc(a.value)}</td></tr>`).join("")}
       <tr><td class="muted">Owner</td><td>${minted ? `<a class="mono" href="${CONFIG.explorer}/address/${owner}" target="_blank" rel="noopener">${short(owner)} ↗</a>` : "Not minted yet: buy from the pool to mint"}</td></tr></table>
       ${minted ? `<a class="stat" href="${CONFIG.explorer}/token/${EARN.mirror}/instance/${id}" target="_blank" rel="noopener" style="text-decoration:underline">View on explorer ↗</a>` : ""}`;
   } catch (e) { $("#nftinfo", m).textContent = errMsg(e); }
@@ -2114,13 +2169,14 @@ async function renderNft() {
   app.innerHTML = `
     <div class="hero"><div><h1>Pepes Earn IMD NFT</h1>
       <p>2,000 on-chain Pepes. 1 $EARN = 1 NFT. Every trade pays 3% to holders in IMD.</p></div></div>
-    <div class="stats" style="margin:0 0 6px">
+    <div class="mfirst">
+    <div class="stats mrest" style="margin:0 0 6px">
       <div class="card"><div class="k">Price per NFT</div><div class="v">${quoteUsd(q) ? fmtUsd(priceImd * quoteUsd(q)) : priceImd.toPrecision(4) + " IMD"}</div><div class="stat">${priceImd.toPrecision(4)} IMD at the pool price</div></div>
       <div class="card"><div class="k">Minted</div><div class="v">${Number(minted).toLocaleString()} / ${EARN_TOTAL.toLocaleString()}</div><div class="stat">NFTs held in wallets</div></div>
       <div class="card"><div class="k">Paid to holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">3% of every trade, in IMD</div></div>
       <div class="card"><div class="k">$Pepes burned</div><div class="v">${fmt(burned)}</div><div class="stat">from expired rewards · ${fmt(recycled)} IMD recycled</div></div>
     </div>
-    <div class="two">
+    <div class="two mflat">
       <div>
         ${sec(1, "My NFTs")}<div id="mynfts" class="card">${account ? "Loading…" : `Connect your wallet to see your NFTs. <button class="primary" id="nftconn" style="margin-left:8px">Connect</button>`}</div>
         ${sec(2, "Collection", `<span class="stat" id="pageinfo"></span>`)}
@@ -2128,7 +2184,7 @@ async function renderNft() {
           <span class="spacer"></span><form id="goto" class="row" style="flex-wrap:nowrap"><input id="gotoid" inputmode="numeric" placeholder="#1–2000" style="width:110px"><button type="submit">View</button></form></div>
         <div id="browse" class="nftgrid"></div>
       </div>
-      <div>
+      <div class="mside">
         <div class="card" style="margin-top:26px">
           <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
           ${P.ethLive ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="nvial">Pay with</span><span class="spacer"></span><div class="seg" id="nvia"><button type="button" data-v="eth">ETH</button><button type="button" data-v="imd">IMD</button></div></div>` : ""}
@@ -2144,6 +2200,7 @@ async function renderNft() {
         ${nftAuditCard("margin-top:14px")}
         ${account ? `<div class="card" style="margin-top:14px" id="nadmin"><span class="h">Community tools</span><div class="stat">Loading…</div></div>` : ""}
       </div>
+    </div>
     </div>
     ${nftHowItWorks(3)}
     <p class="stat">$EARN <a class="mono" href="${CONFIG.explorer}/token/${EARN.token}" target="_blank" rel="noopener">${short(EARN.token)} ↗</a> · NFT <a class="mono" href="${CONFIG.explorer}/token/${EARN.mirror}" target="_blank" rel="noopener">${short(EARN.mirror)} ↗</a> · <a href="#/t/${EARN.token}" style="text-decoration:underline">Trades and chart</a></p>`;
@@ -2538,7 +2595,7 @@ async function renderCreate() {
       <form id="cf">
         ${sec(1, Object.keys(LAUNCHES).length > 1 ? "Chain and pair" : "Pair")}
         ${chainPicker}
-        <div class="row"><span class="pill imd">IMD</span><span class="stat">Every token is paired with $IMD. Holders earn their 3% in IMD; buyers can pay with ETH or IMD.${LAUNCH?.expiry ? " Rewards a holder leaves unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
+        <div class="row"><span class="pill imd">IMD</span><span class="stat">Every token is paired with $IMD; buyers can pay with ETH or IMD. ${LAUNCH?.split ? "Holder rewards are paid in IMD: you choose below how much of the 3% they get (none, with Deflationary)." : "Holders earn 3% of every trade, in IMD."}${LAUNCH?.expiry ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
         ${sec(2, "Describe")}
         <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
@@ -2715,6 +2772,7 @@ let tradeSide = "buy";
 async function renderToken(addr) {
   if (!ethers.isAddress(addr)) return ($("#app").innerHTML = `<div class="card empty">Invalid token address</div>`);
   const app = $("#app");
+  const gen = routeGen, stale = () => gen !== routeGen; // the visitor went elsewhere while this page loaded
   app.innerHTML = `<div class="muted">Loading…</div>`;
   // find which launchpad version created this token (getTokenInfo reverts for tokens it doesn't know)
   let info, P;
@@ -2722,16 +2780,18 @@ async function renderToken(addr) {
   for (const cand of known ? [known, ...livePads().filter((x) => x !== known)] : livePads()) {
     try { info = await cand.v.getTokenInfo(addr); P = cand; break; } catch {}
   }
+  if (stale()) return;
   if (!P) return (app.innerHTML = `<div class="card empty">Token not found on this launchpad.</div>`);
   const sp = await splitOf(P, addr).catch(() => null); // v5: where this token's 3% goes
+  if (stale()) return;
   const p = info, q = info.quote, Q = qsym(q), m = meta(info.metadata);
   const links = [["website", "Website"], ["x", "X"], ["telegram", "Telegram"]]
     .map(([k, l]) => safeUrl(m[k]) ? `<a href="${esc(safeUrl(m[k]))}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "").filter(Boolean).join(" · ");
 
   app.innerHTML = `
-    <div class="two">
-      <div>
-        <div class="card">
+    <div class="two mfirst">
+      <div class="mflat">
+        <div class="card mlead">
           <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap">
             ${avatar(info, "lg")}
             <div style="min-width:0">
@@ -2767,7 +2827,7 @@ async function renderToken(addr) {
         </div>
       </div>
 
-      <div>
+      <div class="mside">
         <div class="card">
           <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
           ${q !== ZERO ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">ETH</button><button type="button" data-v="imd">IMD</button></div></div>` : ""}
@@ -3009,6 +3069,9 @@ function drawChart(pts) {
 
 Promise.all([loadPads(), loadPrices()]).finally(() => {
   route();
+  // A chain whose RPC failed: its tokens are missing for now, so say so rather than hide them silently.
+  const down = [...new Set(PADS.filter((P) => P.readErr).map((P) => P.ch.name))];
+  if (LAUNCH && down.length) toast(`${down.join(" and ")} couldn't be reached: its tokens are missing until you reload.`, 9000);
   // status bar totals on every page (the home page also loads them for its cards)
   if (location.hash.slice(1).replace(/^$/, "/") !== "/") loadTotals().catch(() => {});
 });

@@ -578,9 +578,13 @@ function blocked() {
   const p = POND.clone().applyQuaternion(world.quaternion);
   return arc(p, UP) < 2.75;
 }
+// Visitors who ask for reduced motion get a still planet and clouds while not playing (the game itself still moves
+// when they walk).
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 function update(dt, t) {
-  clouds.rotation.y += dt * 0.02;
-  if (!playing && !intro) { world.rotateOnWorldAxis(v3(0.25, 1, 0.1), dt * 0.12); return; }
+  const still = reduceMotion.matches;
+  if (!still || playing) clouds.rotation.y += dt * 0.02;
+  if (!playing && !intro) { if (!still) world.rotateOnWorldAxis(v3(0.25, 1, 0.1), dt * 0.12); return; }
   if (intro) {
     intro.k = Math.min(1, intro.k + dt / 1.8);
     const e = intro.k < 0.5 ? 2 * intro.k * intro.k : 1 - Math.pow(-2 * intro.k + 2, 2) / 2;
