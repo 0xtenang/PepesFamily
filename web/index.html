@@ -12,7 +12,7 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-<script src="/vendor/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="/js/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
   // theme before first paint: saved choice, else the system setting
   try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
@@ -1448,30 +1448,50 @@ async function loadKing() {
 ///   Protocol: fees already collected (ProtocolFeesCollected events) + fees pending in each launchpad.
 async function loadTotals() {
   const holders = { [ZERO]: 0n, [CONFIG.imd]: 0n };
-  const protocol = { [ZERO]: 0n, [CONFIG.imd]: 0n };
+  const proto = { [ZERO]: 0n, [CONFIG.imd]: 0n };
+  const add = (m, q, w) => { m[q] = (m[q] ?? 0n) + w; };
   let protocolExact = true;
 
   await Promise.all(livePads().map(async (P) => {
     const n = Number(await P.c.tokenCount());
+    // Per quote asset, for this launchpad: holder earnings, and the protocol fees they imply (an estimate used only
+    // if the collection history can't be read). The protocol fee is 1% of each trade; holders get h% of it per the
+    // token's split (3% before v5), so protocol = holder earnings x 1 / h. Tokens paying holders nothing can't be
+    // estimated this way and count as zero there.
+    const estimate = {};
     for (let off = 0; off < n; off += 100) {
-      for (const t of await P.v.getTokens(off, 100)) {
-        holders[t.quote] = (holders[t.quote] ?? 0n) + t.totalDividendsDistributed + t.pendingHolderFees;
-      }
+      const list = await P.v.getTokens(off, 100);
+      const splits = await Promise.all(list.map((t) => splitOf(P, t.token).catch(() => null)));
+      list.forEach((t, i) => {
+        const earned = t.totalDividendsDistributed + t.pendingHolderFees;
+        add(holders, t.quote, earned);
+        const hBps = BigInt(splits[i] ? splits[i].h : 300);
+        if (hBps > 0n) add(estimate, t.quote, (earned * 100n) / hBps);
+      });
     }
+    const pending = {};
     const [pe, pi] = await Promise.all([P.c.pendingProtocolFees(ZERO), P.c.pendingProtocolFees(P.ch.imd)]);
-    protocol[ZERO] += pe; protocol[P.ch.imd] = (protocol[P.ch.imd] ?? 0n) + pi;
+    add(pending, ZERO, pe); add(pending, P.ch.imd, pi);
     try {
+      const collected = {};
       for (const ev of await fetchPadLogs(P, P.c.interface.getEvent("ProtocolFeesCollected").topicHash)) {
         const { quote, amount } = P.c.interface.parseLog(ev).args;
-        protocol[quote] = (protocol[quote] ?? 0n) + amount;
+        add(collected, quote, amount);
       }
-    } catch { protocolExact = false; }
+      for (const [q, w] of Object.entries(pending)) add(proto, q, w);
+      for (const [q, w] of Object.entries(collected)) add(proto, q, w);
+    } catch {
+      // History unavailable: use the estimate, but never less than the pending fees already read.
+      protocolExact = false;
+      for (const q of new Set([...Object.keys(pending), ...Object.keys(estimate)])) {
+        const e = estimate[q] ?? 0n, p = pending[q] ?? 0n;
+        add(proto, q, e > p ? e : p);
+      }
+    }
   }));
 
   const toUsd = (m) => Object.entries(m).reduce((s, [q, wei]) => s + Number(ethers.formatUnits(wei, 18)) * quoteUsd(q), 0);
   const parts = (m) => Object.entries(m).filter(([, w]) => w > 0n).map(([q, w]) => `${fmt(w)} ${qsym(q)}`).join(" + ") || "nothing yet";
-  // If collection history is unavailable, the fixed 1% / 3% split gives the same total from holder earnings.
-  const proto = protocolExact ? protocol : Object.fromEntries(Object.entries(holders).map(([q, w]) => [q, w / 3n]));
   // The protocol fee is exactly 1% of each trade's quote amount, so volume = protocol fees × 100.
   const volume = Object.fromEntries(Object.entries(proto).map(([q, w]) => [q, w * 100n]));
   const approx = protocolExact ? "" : "≈ ";
@@ -2772,7 +2792,9 @@ let tradeSide = "buy";
 async function renderToken(addr) {
   if (!ethers.isAddress(addr)) return ($("#app").innerHTML = `<div class="card empty">Invalid token address</div>`);
   const app = $("#app");
-  const gen = routeGen, stale = () => gen !== routeGen; // the visitor went elsewhere while this page loaded
+  // Each render (a navigation, or the refresh after a trade) takes a new generation, so older loads can tell they
+  // are stale and never write into the page showing now.
+  const gen = ++routeGen, stale = () => gen !== routeGen;
   app.innerHTML = `<div class="muted">Loading…</div>`;
   // find which launchpad version created this token (getTokenInfo reverts for tokens it doesn't know)
   let info, P;
@@ -2856,6 +2878,7 @@ async function renderToken(addr) {
     const [pend, payout, proposed, burned, pendBurn] = await Promise.all([
       P.c.pendingCreatorFees(addr), P.c.creatorPayout(addr), P.c.pendingCreatorPayout(addr), P.c.totalBurned(addr), P.c.pendingBurn(addr),
     ]);
+    if (stale()) return; // another page (or token) is showing now
     const me = account?.toLowerCase();
     const isPayout = me && payout.toLowerCase() === me, isProposed = me && proposed.toLowerCase() === me;
     $("#v5detail").innerHTML = `
@@ -2899,6 +2922,7 @@ async function renderToken(addr) {
     tokBal = b; quoteBal = qb; ethBal = eb;
     const share = Number((b * 1000000n) / SUPPLY) / 10000;
     const ex = P.expiry && d > 0n ? await expiryOf(addr, account, P.ch) : null;
+    if (stale()) return; // another page (or token) is showing now
     const ready = ex ? d - ex.expired : d;
     $("#pos").innerHTML = `Holding <b>${fmt(b)}</b> $${esc(info.symbol)} (${share}% of supply)<br/>
       Claimable: <b>${fmt(ready, 6)} ${Q}</b> · Claimed so far: ${fmt(w, 6)} ${Q}${lostR === null ? " (may include expired rewards)" : lostR > 0n ? ` · ${fmt(lostR, 6)} ${Q} expired earlier` : ""}${ex ? `<br/>${ex.left === null ? "" : ex.left > 0 ? `⏳ Claim within <b>${dur(ex.left)}</b> to keep all of it.` : "⏳ Your older rewards are expiring: claim now to keep the rest."}${ex.expired > 0n ? ` ${fmt(ex.expired, 6)} ${Q} already expired (goes to the $PEPES buyback).` : ""}` : ""}`;
@@ -2938,8 +2962,8 @@ async function renderToken(addr) {
       const out = q !== ZERO && viaEth
         ? await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt)
         : await quoteSwap(P, addr, info.quoteIsCurrency0, buying, amt);
-      if (seq === pvSeq) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${buying ? "$" + info.symbol : payUnit()}`;
-    } catch (e) { if (seq === pvSeq) $("#pv").textContent = "Can't quote this amount"; }
+      if (seq === pvSeq && !stale()) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${buying ? "$" + info.symbol : payUnit()}`;
+    } catch (e) { if (seq === pvSeq && !stale()) $("#pv").textContent = "Can't quote this amount"; }
   }
   $("#amt").oninput = preview;
 
@@ -2983,7 +3007,7 @@ async function renderToken(addr) {
       toast("Transaction sent…", 15000);
       await tx.wait();
       toast(tradeSide === "buy" ? "Bought" : "Sold");
-      renderToken(addr);
+      if (!stale()) renderToken(addr);
     } catch (e) { toast(errMsg(e), 7000); }
     btn.disabled = false;
   };
@@ -3001,7 +3025,7 @@ async function renderToken(addr) {
 
   setSide(tradeSide);
   loadPosition().catch(() => {});
-  loadTrades(P, addr, info).catch((e) => ($("#trades").innerHTML = `<tr><td colspan="5" class="muted">${esc(errMsg(e))}</td></tr>`));
+  loadTrades(P, addr, info, stale).catch((e) => { if (!stale()) $("#trades").innerHTML = `<tr><td colspan="5" class="muted">${esc(errMsg(e))}</td></tr>`; });
 }
 
 /// Trade logs for `addr`, oldest first. Blockscout's API has full history and CORS; the RPC is a fallback
@@ -3039,8 +3063,10 @@ async function fetchTradeLogs(P, addr, createdBlock) {
   }
 }
 
-async function loadTrades(P, addr, info) {
+/// `stale` says the visitor has left this token's page: then nothing is written.
+async function loadTrades(P, addr, info, stale = () => false) {
   const trades = await fetchTradeLogs(P, addr, info.createdBlock);
+  if (stale()) return;
   $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
     <tr><td class="${t.isBuy ? "b" : "s"}">${t.isBuy ? "Buy" : "Sell"}</td>
     <td class="mono"><a href="${P.ch.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
