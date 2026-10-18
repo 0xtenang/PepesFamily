@@ -1040,12 +1040,6 @@ async function renderHall() {
       const vol = $("#sb-vol")?.textContent;
       return { top, events, stats: `${all.length} tokens${vol && vol !== "…" ? ` · ${vol} volume` : ""} · Robinhood + Ethereum` };
     },
-    // Your Pepe: the look of your first Pepes Earn IMD NFT when a wallet is connected, else the classic Pepe.
-    async myLook() {
-      if (!account) return null;
-      const ids = await new ethers.Contract(EARN.token, EARN_ABI, reader).ownedIds(account, 0, 1);
-      return ids.length ? Hall.earnLook(Number(ids[0])) : null;
-    },
     useAsLaunchImage(dataUrl) { HALL_SHOT = dataUrl; try { sessionStorage.setItem("hall:back", "1"); } catch {} location.hash = "#/create"; },
   });
   fit();
