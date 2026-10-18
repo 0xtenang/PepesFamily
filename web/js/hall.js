@@ -159,8 +159,8 @@
     const el = document.createElement("div");
     el.className = "hall";
     el.innerHTML = `
-      <canvas class="hall-c" aria-label="PepesFamily Hall: walk your Pepe to a screen to launch, trade or claim"></canvas>
-      <div class="hall-top"><b>PEPESFAMILY HALL</b><span class="hall-live" id="hlive">reading the chain…</span></div>
+      <canvas class="hall-c" aria-label="PepesFamily: walk your Pepe to a screen to launch, trade or claim"></canvas>
+      <div class="hall-top"><b>PEPESFAMILY</b><span class="hall-live" id="hlive">reading the chain…</span></div>
       <div class="hall-prompt" id="hprompt" hidden></div>
       <div class="hall-help" id="hhelp">WASD / arrows to walk · Shift to run · drag to look · E to use a screen</div>
       <div class="hall-btns"><button type="button" id="hshot" title="Take a picture (C)">📸 Picture</button><button type="button" id="hhelpbtn" aria-label="Help">?</button></div>
@@ -214,12 +214,18 @@
       cg.fillStyle = "#9fb09f"; cg.font = "26px monospace"; cg.fillText(sub, 256, 200);
       const sc = new T.Mesh(new T.PlaneGeometry(1.6, 0.95), new T.MeshBasicMaterial({ map: tex(c) })); sc.position.set(0, 1.62, 0.12); sc.rotation.x = -0.25; g.add(sc);
       const back = new T.Mesh(new T.BoxGeometry(1.75, 1.1, 0.12), toon(0x2a2a2a)); back.position.set(0, 1.6, 0.04); back.rotation.x = -0.25; g.add(back);
-      kiosks.push({ x, z: 1.6, r: 2.3, label: `${label.toLowerCase().replace(/^./, (c) => c.toUpperCase())}: ${sub}`, go: () => api.go(hash) });
+      const k = { x, z: 1.6, r: 2.3, g, label: `${label.toLowerCase().replace(/^./, (c) => c.toUpperCase())}: ${sub}`, go: () => api.go(hash) };
+      kiosks.push(k);
+      return k;
     }
     kiosk(-16, "LAUNCH", "launch a token", "#/create");
-    kiosk(-10.5, "TOKENS", "browse every token", "#/");
+    kiosk(-10.5, "TOKENS", "browse every token", "#/tokens");
     kiosk(10.5, "REWARDS", "claim your IMD", "#/rewards");
     kiosk(16, "NFT", "Pepes Earn IMD", "#/nft");
+    kiosk(5.5, "WORLD", "enter Pepes World", "/world/");
+    // the admin terminal only stands there for the launchpad's owner or fee recipient (see setAdmin)
+    const admin = kiosk(-5.5, "ADMIN", "collect fees", "#/admin");
+    admin.g.visible = false; admin.off = true;
 
     // token booths: the top tokens by market cap, each on its own screen along the wall
     const booths = [];
@@ -255,8 +261,9 @@
     let camYaw = heading, camPitch = 0.12;
     // ---------------- input
     const keys = new Set();
+    let paused = false, drawn = 0;
     const onKey = (e) => {
-      if (e.target.closest?.("input, textarea, select") || !$("hmodal").hidden) return;
+      if (paused || e.target.closest?.("input, textarea, select") || !$("hmodal").hidden) return;
       const k = e.key.toLowerCase();
       if (e.type === "keydown") {
         if (k === "e" || k === "enter") { near?.go(); return; }
@@ -319,7 +326,7 @@
         const a = e.target.closest("[data-a]")?.dataset.a;
         if (e.target === m || a === "close") { m.hidden = true; m.innerHTML = ""; return; }
         if (a === "dl") { const l = document.createElement("a"); l.href = url; l.download = "pepesfamily-hall.png"; l.click(); }
-        if (a === "x") window.open("https://x.com/intent/tweet?text=" + encodeURIComponent("Hanging out in the PepesFamily Hall 🐸\nhttps://pepesfamily.fun/#/hall"), "_blank", "noopener,noreferrer");
+        if (a === "x") window.open("https://x.com/intent/tweet?text=" + encodeURIComponent("Hanging out in the PepesFamily Hall 🐸\nhttps://pepesfamily.fun/"), "_blank", "noopener,noreferrer");
         if (a === "launch") { api.useAsLaunchImage(url); }
       };
       m.onkeydown = (e) => { if (e.key === "Escape") { m.hidden = true; m.innerHTML = ""; } };
@@ -389,6 +396,7 @@
     const ro = new ResizeObserver(resize); ro.observe(el); resize();
     function frame(now) {
       raf = requestAnimationFrame(frame);
+      if (paused && drawn > 30) { last = now; return; } // a window is open over the Hall: hold still (once it has been drawn)
       const dt = Math.min(0.05, (now - last) / 1000); last = now; t0 += dt;
       // movement, relative to where the camera looks
       let fx = 0, fz = 0;
@@ -408,7 +416,7 @@
         pos.x = Math.max(-W / 2 + 1, Math.min(W / 2 - 1, pos.x + dx * 4.2 * speed * dt));
         pos.z = Math.max(1, Math.min(D - 1, pos.z + dz * 4.2 * speed * dt));
         // kiosks are solid
-        for (const k of kiosks) { const ox = pos.x - k.x, oz = pos.z - k.z; if (Math.abs(ox) < 1.1 && Math.abs(oz) < 0.75) pos.z = k.z + 0.75 * Math.sign(oz || 1); }
+        for (const k of kiosks) { if (k.off) continue; const ox = pos.x - k.x, oz = pos.z - k.z; if (Math.abs(ox) < 1.1 && Math.abs(oz) < 0.75) pos.z = k.z + 0.75 * Math.sign(oz || 1); }
         const want = Math.atan2(dx, dz);
         let d = want - heading; d = Math.atan2(Math.sin(d), Math.cos(d)); heading += d * Math.min(1, dt * 10);
         // the camera swings in behind you as you walk away from it
@@ -428,7 +436,7 @@
       // look past your Pepe and a little up, so the wall's screens stay in view
       camera.lookAt(tmp.set(pos.x + Math.sin(camYaw) * 4, 2.6, pos.z + Math.cos(camYaw) * 4));
       // what is within reach
-      const targets = [...kiosks, ...booths.map((b) => b.target).filter(Boolean), { x: 0, z: 1.2, r: 4, label: "The big screen: every launch and trade", go: () => api.go("#/") }];
+      const targets = [...kiosks.filter((k) => !k.off), ...booths.map((b) => b.target).filter(Boolean), { x: 0, z: 1.2, r: 4, label: "The big screen: every launch and trade", go: () => api.go("#/tokens") }];
       let best = null, bd = Infinity;
       for (const tg of targets) { const d = Math.hypot(pos.x - tg.x, pos.z - tg.z); if (d < tg.r && d < bd) { best = tg; bd = d; } }
       if (best !== near) {
@@ -437,13 +445,15 @@
         p.hidden = !near;
         if (near) p.textContent = `${matchMedia("(pointer: coarse)").matches ? "Tap" : "E"} · ${near.label}`;
       }
-      renderer.render(scene, camera);
+      renderer.render(scene, camera); drawn++;
       if ((t0 % 2) < dt) { try { sessionStorage.setItem("hall:pos", JSON.stringify({ x: pos.x, z: pos.z, h: heading })); } catch {} }
     }
     raf = requestAnimationFrame(frame);
 
     state = {
       el,
+      pause(p) { paused = !!p; keys.clear(); joy.x = joy.y = 0; drag = null; drawn = Math.min(drawn, 25); }, // a few more frames: the textures that just loaded
+      setAdmin(on) { admin.off = !on; admin.g.visible = !!on; },
       stop() {
         cancelAnimationFrame(raf); clearInterval(dataTimer); ro.disconnect();
         removeEventListener("keydown", onKey); removeEventListener("keyup", onKey); removeEventListener("blur", onBlur);
@@ -455,10 +465,15 @@
     };
   }
 
+  /// Holds the Hall still (no input, no drawing) while a window is open over it, and lets it go again.
+  function pause(p) { state?.pause(p); }
+  /// Shows or hides the admin terminal.
+  function setAdmin(on) { state?.setAdmin(on); }
+
   function unmount() {
     if (!state) return;
     const s = state; state = null; s.stop();
   }
 
-  window.Hall = { mount, unmount };
+  window.Hall = { mount, unmount, pause, setAdmin };
 })();

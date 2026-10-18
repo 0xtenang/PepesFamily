@@ -41,42 +41,22 @@
 * { box-sizing: border-box; border-radius: 0 !important; }
 [hidden] { display: none !important; } /* layout classes like .row must not override the hidden attribute */
 html, body { background: var(--bg); }
-body { margin: 0; color: var(--text); font: 13px/1.6 "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; padding-bottom: 44px; }
+body { margin: 0; color: var(--text); font: 13px/1.6 "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
 a { color: inherit; text-decoration: none; }
 .mono { font-family: inherit; }
 .muted { color: var(--muted); }
 .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
 
-/* header */
-header { position: sticky; top: 0; z-index: 5; background: var(--bg); }
-header .wrap { display: flex; align-items: center; gap: 18px; height: 64px; }
-.logo { display: flex; border: 1.5px solid var(--strong); font-size: 13px; letter-spacing: .18em; height: 32px; }
-.logo .mk { display: grid; place-items: center; width: 32px; border-right: 1.5px solid var(--strong); font-weight: 600; letter-spacing: 0; }
-.logo .nm { display: grid; place-items: center; padding: 0 12px; background: var(--strong); color: var(--inv); font-weight: 500; }
-nav.top { display: flex; gap: 4px; }
-nav.top a { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; padding: 5px 9px; }
-nav.top a:hover { color: var(--muted); }
-nav.top a.on { background: var(--strong); color: var(--inv); }
 .spacer { flex: 1; }
 #connect { white-space: nowrap; }
 button.icon { border: 0; background: none; color: var(--text); font-size: 15px; padding: 6px; cursor: pointer; }
 @media (max-width: 600px) {
-  /* phones: logo, theme and wallet on the first row; the tabs get their own full-width row below */
-  header .wrap { gap: 8px; flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 8px; }
-  nav.top { order: 3; width: 100%; overflow-x: auto; justify-content: space-between; }
-  nav.top a { white-space: nowrap; }
-  nav.top a { padding: 5px 6px; font-size: 11px; }
   #connect { padding: 7px 10px; }
   #connect.addr { text-transform: none; letter-spacing: 0; }
   h1 { font-size: 24px; }
   .stats:not(.q) { grid-template-columns: 1fr; }
 }
 @media (max-width: 360px) {
-  .logo .nm { display: none; }
-  .logo .mk { border-right: 0; }
-  header .wrap { gap: 4px; }
-  nav.top { gap: 0; }
-  nav.top a { padding: 4px 3px; font-size: 10px; }
   button.icon { padding: 4px; }
   #connect { padding: 6px 7px; font-size: 11px; }
   #connect .a1 { display: none; }
@@ -175,7 +155,6 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .nftc .cap { display: flex; flex-direction: column; padding: 6px 8px; font-size: 12px; line-height: 1.4; }
 .modal .card.big { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
 .warn-box { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--warn); color: var(--text); font-size: 12px; }
-@media (max-width: 860px) { nav.top .nl { display: none; } }
 .koth { border: 1.5px solid var(--strong); margin: 6px 0 14px; }
 .koth-main { display: flex; gap: 16px; align-items: center; padding: 16px; transition: background .12s; }
 .koth-main:hover { background: var(--panel-2); }
@@ -217,8 +196,24 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .status > span:last-child { border-right: 0; border-left: 1px solid var(--line); margin-left: auto; }
 .status b { color: var(--text); font-weight: 500; }
 .status .dot { width: 7px; height: 7px; background: var(--accent); display: inline-block; }
-/* the Hall: a 3D room filling the page between header and status bar */
-body.hall-on main#app { max-width: none; padding: 0; margin: 0; }
+/* the Hall: the whole site, a 3D room filling the screen; pages open as windows over it */
+#world { position: fixed; inset: 0; background: #0b0b0b; }
+#world .hall { height: 100%; }
+.hud { position: fixed; right: 12px; top: 10px; z-index: 7; }
+.hud #connect { background: #050605; color: #3ddc84; border: 1.5px solid #3ddc84; }
+.hud #connect:hover { background: #0e1a12; }
+.win { position: fixed; z-index: 5; top: 58px; bottom: 16px; left: max(16px, calc(50% - 600px)); right: max(16px, calc(50% - 600px));
+  display: flex; flex-direction: column; background: var(--bg); border: 1.5px solid var(--strong); box-shadow: 0 12px 48px rgba(0,0,0,.55); }
+.win-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.win-bar b { letter-spacing: .12em; text-transform: uppercase; font-size: 12px; }
+.win-close { border: 1px solid var(--strong); padding: 5px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+.win-close:hover { background: var(--panel-2); }
+.win #app { flex: 1; overflow: auto; max-width: none; width: 100%; padding: 16px 16px 32px; }
+.win #app > * { max-width: 1088px; margin-left: auto; margin-right: auto; }
+.hall-off { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; color: #e6ede6; }
+.hall-off .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; max-width: 640px; width: 100%; }
+.hall-off a { border: 1.5px solid #3ddc84; color: #3ddc84; padding: 14px; text-align: center; letter-spacing: .08em; }
+@media (max-width: 600px) { .win { top: 52px; bottom: 0; left: 0; right: 0; border-width: 1.5px 0 0; } }
 .hall { position: relative; width: 100%; overflow: hidden; background: #0b0b0b; touch-action: none; }
 .hall [hidden] { display: none !important; }
 .hall-c { display: block; width: 100%; height: 100%; cursor: grab; }
@@ -227,7 +222,7 @@ body.hall-on main#app { max-width: none; padding: 0; margin: 0; }
 .hall-live { color: #3ddc84; background: rgba(0,0,0,.6); padding: 3px 8px; }
 .hall-prompt { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); background: #050605; color: #3ddc84; border: 1.5px solid #3ddc84; padding: 10px 16px; font-size: 14px; cursor: pointer; white-space: nowrap; }
 .hall-help { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); color: #9aa79a; background: rgba(0,0,0,.6); padding: 4px 10px; font-size: 12px; text-align: center; max-width: calc(100% - 24px); }
-.hall-btns { position: absolute; right: 12px; top: 10px; display: flex; gap: 8px; }
+.hall-btns { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 8px; }
 .hall-btns button { background: #050605; color: #e6ede6; border: 1px solid #3a4a3a; }
 .hall-joy { position: absolute; left: 22px; bottom: 54px; width: 110px; height: 110px; border-radius: 50% !important; border: 2px solid rgba(255,255,255,.35); background: rgba(0,0,0,.25); touch-action: none; }
 .hall-knob { position: absolute; left: 33px; top: 33px; width: 44px; height: 44px; border-radius: 50% !important; background: rgba(61,220,132,.75); }
@@ -235,66 +230,21 @@ body.hall-on main#app { max-width: none; padding: 0; margin: 0; }
 .hall-card { background: var(--bg); border: 1.5px solid var(--strong); padding: 14px; max-width: 760px; width: 100%; }
 .hall-card img { width: 100%; display: block; border: 1px solid var(--line); }
 .hall-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
-.hall-back { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 6; background: #050605; color: #3ddc84; border: 1.5px solid #3ddc84; padding: 8px 14px; font-size: 13px; }
 @media (max-width: 600px) { .hall-top .hall-live { display: none; } .hall-prompt { bottom: 180px; } .hall-help { top: 48px; bottom: auto; } }
-
-/* home scene: control wall + live screen + frog */
-.scene { position: relative; height: clamp(380px, 50vw, 560px); margin: 6px 0 28px; border: 1.5px solid var(--strong); overflow: hidden; background: var(--panel-2); }
-.scene canvas.wall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.screen { position: absolute; left: 50%; top: 6%; transform: translateX(-50%); width: min(720px, calc(100% - 32px)); height: 60%;
-  background: #050605; border: 5px solid var(--frame); outline: 1.5px solid #1b1b1b; color: #9aa79a; font-size: 12px;
-  display: flex; flex-direction: column; z-index: 1; }
-.scr-head { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid #1d261d; color: #6f7d6f; white-space: nowrap; overflow: hidden; }
-.scr-head b { color: #3ddc84; font-weight: 500; }
-.scr-head .pulse { color: #3ddc84; animation: blink 2s steps(1) infinite; }
-.scr-log { flex: 1; overflow: hidden; padding: 6px 12px; display: flex; flex-direction: column; justify-content: flex-end; }
-.scr-log .ln { display: grid; grid-template-columns: 12px 44px 50px minmax(72px, max-content) 1fr; gap: 8px; white-space: nowrap; line-height: 24px; min-height: 24px; flex-shrink: 0; align-items: center; color: #8e9b8e; }
-.scr-log a.ln:hover { background: #0e170e; }
-.scr-log .ln > span { overflow: hidden; text-overflow: ellipsis; }
-.scr-log .gt { color: #3ddc84; }
-.scr-log .ev.launch { color: #ffffff; } .scr-log .ev.buy { color: #3ddc84; } .scr-log .ev.sell { color: #ff7b72; }
-.scr-log .sym { color: #e6ede6; }
-.scr-log .new { animation: appear .5s ease-out; }
-@keyframes appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-.scr-input { margin: 0 12px 10px; border: 1px solid #1f5e35; padding: 5px 10px; color: #3ddc84; font-size: 12px; }
-.scr-input:hover { background: #0e170e; }
-.cur { animation: blink 1s steps(1) infinite; }
-@keyframes blink { 50% { opacity: 0; } }
-.crowd { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-.pepe { position: absolute; }
-.pepe svg { width: 100%; height: auto; display: block; transform-origin: 50% 100%; animation: bob var(--dur, 5s) ease-in-out infinite; animation-delay: var(--d, 0s); }
-@keyframes bob { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1.5deg); } }
-@media (prefers-reduced-motion: reduce) { .pepe svg, .cur, .scr-head .pulse, .scr-log .new { animation: none; } }
-@media (max-width: 600px) {
-  .screen { top: 4%; height: 64%; font-size: 11px; }
-  .scr-log .ln { grid-template-columns: 40px 38px minmax(60px, max-content) 1fr; gap: 6px; }
-  .scr-log .ln .gt { display: none; }
-  .scr-head .wide { display: none; }
-}
 
 </style>
 </head>
 <body>
-<header>
-  <div class="wrap">
-    <a class="logo" href="#/" aria-label="PepesFamily home"><span class="mk">P</span><span class="nm">PEPESFAMILY</span></a>
-    <nav class="top">
-      <a href="#/" data-nav="/">Tokens</a>
-      <a href="#/create" data-nav="/create">Launch</a>
-      <a href="#/rewards" data-nav="/rewards">Rewards</a>
-      <a href="#/hall" data-nav="/hall">Hall</a>
-      <a href="#/nft" data-nav="/nft"><span class="nl">Pepes Earn IMD </span>NFT</a>
-      <a href="/world/">World</a>
-      <a href="#/admin" data-nav="/admin" id="adminlink" style="display:none">Admin</a>
-    </nav>
-    <span class="spacer"></span>
-    <button class="icon" id="theme" aria-label="Toggle light / dark">◐</button>
-    <button id="connect">Connect</button>
-  </div>
-</header>
-<main class="wrap" id="app"></main>
+<!-- The whole site is the Hall: a 3D room you walk around in. Every page (launch, a token, the token list,
+     rewards, the NFT, admin) opens as a window over it from a kiosk or a token's screen; there is no other menu. -->
+<div id="world"></div>
+<div class="hud"><button id="connect">Connect</button></div>
+<section class="win" id="win" hidden role="dialog" aria-modal="true" aria-labelledby="wintitle">
+  <div class="win-bar"><b id="wintitle"></b><span class="spacer"></span><a class="win-close" href="#/" id="winclose">✕ Back to the Hall</a></div>
+  <main class="wrap" id="app"></main>
+</section>
 <div class="toast" id="toast"></div>
-<footer class="status">
+<footer class="status" hidden><!-- not shown: the Hall reads its numbers -->
   <span><b id="sb-vol">…</b> volume</span>
   <span><b id="sb-hold">…</b> paid to holders</span>
   <span>ETH <b id="sb-eth">…</b></span>
@@ -848,6 +798,7 @@ function listen(eth) {
   listening = eth;
   eth.on?.("accountsChanged", (accs) => {
     signer = null; account = null; $("#connect").textContent = "Connect"; $("#connect").classList.remove("addr");
+    IS_ADMIN = false; window.Hall?.setAdmin(false);
     if (accs?.length) connect().catch(() => {});
   });
   // Switching network inside the wallet: the signer is rebuilt for the new network before the next action.
@@ -938,35 +889,46 @@ window.addEventListener("hashchange", route);
 const sec = (n, title, extra = "") =>
   `<div class="sec"><span class="n">${String(n).padStart(2, "0")}</span><span class="t">${esc(title)}</span><span class="rule"></span>${extra}</div>`;
 
-$("#theme").onclick = () => {
-  const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#000000";
-  const next = dark ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("theme", next); } catch {}
-};
-
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
+/// What each address opens: the window's title (everything but "/" opens a window over the Hall).
+function windowTitle(h) {
+  if (h.startsWith("/t/")) return "Token";
+  if (h === "/create") return "Launch a token";
+  if (h === "/tokens") return "Tokens";
+  if (h === "/admin") return "Admin";
+  if (h === "/rewards" || h.startsWith("/rewards/")) return "Rewards";
+  if (h === "/nft") return "Pepes Earn IMD NFT";
+  return null;
+}
 function route() {
   routeGen++;
-  const h = location.hash.slice(1) || "/";
-  // leaving the Hall: stop it; visiting a page from one of its screens: offer the way back
-  if (h !== "/hall") { window.Hall?.unmount(); document.body.classList.remove("hall-on"); }
-  let back = false;
-  try { back = h !== "/hall" && sessionStorage.getItem("hall:back") === "1"; if (h === "/hall") sessionStorage.removeItem("hall:back"); } catch {}
-  $("#hallback")?.remove();
-  if (back) document.body.insertAdjacentHTML("beforeend", `<a class="hall-back" id="hallback" href="#/hall">← Back to the Hall</a>`);
-  const navKey = h.startsWith("/t/") ? "/" : h.startsWith("/rewards") ? "/rewards" : h;
-  document.querySelectorAll("nav.top a").forEach((a) => a.classList.toggle("on", a.dataset.nav === navKey));
-  Scene.unmount(); Feed.stop(); // the home page restarts them
+  let h = location.hash.slice(1) || "/";
+  if (h === "/hall") h = "/"; // old links to the Hall
+  renderHall(); // the world is always there (mounted once)
+  const title = LAUNCH ? windowTitle(h) : "PepesFamily";
+  const win = $("#win");
+  if (!title) {
+    win.hidden = true; $("#app").innerHTML = "";
+    window.Hall?.pause(false);
+    return;
+  }
+  $("#wintitle").textContent = title;
+  win.hidden = false;
+  $("#app").scrollTop = 0;
+  window.Hall?.pause(true);
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
-  if (h === "/hall") return renderHall();
   if (h === "/admin") return renderAdmin();
-  if (h === "/rewards" || h.startsWith("/rewards/")) return renderRewards(h.slice(9) || null);
+  if (h.startsWith("/rewards")) return renderRewards(h.slice(9) || null);
   if (h === "/nft") return renderNft();
   return renderHome();
 }
+// Esc closes the window (unless it is closing something inside it, like a menu or a field being edited)
+addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || $("#win").hidden || e.defaultPrevented || e.target.closest?.("input, textarea, select")) return;
+  location.hash = "#/";
+});
 
 function renderSetup() {
   // A failed read means the chain's RPC is down or unreachable, which is not the same as no launchpad.
@@ -1009,48 +971,49 @@ function imageOf(info) {
   const ipfs = ipfsPath(raw.trim());
   return ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw) || "";
 }
+let hallMounted = false;
 async function renderHall() {
-  const app = $("#app");
-  document.body.classList.add("hall-on");
-  app.innerHTML = `<div class="muted" style="padding:16px">Opening the Hall…</div>`;
+  if (hallMounted) return;
+  hallMounted = true;
+  const world = $("#world");
+  world.innerHTML = `<div class="hall-off">Opening the Hall…</div>`;
+  const fallback = (why) => {
+    // no 3D here (no WebGL, or the scripts didn't load): the same places, as plain links
+    world.innerHTML = `<div class="hall-off"><div><p>${esc(why)}</p><div class="grid">
+      <a href="#/create">LAUNCH</a><a href="#/tokens">TOKENS</a><a href="#/rewards">REWARDS</a><a href="#/nft">NFT</a><a href="/world/">WORLD</a></div></div></div>`;
+  };
   try {
+    if (!document.createElement("canvas").getContext("webgl2") && !document.createElement("canvas").getContext("webgl")) throw new Error("This browser can't show the 3D Hall.");
     await scriptOnce("/js/three-0.160.0.min.js", "sha512-vnmn/Qqn6aG0POAc9mIGzjq0IybrvxJXYDafNvp9JSnDGxeF3pbkSqLvf+YGd5ku63pT7sa/jxHn7/d0mU8+tA==");
     await scriptOnce("/js/hall.js");
-  } catch (e) { return (app.innerHTML = `<div class="card empty">${esc(errMsg(e))}</div>`); }
-  if ((location.hash.slice(1) || "/") !== "/hall") return;
-  app.innerHTML = "";
-  const fit = () => {
-    const hd = document.querySelector("header")?.offsetHeight || 0, ft = document.querySelector("footer.status")?.offsetHeight || 0;
-    const el = app.querySelector(".hall"); if (el) el.style.height = Math.max(320, innerHeight - hd - ft) + "px";
-  };
-  Hall.mount(app, {
-    go(hash) { try { sessionStorage.setItem("hall:back", "1"); } catch {} location.hash = hash; },
-    async data() {
-      const all = (await allTokenInfos()).filter(({ t }) => isListed(t));
-      const top = [...all].sort((a, b) => toUsdNum(b.t.marketCap, b.t.quote) - toUsdNum(a.t.marketCap, a.t.quote))
-        .slice(0, 6).map(({ t }) => ({ token: t.token, symbol: t.symbol, mc: usd(t.marketCap, t.quote), image: imageOf(t) }));
-      const bySym = new Map(all.map(({ t }) => [t.token.toLowerCase(), t]));
-      const hhmm = (sec) => new Date(sec * 1000).toTimeString().slice(0, 5);
-      const trades = await Feed.recentTrades().catch(() => []);
-      const events = [
-        ...all.map(({ t }) => ({ ts: Number(t.createdAt), kind: "launch", t, detail: `${qsym(t.quote)} pair · MC ${usd(t.marketCap, t.quote)}` })),
-        ...trades.map((e) => ({ ts: e.ts, kind: e.kind, t: bySym.get(e.token.toLowerCase()), detail: `${fmt(e.a.tokenAmount)} · ${usd(e.a.quoteAmount, bySym.get(e.token.toLowerCase())?.quote ?? ZERO)}` })),
-      ].filter((e) => e.t).sort((a, b) => a.ts - b.ts).slice(-12)
-        .map((e) => ({ time: hhmm(e.ts), kind: e.kind, sym: "$" + e.t.symbol, detail: e.detail }));
-      const vol = $("#sb-vol")?.textContent;
-      return { top, events, stats: `${all.length} tokens${vol && vol !== "…" ? ` · ${vol} volume` : ""} · Robinhood + Ethereum` };
-    },
-    useAsLaunchImage(dataUrl) { HALL_SHOT = dataUrl; try { sessionStorage.setItem("hall:back", "1"); } catch {} location.hash = "#/create"; },
-  });
-  fit();
-  addEventListener("resize", fit);
+    world.innerHTML = "";
+    Hall.mount(world, {
+      go(to) { if (to.startsWith("#")) location.hash = to; else location.href = to; },
+      async data() {
+        if (!LAUNCH) return { top: [], events: [], stats: "launchpad not reachable" };
+        const all = (await allTokenInfos()).filter(({ t }) => isListed(t));
+        const top = [...all].sort((a, b) => toUsdNum(b.t.marketCap, b.t.quote) - toUsdNum(a.t.marketCap, a.t.quote))
+          .slice(0, 6).map(({ t }) => ({ token: t.token, symbol: t.symbol, mc: usd(t.marketCap, t.quote), image: imageOf(t) }));
+        const bySym = new Map(all.map(({ t }) => [t.token.toLowerCase(), t]));
+        const hhmm = (sec) => new Date(sec * 1000).toTimeString().slice(0, 5);
+        const trades = await Feed.recentTrades().catch(() => []);
+        const events = [
+          ...all.map(({ t }) => ({ ts: Number(t.createdAt), kind: "launch", t, detail: `${qsym(t.quote)} pair · MC ${usd(t.marketCap, t.quote)}` })),
+          ...trades.map((e) => ({ ts: e.ts, kind: e.kind, t: bySym.get(e.token.toLowerCase()), detail: `${fmt(e.a.tokenAmount)} · ${usd(e.a.quoteAmount, bySym.get(e.token.toLowerCase())?.quote ?? ZERO)}` })),
+        ].filter((e) => e.t).sort((a, b) => a.ts - b.ts).slice(-12)
+          .map((e) => ({ time: hhmm(e.ts), kind: e.kind, sym: "$" + e.t.symbol, detail: e.detail }));
+        const vol = $("#sb-vol")?.textContent;
+        return { top, events, stats: `${all.length} tokens${vol && vol !== "…" ? ` · ${vol} volume` : ""} · Robinhood + Ethereum` };
+      },
+      useAsLaunchImage(dataUrl) { HALL_SHOT = dataUrl; location.hash = "#/create"; },
+    });
+    Hall.setAdmin(IS_ADMIN);
+    Hall.pause(!$("#win").hidden);
+  } catch (e) { fallback(errMsg(e)); }
 }
 let HALL_SHOT = null; // a picture taken in the Hall, waiting to become the next launch's image
 
-// ---------------------------------------------------------------- Home
-// ---------------------------------------------------------------- Home scene
-// A procedurally drawn wall of instrument panels (canvas), a live "terminal" of launches and trades, and a crowd of
-// frogs watching it. The wall layout is seeded, so it is the same on every visit; only the gauges move.
+// ---------------------------------------------------------------- Token list
 // One frog seen from behind (original drawing): big lumpy green head with two eye bumps, blue shirt, tan shorts.
 const FROG_SVG = `<svg viewBox="0 0 100 122" aria-hidden="true">
   <path d="M34 106 L34 116 M45 106 L45 116 M55 106 L55 116 M66 106 L66 116" stroke="#3b2a14" stroke-width="2"/>
@@ -1065,206 +1028,8 @@ const FROG_SVG = `<svg viewBox="0 0 100 122" aria-hidden="true">
   <path d="M30 50 Q50 56 70 50" stroke="#4a8a37" stroke-width="2" fill="none" stroke-linecap="round"/>
 </svg>`;
 
-const Scene = (() => {
-  const LIGHT = { wall: "#b9b9b6", panel: "#dcdcd9", ink: "#1b1b1b", green: "#3ddc84", dark: "#0c0f0c", lit: "#1b1b1b" };
-  const DARK = { wall: "#030403", panel: "#0d0f0d", ink: "#8e998e", green: "#3ddc84", dark: "#000000", lit: "#3ddc84" };
-  let C = LIGHT;
-  const isDark = () => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#000000";
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let canvas, ctx, crowdEl, mods = [], specks = [], W = 0, H = 0, raf = 0, last = 0, visible = true, ro, io;
-  const rng = (seed) => { let s = seed >>> 0; return () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296); };
-  const h01 = (a) => { const v = Math.sin(a * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
-  const TYPES = ["knobs", "leds", "meter", "scope", "eq", "digits", "sliders", "grill", "dial", "buttons", "leds", "knobs"];
-  const floorH = () => Math.max(36, Math.round(H * 0.11));
-
-  function layout() {
-    const r = rng(7);
-    mods = [];
-    const cell = W < 600 ? 15 : 20, wallH = H - floorH();
-    for (let y = 3; y < wallH - cell; ) {
-      const h = Math.min(cell * (2 + Math.floor(r() * 4)), wallH - y - 3);
-      for (let x = 3; x < W - cell; ) {
-        const w = Math.min(cell * (2 + Math.floor(r() * 6)), W - x - 3);
-        mods.push({ x, y, w: w - 3, h: h - 3, t: TYPES[Math.floor(r() * TYPES.length)], s: r(), hl: r() < 0.07 });
-        x += w;
-      }
-      y += h;
-    }
-    specks = Array.from({ length: Math.round(W / 2.5) }, () => [r(), r(), r()]);
-  }
-
-  function circle(x, y, r, fill) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); fill ? ctx.fill() : ctx.stroke(); }
-
-  function mod(m, t) {
-    const { x, y, w, h, s } = m;
-    ctx.fillStyle = C.panel; ctx.fillRect(x, y, w, h);
-    ctx.lineWidth = 1.5; ctx.strokeStyle = m.hl ? C.green : C.ink; ctx.strokeRect(x + 0.75, y + 0.75, w - 1.5, h - 1.5);
-    const p = 5, ix = x + p, iy = y + p, iw = w - 2 * p, ih = h - 2 * p;
-    if (iw < 6 || ih < 6) return;
-    ctx.strokeStyle = C.ink; ctx.fillStyle = C.ink; ctx.lineWidth = 1.3;
-    switch (m.t) {
-      case "knobs": {
-        const r = Math.max(3, Math.min(ih / 2 - 1, 9)), n = Math.max(1, Math.floor(iw / (r * 2 + 7)));
-        for (let i = 0; i < n; i++) {
-          const cx = ix + (i + 0.5) * (iw / n), cy = iy + ih / 2, a = s * 9 + i * 1.9;
-          circle(cx, cy, r);
-          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.stroke();
-        }
-        break;
-      }
-      case "leds": {
-        const sz = 5, g = 4, cols = Math.floor(iw / (sz + g)), rows = Math.floor(ih / (sz + g));
-        for (let i = 0; i < cols * rows; i++) {
-          const lx = ix + (i % cols) * (sz + g), ly = iy + Math.floor(i / cols) * (sz + g);
-          if (h01(i + s * 999 + Math.floor(t * 1.5 + s * 7)) < 0.28) { ctx.fillStyle = m.hl ? C.green : C.lit; ctx.fillRect(lx, ly, sz, sz); }
-          else ctx.strokeRect(lx + 0.5, ly + 0.5, sz - 1, sz - 1);
-        }
-        break;
-      }
-      case "meter": {
-        const cx = ix + iw / 2, cy = iy + ih * 0.9, r = Math.min(iw / 2, ih * 0.8);
-        ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
-        for (let k = 0; k <= 6; k++) { const a = Math.PI * (1.15 + k * 0.7 / 6); ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.lineTo(cx + Math.cos(a) * (r - 4), cy + Math.sin(a) * (r - 4)); ctx.stroke(); }
-        const a = Math.PI * (1.2 + 0.6 * (0.5 + 0.45 * Math.sin(t * 1.1 + s * 20)));
-        ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * (r - 2), cy + Math.sin(a) * (r - 2)); ctx.stroke();
-        break;
-      }
-      case "scope": {
-        ctx.fillStyle = C.dark; ctx.fillRect(ix, iy, iw, ih);
-        ctx.strokeStyle = C.green; ctx.lineWidth = 1.4; ctx.beginPath();
-        for (let k = 0; k <= iw; k += 2) {
-          const yy = iy + ih / 2 + Math.sin(k * (0.08 + s * 0.1) + t * 3 + s * 30) * ih * 0.32 * (0.6 + 0.4 * Math.sin(t + s * 5));
-          k ? ctx.lineTo(ix + k, yy) : ctx.moveTo(ix + k, yy);
-        }
-        ctx.stroke();
-        break;
-      }
-      case "eq": {
-        const n = Math.max(3, Math.floor(iw / 6));
-        for (let i = 0; i < n; i++) {
-          const bh = ih * (0.2 + 0.8 * Math.abs(Math.sin(t * 2.2 + i * 1.7 + s * 13)));
-          ctx.fillRect(ix + i * (iw / n), iy + ih - bh, Math.max(2, iw / n - 2), bh);
-        }
-        break;
-      }
-      case "digits": {
-        ctx.fillStyle = C.dark; ctx.fillRect(ix, iy, iw, ih);
-        ctx.fillStyle = C.green; ctx.font = `${Math.max(8, Math.min(ih * 0.62, 18))}px "IBM Plex Mono", monospace`;
-        ctx.textBaseline = "middle";
-        const d = new Date(), txt = s < 0.5
-          ? [d.getHours(), d.getMinutes(), d.getSeconds()].map((v) => String(v).padStart(2, "0")).join(":")
-          : String(Math.floor(s * 900000 + t * 3)).slice(-6);
-        ctx.save(); ctx.beginPath(); ctx.rect(ix, iy, iw, ih); ctx.clip(); ctx.fillText(txt, ix + 4, iy + ih / 2 + 1); ctx.restore();
-        break;
-      }
-      case "sliders": {
-        const n = Math.max(2, Math.floor(iw / 12));
-        for (let i = 0; i < n; i++) {
-          const sx = ix + (i + 0.5) * (iw / n);
-          ctx.beginPath(); ctx.moveTo(sx, iy); ctx.lineTo(sx, iy + ih); ctx.stroke();
-          const ky = iy + ih * (0.15 + 0.7 * (0.5 + 0.5 * Math.sin(t * 0.4 + i * 2.1 + s * 9)));
-          ctx.fillRect(sx - 4, ky - 2, 8, 4);
-        }
-        break;
-      }
-      case "grill": for (let yy = iy + 2; yy < iy + ih; yy += 5) { ctx.beginPath(); ctx.moveTo(ix, yy); ctx.lineTo(ix + iw, yy); ctx.stroke(); } break;
-      case "dial": {
-        const cx = ix + iw / 2, cy = iy + ih / 2, r = Math.min(iw, ih) / 2 - 1;
-        circle(cx, cy, r);
-        for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); ctx.lineTo(cx + Math.cos(a) * r * 0.82, cy + Math.sin(a) * r * 0.82); ctx.stroke(); }
-        const a = t * 0.6 + s * 10;
-        ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a) * r * 0.7, cy + Math.sin(a) * r * 0.7); ctx.stroke();
-        break;
-      }
-      case "buttons": {
-        const bw = 12, n = Math.max(1, Math.floor(iw / (bw + 4))), on = Math.floor(h01(s * 77 + Math.floor(t / 3)) * n);
-        for (let i = 0; i < n; i++) {
-          const bx = ix + i * (bw + 4), bh = Math.min(10, ih);
-          if (i === on) { ctx.fillStyle = m.hl ? C.green : C.lit; ctx.fillRect(bx, iy + (ih - bh) / 2, bw, bh); }
-          else ctx.strokeRect(bx + 0.5, iy + (ih - bh) / 2 + 0.5, bw - 1, bh - 1);
-        }
-        break;
-      }
-    }
-  }
-
-  function draw(t) {
-    C = isDark() ? DARK : LIGHT;
-    const wallH = H - floorH();
-    ctx.fillStyle = C.wall; ctx.fillRect(0, 0, W, wallH);
-    for (const m of mods) mod(m, t);
-    // a dark baseboard, then a speckled floor
-    ctx.fillStyle = "#121212"; ctx.fillRect(0, wallH, W, Math.max(8, floorH() * 0.3));
-    const fy = wallH + Math.max(8, floorH() * 0.3);
-    ctx.fillStyle = "#f2f2ef"; ctx.fillRect(0, fy, W, H - fy);
-    ctx.fillStyle = "#2a2a2a";
-    for (const [a, b, c] of specks) ctx.fillRect(a * W, fy + b * (H - fy), 1 + c * 2, 1);
-  }
-
-  function frame(now) {
-    raf = requestAnimationFrame(frame);
-    if (!visible || document.hidden || now - last < 110) return;
-    last = now;
-    draw(now / 1000);
-  }
-
-  function size() {
-    const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
-    W = r.width; H = r.height;
-    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    layout(); crowd(); draw(performance.now() / 1000);
-  }
-
-  // The Pepes: two rows of frogs on the floor, back row smaller, each swaying on its own rhythm.
-  function crowd() {
-    if (!crowdEl) return;
-    const r = rng(11), base = Math.max(38, Math.min(80, W * 0.062)), out = [];
-    for (const [row, scale, lift] of [[0, 0.8, 0.07], [1, 1, 0.008]]) {
-      const w = base * scale;
-      for (let x = -w * 0.35 + r() * w * 0.4 + row * w * 0.6; x < W - w * 0.45; x += w * (1.12 + r() * 0.4)) {
-        const s = scale * (0.9 + r() * 0.2);
-        out.push(`<div class="pepe" style="left:${(x + (r() - 0.5) * w * 0.2).toFixed(1)}px;bottom:${(lift * H + r() * 3).toFixed(1)}px;width:${(base * s).toFixed(1)}px;--d:-${(r() * 5).toFixed(2)}s;--dur:${(4 + r() * 3).toFixed(2)}s">${FROG_SVG}</div>`);
-      }
-    }
-    crowdEl.innerHTML = out.join("");
-  }
-
-  function mount(root) {
-    unmount();
-    canvas = root.querySelector("canvas.wall");
-    crowdEl = root.querySelector(".crowd");
-    ctx = canvas.getContext("2d");
-    size();
-    ro = new ResizeObserver(() => size()); ro.observe(canvas);
-    io = new IntersectionObserver(([e]) => (visible = e.isIntersecting)); io.observe(canvas);
-    if (!reduce) raf = requestAnimationFrame(frame);
-  }
-
-  function unmount() {
-    cancelAnimationFrame(raf); raf = 0;
-    ro?.disconnect(); io?.disconnect(); ro = io = null;
-  }
-
-  return { mount, unmount };
-})();
-
-/// Live terminal: recent launches and trades across every launchpad version, polled every 20 s.
+/// Recent trades across every launchpad version (the Hall's big screen shows them with the launches).
 const Feed = (() => {
-  let timer = 0, seen = new Set(), tokens = new Map();
-  const hhmm = (sec) => new Date(sec * 1000).toTimeString().slice(0, 5);
-
-  async function loadTokens() {
-    const lists = await Promise.all(livePads().map(async (P) => {
-      const n = Number(await P.c.tokenCount());
-      const out = [];
-      for (let off = 0; off < n; off += 100) out.push(...(await P.v.getTokens(off, 100)));
-      return out;
-    }));
-    for (const t of lists.flat().filter(isListed)) tokens.set(t.token.toLowerCase(), t);
-    const n = $("#scr-n"); if (n) n.textContent = String(tokens.size);
-  }
-
   async function recentTrades() {
     const out = [];
     await Promise.all(livePads().map(async (P) => {
@@ -1281,51 +1046,7 @@ const Feed = (() => {
     }));
     return out;
   }
-
-  function line(e, fresh) {
-    const t = tokens.get(e.token.toLowerCase());
-    if (!t) return "";
-    const sym = "$" + esc(t.symbol);
-    const detail = e.kind === "launch"
-      ? `${qsym(t.quote)} pair · MC ${usd(t.marketCap, t.quote)}`
-      : `${fmt(e.a.tokenAmount)} · ${usd(e.a.quoteAmount, t.quote)}`;
-    return `<a class="ln${fresh ? " new" : ""}" href="#/t/${t.token}"><span class="gt">&gt;</span><span>${hhmm(e.ts)}</span><span class="ev ${e.kind}">${e.kind}</span><span class="sym">${sym}</span><span>${esc(detail)}</span></a>`;
-  }
-
-  /// Shows only the newest rows that fit completely (24px each), so no row is ever cut in half.
-  function wholeRows(log) {
-    const room = Math.max(1, Math.floor((log.clientHeight - 12) / 24));
-    const rows = [...log.children];
-    rows.forEach((el, i) => { el.hidden = i < rows.length - room; });
-  }
-  addEventListener("resize", () => { const log = $("#scr-log"); if (log) wholeRows(log); });
-
-  async function tick(first) {
-    const log = $("#scr-log");
-    if (!log) return stop();
-    try {
-      await loadTokens();
-      const events = [
-        ...[...tokens.values()].map((t) => ({ key: "launch:" + t.token, ts: Number(t.createdAt), kind: "launch", token: t.token })),
-        ...(await recentTrades()),
-      ].sort((x, y) => x.ts - y.ts);
-      const fresh = events.filter((e) => !seen.has(e.key));
-      fresh.forEach((e) => seen.add(e.key));
-      if (first) {
-        log.innerHTML = events.slice(-28).map((e) => line(e, false)).join("") || `<div class="ln"><span></span><span></span><span class="ev">idle</span><span>no activity yet</span></div>`;
-      } else if (fresh.length) {
-        log.insertAdjacentHTML("beforeend", fresh.map((e) => line(e, true)).join(""));
-        while (log.children.length > 40) log.firstElementChild.remove();
-      }
-      wholeRows(log);
-    } catch (e) {
-      if (first) log.innerHTML = `<div class="ln"><span></span><span></span><span class="ev sell">error</span><span>${esc(errMsg(e))}</span></div>`;
-    }
-  }
-
-  function start() { stop(); seen = new Set(); tick(true); timer = setInterval(() => tick(false), 20000); }
-  function stop() { clearInterval(timer); timer = 0; }
-  return { start, stop, recentTrades };
+  return { recentTrades };
 })();
 
 async function renderHome() {
@@ -1333,15 +1054,6 @@ async function renderHome() {
   app.innerHTML = `
     <div id="official"></div>
     <div id="koth"></div>
-    <div class="scene" id="scene">
-      <canvas class="wall" aria-hidden="true"></canvas>
-      <div class="screen">
-        <div class="scr-head"><span class="pulse">■</span><b id="scr-n">…</b> tokens · <b id="scr-vol">…</b> volume<span class="wide"> · <b id="scr-hold">…</b> to holders</span><span class="spacer"></span><span class="wide">robinhood chain · live</span></div>
-        <div class="scr-log" id="scr-log"><div class="ln"><span></span><span></span><span class="ev">boot</span><span>reading the chain…</span></div></div>
-        <a class="scr-input" href="#/create">&gt; <span class="cur">▌</span> launch a token</a>
-      </div>
-      <div class="crowd" aria-hidden="true"></div>
-    </div>
     <div class="hero">
       <div><h1>Launch a token on Robinhood Chain or Ethereum</h1>
       <p>1B fixed supply · liquidity locked forever · paired with $IMD · each creator chooses where the 3% fee goes: holders (paid in IMD), creator or burn</p>
@@ -1375,8 +1087,6 @@ async function renderHome() {
         </div>`)(CONFIG.audits.nft)}
     </div>`;
   loadKing().catch((e) => console.warn("king of the hill", e));
-  Scene.mount($("#scene"));
-  Feed.start();
   loadTotals().catch((e) => console.warn("totals", e));
   loadOfficial().catch((e) => console.warn("official token", e));
   // every listed token from every live launchpad version; shown newest first or by market cap (remembered)
@@ -1587,10 +1297,9 @@ async function loadTotals() {
   const volume = Object.fromEntries(Object.entries(proto).map(([q, w]) => [q, w * 100n]));
   const approx = protocolExact ? "" : "≈ ";
 
-  // bottom status bar (every page)
+  // the hidden status bar, which the Hall reads
   $("#sb-vol").textContent = approx + fmtUsd(toUsd(volume));
   $("#sb-hold").textContent = fmtUsd(toUsd(holders));
-  if ($("#scr-vol")) { $("#scr-vol").textContent = $("#sb-vol").textContent; $("#scr-hold").textContent = $("#sb-hold").textContent; }
 
   if (!$("#tot-holders")) return; // not on the home page
   $("#tot-holders").textContent = fmtUsd(toUsd(holders));
@@ -1618,10 +1327,12 @@ async function fetchPadLogs(P, topic0) {
 }
 
 // ---------------------------------------------------------------- Admin
+let IS_ADMIN = false; // the connected wallet is the launchpad's owner or fee recipient: the Hall shows the admin terminal
 async function showAdminLink() {
   const [owner, feeTo] = await Promise.all([padR.owner(), padR.feeRecipient()]);
   const me = account?.toLowerCase();
-  $("#adminlink").style.display = me && (me === owner.toLowerCase() || me === feeTo.toLowerCase()) ? "" : "none";
+  IS_ADMIN = !!me && (me === owner.toLowerCase() || me === feeTo.toLowerCase());
+  window.Hall?.setAdmin(IS_ADMIN);
 }
 
 /// Protocol fees accrue in each launchpad contract (as Uniswap v4 claims) until collected. Anyone may trigger a
@@ -1913,7 +1624,7 @@ async function renderRewards(who) {
           ${mine ? `<td>${r.claimable > 0n ? `<button data-claim="${i}">Claim</button>` : ""}</td>` : ""}
         </tr>`).join("")}</tbody></table>
       <p class="stat" style="margin:10px 0 0">Claiming also pays out any fees still waiting for that token, so you may receive slightly more than shown.${rows.some((r) => r.P.expiry) ? " Launchpad v4 tokens: rewards expire after more than 7 days without a claim, buy, sell or send (only what was earned in the last 7 days is kept); expired rewards go to a $PEPES buyback and burn." : ""}</p></div>`
-      : `<div class="card empty">No PepesFamily tokens in this wallet yet. Holders of tokens launched here earn up to 3% of every trade, depending on the split each creator chose. <a href="#/" style="color:var(--accent)">Browse tokens →</a></div>`}
+      : `<div class="card empty">No PepesFamily tokens in this wallet yet. Holders of tokens launched here earn up to 3% of every trade, depending on the split each creator chose. <a href="#/tokens" style="color:var(--accent)">Browse tokens →</a></div>`}
     ${creatorRows.length ? `${sec(2, "Creator earnings")}
     <div class="card scroll-x"><table>
       <thead><tr><th>Token</th><th>Split</th><th>Waiting</th>${mine ? "<th></th>" : ""}</tr></thead>
@@ -2886,7 +2597,7 @@ async function renderCreate() {
           toast(`Token launched, but the ETH buy didn't go through (${errMsg(e)}). You can buy it on the token page.`, 10000);
         }
       } else toast("Token launched");
-      location.hash = token ? "#/t/" + token : "#/";
+      location.hash = token ? "#/t/" + token : "#/tokens";
     } catch (e) { toast(errMsg(e), 7000); }
     btn.disabled = false;
   };
@@ -3203,8 +2914,8 @@ Promise.all([loadPads(), loadPrices()]).finally(() => {
   // A chain whose RPC failed: its tokens are missing for now, so say so rather than hide them silently.
   const down = [...new Set(PADS.filter((P) => P.readErr).map((P) => P.ch.name))];
   if (LAUNCH && down.length) toast(`${down.join(" and ")} couldn't be reached: its tokens are missing until you reload.`, 9000);
-  // status bar totals on every page (the home page also loads them for its cards)
-  if (location.hash.slice(1).replace(/^$/, "/") !== "/") loadTotals().catch(() => {});
+  // the totals the Hall shows (the token list loads them again for its cards)
+  if (LAUNCH && location.hash.slice(1) !== "/tokens") loadTotals().catch(() => {});
 });
 setInterval(loadPrices, 60_000);
 </script>
