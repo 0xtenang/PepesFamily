@@ -9,7 +9,7 @@
 # CONFIG.hallServer in web/index.html (wss://…/hall).
 set -euo pipefail
 cd "$(dirname "$0")"
-NAME=${WORKER_NAME:-pepes-hall}
+NAME=${WORKER_NAME:-pepesfamily}
 API=https://api.cloudflare.com/client/v4
 read -r -p "Cloudflare account ID: " ACCOUNT
 read -r -s -p "Cloudflare API token (hidden): " TOKEN; echo

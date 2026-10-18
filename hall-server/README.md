@@ -19,7 +19,7 @@ No Node needed, only curl:
 
 It asks for your Cloudflare account ID and an API token (My Profile > API Tokens > Create Token > "Edit Cloudflare
 Workers"); the token is read hidden and never saved. It prints the server's address: put it in `CONFIG.hallServer` in
-`web/index.html` (`wss://pepes-hall.<you>.workers.dev/hall`). Running it again updates the code.
+`web/index.html` (`wss://pepesfamily.arief-kurniawan-id.workers.dev/hall`). Running it again updates the code.
 
 The free plan covers a busy Hall (100,000 requests a day; 20 WebSocket messages count as one request). Players send
 their position at most 5 times a second, and only while moving.

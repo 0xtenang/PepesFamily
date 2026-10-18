@@ -548,7 +548,8 @@
     // you
     const player = makePepe({ you: true });
     scene.add(player.root);
-    let pos = new T.Vector3(-1.2, 0, 3.4), heading = Math.PI; // beside the man, facing the wall (-z), as on imd.fun
+    // beside the man, facing the wall (-z), as on imd.fun; a little apart from whoever came in before you
+    let pos = new T.Vector3(-1.2 + (Math.random() - 0.5) * 3, 0, 3.4 + Math.random() * 1.6), heading = Math.PI;
     try { const s = JSON.parse(sessionStorage.getItem("hall:pos") || "null"); if (s) { pos.set(s.x, 0, s.z); heading = s.h; } } catch {}
     let camYaw = heading, camPitch = 0.06;
 

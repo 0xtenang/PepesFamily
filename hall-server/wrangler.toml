@@ -1,6 +1,6 @@
 # Cloudflare deploys this from the GitHub repo (Workers Builds, root directory hall-server/), or `npx wrangler deploy`
 # here. deploy.sh does the same with curl.
-name = "pepes-hall"
+name = "pepesfamily"
 main = "index.js"
 compatibility_date = "2025-01-01"
 workers_dev = true
