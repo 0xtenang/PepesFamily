@@ -90,6 +90,7 @@ h3 { font-weight: 500; font-size: 14px; }
 .sec .t { font-weight: 600; }
 .sec .rule { flex: 1; height: 1px; background: var(--line); }
 .seg { display: inline-flex; border: 1px solid var(--line); }
+.seg.wrap { flex-wrap: wrap; }
 .seg button { border: 0; background: transparent; padding: 5px 12px; color: var(--muted); }
 .seg button.on { background: var(--strong); color: var(--inv); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
@@ -285,6 +286,13 @@ const CONFIG = {
   // v5: the creator chooses where the 3% goes (split: true); token lists are read from its lens contract.
   // `chain` picks the network from CHAINS below (default: Robinhood Chain).
   pads: [
+    // 2026-10-18: one launchpad per pair asset (contracts/script/Chains.sol `pad`). Addresses are fixed in advance
+    // (CREATE2); each lights up here once its contract exists on its chain.
+    { version: 5, chain: "ethereum", quote: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", pad: "0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC", router: "0xAdBF95c54Cb0b292F1D1544C716E4f86c2987Ab1", ethRouter: "0x20c8e761D9466b4A17014F33A9E1B1052732428d", lens: "0x78e8f790ae6506B90B3DbF6020539a496FD87604", permit: true, expiry: true, split: true },
+    { version: 5, chain: "ethereum", quote: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", pad: "0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC", router: "0x701Cc95886ad032b18f5e2513aEcA8f8BB942A7b", ethRouter: "0xC6E9bbd4902f5596dc577d1be104F71f469E68EF", lens: "0xc7F2AA94AC971830428748C7e647DE4407550aea", permit: true, expiry: true, split: true },
+    { version: 5, chain: "bsc", quote: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", pad: "0xbeCc01b1Ec3D78E34953432255e7FcfDe47Ea8cC", router: "0xa34A348b57b0099C5533c272442452f60c3E135e", ethRouter: "0x2E5F4Ea419875DcDf0c2bea89B7352f2C7CBD835", lens: "0x85E706d2F4942DBE8964D5b5ba4500128d69bD6f", permit: true, expiry: true, split: true },
+    { version: 5, chain: "base", quote: "0xB2000000000000000000004c27f6523082f41D01", pad: "0xceA0c4Dc22fa07EeA1313d4b3A1B8f5f46FEa8CC", router: "0xee0dF7ea65Ad3a7c3f0E7c52F5De2e3b567c00Ea", ethRouter: "0x7d8815A781a08640decaF7d298aC7319Ac49527F", lens: "0xE6fEdfd9B8c862d3CEf2C0f72210794658D0Eb79", permit: true, expiry: true, split: true },
+    { version: 5, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC", router: "0x5df991A1c82fBd56eA0b8Cdc3b9749f2286615D4", ethRouter: "0x4927CfFA45cf2Aaa568f73aE9c8d988acaECF7Bb", lens: "0x9F2333517B84e83e59d9a0166752978AF2b7a694", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", pad: "0xa89083083119B70c06b372dC85Dc6155a8F568CC", router: "0x28d22B5Ea3631D7f4d5157134DFf09b94d015D16", ethRouter: "0x3cC32f0ff08109D75AC86A9fE7da85DE51C00A3C", lens: "0xfda1aD95068d23b8491D0787Cc374767b0c67864", permit: true, expiry: true, split: true },
     { version: 5, pad: "0xC26003787503b978033427F77047fAF5551Ca8CC", router: "0x515aC666729a73761DA06b323133286C8a968CDf", ethRouter: "0x349059fc128bEe463C1Ee6a732F8201907a78035", lens: "0xd43CE11019393b4C60304978E3d789D316414B20", permit: true, expiry: true, split: true },
     { version: 4, pad: "0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc", router: "0xDB202196E62413c0eFB59e926EA1BD4817dB7226", ethRouter: "0x19f112328cFb44191704Dba441050008Fe85C361", permit: true, expiry: true },
@@ -357,17 +365,33 @@ const CHAINS = {
   robinhood: {
     key: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
     explorer: CONFIG.explorer, blockscoutApi: CONFIG.blockscoutApi, quoter: CONFIG.quoter, imd: CONFIG.imd, imdEthKey: CONFIG.imdEthKey,
-    gmgn: "robinhood", dex: "robinhood",
+    gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, blurb: "Robinhood Chain: low gas, home of $PEPES.",
   },
   ethereum: {
     key: "ethereum", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
     explorer: "https://etherscan.io", blockscoutApi: "https://eth.blockscout.com/api/v2", quoter: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
     imd: "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
-    gmgn: "eth", dex: "ethereum",
+    gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" }, blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
+    stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+  },
+  bsc: {
+    key: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
+    explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
+    gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BNB Smart Chain: low gas, paired with BNB.",
+  },
+  base: {
+    key: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
+    explorer: "https://basescan.org", blockscoutApi: "https://base.blockscout.com/api/v2", quoter: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D",
+    gmgn: "base", dex: "base", native: { name: "Ether", symbol: "ETH" }, blurb: "Base: low gas, paired with $BASECAT.",
+    stateView: "0xA3c0c9b65baD0b08107Aa264b0f3dB444b867A71",
+  },
+  hyperevm: {
+    key: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
+    explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
+    gmgn: "", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
   },
 };
-const IMDS = new Set(Object.values(CHAINS).map((c) => c.imd.toLowerCase()));
 
 const KEY_T = "tuple(address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks)";
 const INFO_T = "tuple(address token, string name, string symbol, string metadata, address quote, address creator, uint64 createdAt, uint64 createdBlock, bool quoteIsCurrency0, bytes32 poolId, uint160 sqrtPriceX96, uint256 marketCap, uint256 pendingHolderFees, uint256 totalDividendsDistributed)";
@@ -471,6 +495,7 @@ function feeText(sp) {
 /// withdrawnDividends counts them too, so "claimed" = withdrawnDividends - this. Null if the history can't be read.
 const RECYCLED_TOPIC = ethers.id("RewardsRecycled(address,uint256)");
 async function recycledOf(token, holder, ch = CHAINS.robinhood, attempt = 0) {
+  if (!ch.blockscoutApi) return null; // no event history on this chain (BSC, HyperEVM): unknown
   const want = ethers.zeroPadValue(holder, 32).toLowerCase();
   try {
     let total = 0n, next = null;
@@ -510,6 +535,23 @@ const ERC20_ABI = [
   "function nonces(address) view returns (uint256)",
 ];
 const ZERO = ethers.ZeroAddress;
+/// Every pair asset launches can use, by address (lowercase): its symbol, chain, how to buy with the chain's coin
+/// (`ethKey`: the Uniswap v4 coin/asset pool the ETH router swaps through; `wrapped`: the asset is the wrapped coin
+/// itself) and its USD price. Tokens paired with these are listed; old ETH-paired Robinhood tokens are not.
+const QUOTES = {};
+const addQuote = (chain, addr, sym, o) => { QUOTES[addr.toLowerCase()] = { chain, addr, sym, ...o }; };
+addQuote("robinhood", CONFIG.imd, "IMD", { ethKey: CONFIG.imdEthKey, usd: () => prices.imdEth * prices.ethUsd, quick: ["1", "5", "10", "50"] });
+addQuote("ethereum", CHAINS.ethereum.imd, "IMD", { ethKey: CHAINS.ethereum.imdEthKey, usd: () => prices.imdEth * prices.ethUsd, quick: ["1", "5", "10", "50"] });
+addQuote("ethereum", "0x6982508145454Ce325dDbE47a25d4ec3d2311933", "PEPE", {
+  ethKey: [ZERO, "0x6982508145454Ce325dDbE47a25d4ec3d2311933", 10000, 200, ZERO], usd: () => prices.pepeEth * prices.ethUsd,
+  quick: ["1000000", "5000000", "10000000", "50000000"] });
+addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
+addQuote("bsc", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", { wrapped: true, usd: () => prices.bnbUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
+addQuote("base", "0xB2000000000000000000004c27f6523082f41D01", "BASECAT", {
+  ethKey: [ZERO, "0xB2000000000000000000004c27f6523082f41D01", 2000, 20, ZERO], usd: () => prices.basecatEth * prices.ethUsd,
+  quick: ["1000", "5000", "10000", "50000"] });
+addQuote("hyperevm", "0x5555555555555555555555555555555555555555", "WHYPE", { wrapped: true, usd: () => prices.hypeUsd, quick: ["0.5", "1", "5", "10"] });
+const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], BNB: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "5", "10"] };
 const SUPPLY = 10n ** 27n;
 const ONE = 10n ** 18n;
 
@@ -534,6 +576,10 @@ const PADS = [
   ch: CHAINS[p.chain || "robinhood"],
   c: new ethers.Contract(p.pad, PAD_ABI, CHAINS[p.chain || "robinhood"].reader),
   v: new ethers.Contract(p.lens || p.pad, PAD_ABI, CHAINS[p.chain || "robinhood"].reader), // token lists: lens on v5
+  // the pair asset of launches here (v4+: one per launchpad), how its ETH router trades it
+  quote: p.quote || (p.nft ? CONFIG.imd : (CHAINS[p.chain || "robinhood"].imd)),
+  wrapped: !!QUOTES[(p.quote || "").toLowerCase()]?.wrapped,
+  ethKey: QUOTES[(p.quote || CHAINS[p.chain || "robinhood"].imd || "").toLowerCase()]?.ethKey || CHAINS[p.chain || "robinhood"].imdEthKey,
   live: false,
   ethLive: false,
 }));
@@ -542,7 +588,7 @@ const padLabel = (P) => (P.nft ? "Pepes Earn IMD" : `Launchpad v${P.version}${P.
 const chainBadge = (P) => (P && P.ch.key !== "robinhood" ? `<span class="pill chain">${esc(P.ch.short)}</span>` : "");
 let LAUNCH = null; // newest live launchpad on the chosen chain: where new tokens are created
 let padR = null;   // LAUNCH's contract (launch form + admin owner lookups)
-const LAUNCHES = {}; // chain key -> newest live launchpad there
+const LAUNCHES = {}; // chain key -> newest live launchpad there for each pair asset (array, newest first)
 async function loadPads() {
   await Promise.all(PADS.map(async (P) => {
     try {
@@ -550,15 +596,21 @@ async function loadPads() {
       P.live = a.length > 2; P.ethLive = b.length > 2; P.readErr = false;
     } catch { P.readErr = true; } // the chain couldn't be read: unknown, not "not deployed"
   }));
-  for (const P of PADS) if (P.live && !P.nft && !LAUNCHES[P.ch.key]) LAUNCHES[P.ch.key] = P;
-  LAUNCH = LAUNCHES.robinhood || PADS.find((P) => P.live && !P.nft) || null;
+  for (const P of PADS) {
+    if (!P.live || P.nft || P.version < 4) continue; // v1-v3 took several pair assets: never used for new launches
+    const L = (LAUNCHES[P.ch.key] ||= []);
+    if (!L.some((x) => x.quote.toLowerCase() === P.quote.toLowerCase())) L.push(P);
+  }
+  LAUNCH = LAUNCHES.robinhood?.[0] || PADS.find((P) => P.live && !P.nft) || null;
   padR = LAUNCH?.c || null;
 }
 const livePads = () => PADS.filter((P) => P.live);
-/// Tokens shown on the home page and live feed: IMD pairs only. ETH-pair tokens launched earlier still have their
-/// own pages (#/t/<address>) and appear on the Rewards and Admin pages, so holders can always trade and claim.
+/// The assets a launchpad holds fees in: its one pair asset (v4 and later), or ETH and IMD (v1-v3).
+const padAssets = (P) => (P.version >= 4 || P.nft ? [P.quote] : [ZERO, P.ch.imd]);
+/// Tokens shown on the home page and live feed: pairs with a listed asset (QUOTES). ETH-pair tokens launched on
+/// Robinhood v1-v3 still have their own pages (#/t/<address>) and appear on the Rewards and Admin pages.
 const isListed = (t) =>
-  IMDS.has(t.quote.toLowerCase()) && t.token.toLowerCase() !== CONFIG.earn.token.toLowerCase();
+  !!QUOTES[t.quote.toLowerCase()] && t.token.toLowerCase() !== CONFIG.earn.token.toLowerCase();
 /// Which launchpad (and so which chain) every listed token belongs to, filled by allTokenInfos.
 const TOKEN_PAD = new Map();
 
@@ -572,9 +624,11 @@ async function quoteSwap(P, token, quoteIsCurrency0, isBuy, amount) {
 }
 
 /// Same, but paying/receiving ETH on an IMD pair: routes through the IMD/ETH pool (as PepesFamilyEthRouter does).
+/// A wrapped-coin pair (WETH, WBNB, WHYPE) wraps 1:1 instead (PepesFamilyNativeRouter).
 async function quoteSwapEth(P, token, quoteIsCurrency0, isBuy, amount) {
-  if (isBuy) return quoteSwap(P, token, quoteIsCurrency0, true, await quoteExact(P.ch.imdEthKey, true, amount, P.ch));
-  return quoteExact(P.ch.imdEthKey, false, await quoteSwap(P, token, quoteIsCurrency0, false, amount), P.ch);
+  if (P.wrapped) return quoteSwap(P, token, quoteIsCurrency0, isBuy, amount);
+  if (isBuy) return quoteSwap(P, token, quoteIsCurrency0, true, await quoteExact(P.ethKey, true, amount, P.ch));
+  return quoteExact(P.ethKey, false, await quoteSwap(P, token, quoteIsCurrency0, false, amount), P.ch);
 }
 
 /// Gets `spender` allowed to pull `amount` of `token` for a sale. Returns permit {v,r,s} when the user signed one
@@ -605,7 +659,13 @@ async function authorizeSell(P, token, spender, amount, dl) {
 
 // ---------------------------------------------------------------- USD prices
 const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
-const prices = { ethUsd: 0, imdEth: 0 };
+const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, basecatEth: 0, bnbUsd: 0, hypeUsd: 0 };
+/// ETH per token, from a Uniswap v4 ETH/token pool's price (both 18 decimals), read on its chain.
+async function ethPerToken(ch, poolId) {
+  const [sq] = await new ethers.Contract(ch.stateView, STATEVIEW_ABI, ch.reader).getSlot0(poolId);
+  const r = Number(sq) / 2 ** 96;
+  return r ? 1 / (r * r) : 0;
+}
 async function loadPrices() {
   try {
     const sv = new ethers.Contract(CONFIG.stateView, STATEVIEW_ABI, reader);
@@ -616,8 +676,19 @@ async function loadPrices() {
     $("#sb-eth").textContent = fmtUsd(prices.ethUsd);
     $("#sb-imd").textContent = fmtUsd(prices.imdEth * prices.ethUsd);
   } catch (e) { console.warn("price load failed", e); }
+  // the other pair assets: PEPE and BASECAT from their ETH pools; BNB and HYPE from CoinGecko
+  await Promise.all([
+    ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {}),
+    ethPerToken(CHAINS.base, "0x18816b0a9ffba7fae928ed0315c756ffe9fba1eb6eaf18236ce82c700ddd20d7").then((v) => (prices.basecatEth = v)).catch(() => {}),
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,hyperliquid&vs_currencies=usd", { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json()).then((j) => { prices.bnbUsd = j?.binancecoin?.usd || 0; prices.hypeUsd = j?.hyperliquid?.usd || 0; }).catch(() => {}),
+  ]);
 }
-const quoteUsd = (q) => (q === ZERO ? prices.ethUsd : prices.imdEth * prices.ethUsd);
+const quoteUsd = (q) => {
+  if (q === ZERO) return prices.ethUsd;
+  const Q = QUOTES[String(q).toLowerCase()];
+  return (Q ? Q.usd() : prices.imdEth * prices.ethUsd) || 0;
+};
 function fmtUsd(n) {
   if (n >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
   if (n >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
@@ -637,7 +708,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const str = (s) => { try { return typeof s === "string" ? s : String(s ?? ""); } catch { return ""; } };
 const esc = (s) => str(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
-const qsym = (q) => (q === ZERO ? "ETH" : "IMD");
+const qsym = (q) => QUOTES[String(q).toLowerCase()]?.sym || (q === ZERO ? "ETH" : "IMD");
 const pill = (q) => `<span class="pill ${q === ZERO ? "eth" : "imd"}">${qsym(q)}</span>`;
 
 function fmt(wei, max = 4) {
@@ -817,7 +888,7 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
       try {
         await eth.request({ method: "wallet_addEthereumChain", params: [{
           chainId: hex, chainName: ch.name, rpcUrls: [ch.walletRpc],
-          nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, blockExplorerUrls: [ch.explorer],
+          nativeCurrency: { ...(ch.native || { name: "Ether", symbol: "ETH" }), decimals: 18 }, blockExplorerUrls: [ch.explorer],
         }] });
         // Adding a network doesn't always select it (EIP-3085): ask to switch again.
         if ((await eth.request({ method: "eth_chainId" })) !== hex) {
@@ -869,7 +940,7 @@ async function ensureImdAllowance(amount, spender, imdAddr = CONFIG.imd) {
   const imd = new ethers.Contract(imdAddr, ERC20_ABI, signer);
   const current = await imd.allowance(account, spender);
   if (current >= amount) return;
-  toast("Approve IMD in your wallet…", 8000);
+  toast(`Approve ${qsym(imdAddr)} in your wallet…`, 8000);
   const tx = await imd.approve(spender, amount);
   await tx.wait();
 }
@@ -1028,6 +1099,7 @@ const Feed = (() => {
     const out = [];
     await Promise.all(livePads().map(async (P) => {
       const topic = P.c.interface.getEvent("Trade").topicHash;
+      if (!P.ch.blockscoutApi) return; // no trade history on this chain's explorer
       try {
         const r = await fetch(`${P.ch.blockscoutApi}/addresses/${P.pad}/logs?topic=${topic}`, { signal: AbortSignal.timeout(8000) });
         if (!r.ok) return;
@@ -1050,7 +1122,7 @@ async function renderHome() {
     <div id="koth"></div>
     <div class="hero">
       <div><h1>Launch a token on Robinhood Chain or Ethereum</h1>
-      <p>1B fixed supply · liquidity locked forever · paired with $IMD · each creator chooses where the 3% fee goes: holders (paid in IMD), creator or burn</p>
+      <p>1B fixed supply · liquidity locked forever · paired with ${[...new Set(Object.values(LAUNCHES).flat().map((P) => qsym(P.quote)))].join(", ") || "IMD"} · each creator chooses where the 3% fee goes: holders (paid in the pair asset), creator or burn</p>
       <div class="row" style="margin-top:16px"><a class="btn primary" href="#/create">Launch a token</a><a class="btn" href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source ↗</a></div></div>
     </div>
     ${sec(1, "Platform")}
@@ -1163,6 +1235,7 @@ async function loadOfficial() {
 async function tradesSince(sinceTs, pads) {
   const out = [];
   await Promise.all(pads.map(async (P) => {
+    if (!P.ch.blockscoutApi) return; // no trade history on this chain's explorer
     const topic = P.c.interface.getEvent("Trade").topicHash;
     let next = null;
     for (let page = 0; page < 20; page++) {
@@ -1235,8 +1308,8 @@ async function loadKing() {
 ///   Holders:  for each token, dividends already distributed + holder fees still waiting to be flushed.
 ///   Protocol: fees already collected (ProtocolFeesCollected events) + fees pending in each launchpad.
 async function loadTotals() {
-  const holders = { [ZERO]: 0n, [CONFIG.imd]: 0n };
-  const proto = { [ZERO]: 0n, [CONFIG.imd]: 0n };
+  const holders = {};
+  const proto = {};
   const add = (m, q, w) => { m[q] = (m[q] ?? 0n) + w; };
   let protocolExact = true;
 
@@ -1258,8 +1331,8 @@ async function loadTotals() {
       });
     }
     const pending = {};
-    const [pe, pi] = await Promise.all([P.c.pendingProtocolFees(ZERO), P.c.pendingProtocolFees(P.ch.imd)]);
-    add(pending, ZERO, pe); add(pending, P.ch.imd, pi);
+    const assets = padAssets(P);
+    (await Promise.all(assets.map((q) => P.c.pendingProtocolFees(q)))).forEach((w, i) => add(pending, assets[i], w));
     try {
       const collected = {};
       for (const ev of await fetchPadLogs(P, P.c.interface.getEvent("ProtocolFeesCollected").topicHash)) {
@@ -1299,6 +1372,7 @@ async function loadTotals() {
 
 /// All logs a launchpad emitted with `topic0`, via Blockscout's API (paginated).
 async function fetchPadLogs(P, topic0) {
+  if (!P.ch.blockscoutApi) throw new Error("no event history on " + P.ch.name); // callers fall back
   const url = `${P.ch.blockscoutApi}/addresses/${P.pad}/logs?topic=${topic0}`;
   const items = [];
   let next = null;
@@ -1327,7 +1401,7 @@ async function showAdminLink() {
 async function renderAdmin() {
   const app = $("#app");
   app.innerHTML = `<div class="muted">Loading…</div>`;
-  const assetsOf = (P) => [ZERO, P.ch.imd]; // protocol fees can be in ETH (v1-v3) or the chain's IMD
+  const assetsOf = padAssets; // protocol fees: the launchpad's pair asset (ETH and IMD on v1-v3)
   let rows;
   try {
     rows = await Promise.all(livePads().filter((P) => P.admin !== false).map(async (P) => {
@@ -1395,7 +1469,7 @@ async function renderAdmin() {
       </div>`).join("")}
     ${rows.some((r) => r.P.expiry) ? `${sec(rows.length + 1, "Expired holder rewards (v4 and later)")}
       <div class="card">
-        <p class="stat" style="margin:0 0 10px">Rewards of wallets inactive for more than 7 days (no claim, buy, sell or send), except what they earned in their last 7 days. Sending them moves the IMD from each token to the fee address, for the $PEPES buyback and burn. Wallets that claim send their own expired part automatically; this finds the ones that never come back.</p>
+        <p class="stat" style="margin:0 0 10px">Rewards of wallets inactive for more than 7 days (no claim, buy, sell or send), except what they earned in their last 7 days. Sending them moves them (in each token's pair asset) from each token to the fee address, for the $PEPES buyback and burn. Wallets that claim send their own expired part automatically; this finds the ones that never come back.</p>
         <div id="rcy" class="stat">Not checked yet.</div>
         <div class="row" style="margin-top:10px"><button id="rcyscan">Find expired rewards</button><button class="primary" id="rcysend" hidden></button></div>
       </div>` : ""}
@@ -1438,11 +1512,11 @@ async function renderAdmin() {
       const total = found.reduce((s, f) => s + f.total, 0n);
       $("#rcy").innerHTML = found.length
         ? `<div class="scroll-x"><table><thead><tr><th>Token</th><th>Wallets</th><th>Expired</th></tr></thead><tbody>${found.map((f) => `
-            <tr><td><a href="#/t/${f.t.token}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} IMD</div></td></tr>`).join("")}</tbody></table></div>`
+            <tr><td><a href="#/t/${f.t.token}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} ${qsym(f.t.quote)}</div></td></tr>`).join("")}</tbody></table></div>`
         : "No expired rewards right now.";
       if (found.length) {
         const txs = found.reduce((n, f) => n + Math.ceil(f.hits.length / 50), 0);
-        $("#rcysend").textContent = `Send ${fmt(total, 4)} IMD to the fee address${txs > 1 ? ` (${txs} transactions)` : ""}`;
+        $("#rcysend").textContent = `Send the expired rewards to the fee address${txs > 1 ? ` (${txs} transactions)` : ""}`;
         $("#rcysend").hidden = false;
       }
     } catch (e) { $("#rcy").textContent = "Couldn't check: " + errMsg(e); }
@@ -1464,9 +1538,9 @@ async function renderAdmin() {
           sent += f.hits.slice(k, k + 50).reduce((s, h) => s + h.ex, 0n);
         }
       }
-      toast(`About ${fmt(sent, 4)} IMD sent to the fee address`);
+      toast("Expired rewards sent to the fee address");
       renderAdmin();
-    } catch (e) { toast((sent ? `Sent about ${fmt(sent, 4)} IMD before stopping. ` : "") + errMsg(e), 7000); b.disabled = false; }
+    } catch (e) { toast((sent ? "Some were sent before stopping. " : "") + errMsg(e), 7000); b.disabled = false; }
   };
   // Paying out from a wallet transaction runs outside any PoolManager unlock, which is the safe way to distribute.
   // flush() sends the launchpad's pending fees and distributes them; when only quote already sitting in the token
@@ -1491,6 +1565,7 @@ async function renderAdmin() {
 /// v4 admin: every address that ever sent or received `token` (Blockscout token transfers), so wallets that sold
 /// everything but left rewards unclaimed are found too. Excluded system accounts report 0 expired and drop out.
 async function tokenParticipants(token, ch = CHAINS.robinhood) {
+  if (!ch.blockscoutApi) return []; // no transfer history on this chain's explorer: can't be scanned here
   const seen = new Set();
   let next = null;
   for (let page = 0; page < 200; page++) {
@@ -1622,7 +1697,7 @@ async function renderRewards(who) {
           <td>${usd(c.pending, c.t.quote)}<div class="stat">${fmt(c.pending, 6)} ${qsym(c.t.quote)}</div>${c.isProposed && !c.isPayout ? `<div class="stat warn">You're invited to receive these earnings</div>` : ""}</td>
           ${mine ? `<td>${c.isPayout && c.pending > 0n ? `<button data-collect="${i}">Collect</button>` : ""}${c.isProposed ? ` <button class="primary" data-accept="${i}">Accept</button>` : ""}</td>` : ""}
         </tr>`).join("")}</tbody></table>
-      <p class="stat" style="margin:10px 0 0">Your share of every trade on tokens you launched with creator earnings, paid in IMD. They never expire.</p></div>` : ""}
+      <p class="stat" style="margin:10px 0 0">Your share of every trade on tokens you launched with creator earnings, paid in each token's pair asset. They never expire.</p></div>` : ""}
     ${earnedAny ? `${sec(creatorRows.length ? 3 : 2, "Share")}
     <div class="two sharegrid">
       <div><img class="share-img" id="card" alt="Share card: holder rewards earned on PepesFamily" /></div>
@@ -1689,7 +1764,7 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in ETH or IMD.\n\n${tags}\nhttps://pepesfamily.fun`;
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, BNB, BASECAT or HYPE.\n\n${tags}\nhttps://pepesfamily.fun`;
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);
@@ -2130,16 +2205,23 @@ function setupImageField() {
 // ---------------------------------------------------------------- Create
 let launchChain = "robinhood";
 try { const c = localStorage.getItem("launchChain"); if (c && CHAINS[c]) launchChain = c; } catch {}
+const launchPairKey = (c) => "launchPair:" + c;
 async function renderCreate() {
-  // The launchpad on the chosen chain (falls back to Robinhood Chain); shadows the global LAUNCH / padR here.
-  const LAUNCH = LAUNCHES[launchChain] || LAUNCHES.robinhood || PADS.find((P) => P.live && !P.nft);
+  // The launchpad for the chosen chain and pair asset (falls back to Robinhood Chain's IMD launchpad); shadows the
+  // global LAUNCH / padR here. Each pair asset is its own launchpad.
+  const pads = LAUNCHES[launchChain] || LAUNCHES.robinhood || [PADS.find((P) => P.live && !P.nft)];
+  let wantPair = ""; try { wantPair = localStorage.getItem(launchPairKey(pads[0].ch.key)) || ""; } catch {}
+  const LAUNCH = pads.find((P) => P.quote.toLowerCase() === wantPair.toLowerCase()) || pads[0];
   const padR = LAUNCH.c, ch = LAUNCH.ch;
-  // New tokens on this site are always paired with IMD (ETH buyers still trade them through the ETH router).
-  const quote = ch.imd;
+  const quote = LAUNCH.quote, QS = qsym(quote), NAT = ch.native?.symbol || "ETH";
   const chainPicker = Object.keys(LAUNCHES).length > 1 ? `
-        <div class="seg" id="lchain" style="margin-bottom:10px">${Object.values(CHAINS).filter((c) => LAUNCHES[c.key]).map((c) =>
-          `<button type="button" data-c="${c.key}" class="${c.key === ch.key ? "on" : ""}">${esc(c.name)}</button>`).join("")}</div>
-        <div class="stat" style="margin-bottom:10px">${ch.key === "ethereum" ? "Ethereum mainnet: higher gas, the deepest IMD liquidity." : "Robinhood Chain: low gas, home of $PEPES."} Your token lives on ${esc(ch.name)} only.</div>` : "";
+        <div class="seg wrap" id="lchain" style="margin-bottom:10px">${Object.values(CHAINS).filter((c) => LAUNCHES[c.key]).map((c) =>
+          `<button type="button" data-c="${c.key}" class="${c.key === ch.key ? "on" : ""}">${esc(c.short)}</button>`).join("")}</div>
+        <div class="stat" style="margin-bottom:10px">${esc(ch.blurb || "")} Your token lives on ${esc(ch.name)} only.</div>` : "";
+  const pairPicker = pads.length > 1 ? `
+        <div class="row" style="margin-bottom:10px"><span class="stat">Pair with</span><div class="seg wrap" id="lpair">${pads.map((P) =>
+          `<button type="button" data-q="${P.quote}" class="${P === LAUNCH ? "on" : ""}">${esc(qsym(P.quote))}</button>`).join("")}</div></div>` : "";
+  const payNote = LAUNCH.wrapped ? `buyers pay with ${NAT} (wrapped automatically) or ${QS}` : `buyers can pay with ${NAT} or ${QS}`;
   $("#app").innerHTML = `
     <div class="hero"><div><h1>Launch a token</h1>
       <p>1,000,000,000 supply, all placed in a locked pool. No creator allocation beyond what you buy.</p></div></div>
@@ -2147,7 +2229,8 @@ async function renderCreate() {
       <form id="cf">
         ${sec(1, Object.keys(LAUNCHES).length > 1 ? "Chain and pair" : "Pair")}
         ${chainPicker}
-        <div class="row"><span class="pill imd">IMD</span><span class="stat">Every token is paired with $IMD; buyers can pay with ETH or IMD. ${LAUNCH?.split ? "Holder rewards are paid in IMD: you choose below how much of the 3% they get (none, with Deflationary)." : "Holders earn 3% of every trade, in IMD."}${LAUNCH?.expiry ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
+        ${pairPicker}
+        <div class="row"><span class="pill imd">${esc(QS)}</span><span class="stat">Your token is paired with ${esc(QS)}; ${payNote}. ${LAUNCH?.split ? `Holder rewards are paid in ${esc(QS)}: you choose below how much of the 3% they get (none, with Deflationary).` : `Holders earn 3% of every trade, in ${esc(QS)}.`}${LAUNCH?.expiry ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
         ${sec(2, "Describe")}
         <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
@@ -2176,7 +2259,7 @@ async function renderCreate() {
         </div>
         <div class="stat" id="splitnote" style="margin-top:8px"></div>` : ""}
         ${sec(LAUNCH?.split ? 4 : 3, "Initial buy")}
-        <div class="row" style="margin-bottom:4px"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">ETH</button><button type="button" data-p="imd">IMD</button></div></div>
+        <div class="row" style="margin-bottom:4px"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">${esc(NAT)}</button><button type="button" data-p="imd">${esc(QS)}</button></div></div>
         <label for="ib" id="ibl">Amount (optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
         <div class="stat" id="ibnote"></div>
@@ -2185,8 +2268,8 @@ async function renderCreate() {
       </form>
       <div class="card" style="margin-top:26px">
         <span class="h">How it works</span>
-        <p class="muted">Your token gets a Uniswap v4 pool against IMD holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
-        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>${LAUNCH?.split ? "1% protocol · 3% split as you choose: creator earnings (IMD, up to 2%), holder rewards (IMD, pro rata to balance), and burn (taken in your token on every trade and burned). The split is fixed forever at launch." : "1% protocol · 3% shared by all holders, pro rata to their balance, paid in IMD. Holders claim anytime."}</div>
+        <p class="muted">Your token gets a Uniswap v4 pool against ${esc(QS)} holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
+        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>${LAUNCH?.split ? `1% protocol · 3% split as you choose: creator earnings (${esc(QS)}, up to 2%), holder rewards (${esc(QS)}, pro rata to balance), and burn (taken in your token on every trade and burned). The split is fixed forever at launch.` : `1% protocol · 3% shared by all holders, pro rata to their balance, paid in ${esc(QS)}. Holders claim anytime.`}</div>
         <div class="fees" id="startmc"></div>
       </div>
     </div>`;
@@ -2201,6 +2284,10 @@ async function renderCreate() {
   $("#lchain")?.querySelectorAll("button").forEach((b) => b.onclick = () => {
     launchChain = b.dataset.c;
     try { localStorage.setItem("launchChain", launchChain); } catch {}
+    renderCreate();
+  });
+  $("#lpair")?.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    try { localStorage.setItem(launchPairKey(ch.key), b.dataset.q); } catch {}
     renderCreate();
   });
   let pay = LAUNCH.ethLive ? "eth" : "imd";
@@ -2242,18 +2329,18 @@ async function renderCreate() {
     const seq = ++pvSeq, amt = ibAmount();
     if (!amt) return ($("#ibp").textContent = "");
     try {
-      const imdIn = pay === "eth" ? await quoteExact(ch.imdEthKey, true, amt, ch) : amt;
+      const imdIn = pay === "eth" ? (LAUNCH.wrapped ? amt : await quoteExact(LAUNCH.ethKey, true, amt, ch)) : amt;
       const out = tokensFor(imdIn, await padR.startTick(quote));
       if (seq !== pvSeq) return;
-      $("#ibp").textContent = `≈ ${fmt(out)} tokens (${(Number((out * 10000n) / SUPPLY) / 100).toFixed(2)}% of supply)` + (pay === "eth" ? ` · ≈ ${fmt(imdIn)} IMD` : "");
+      $("#ibp").textContent = `≈ ${fmt(out)} tokens (${(Number((out * 10000n) / SUPPLY) / 100).toFixed(2)}% of supply)` + (pay === "eth" && !LAUNCH.wrapped ? ` · ≈ ${fmt(imdIn)} ${QS}` : "");
     } catch { if (seq === pvSeq) $("#ibp").textContent = "Can't quote this amount"; }
   };
   const setPay = (p) => {
     pay = p;
     document.querySelectorAll("#ibpay button").forEach((b) => b.classList.toggle("on", b.dataset.p === p));
-    $("#ibl").textContent = `Amount in ${p.toUpperCase()} (optional): buy your token first`;
+    $("#ibl").textContent = `Amount in ${p === "eth" ? NAT : QS} (optional): buy your token first`;
     $("#ibnote").textContent = p === "eth"
-      ? "Two wallet confirmations: the launch, then your buy with ETH (swapped to IMD automatically). Someone could buy in the few seconds between them; pay with IMD to buy inside the launch itself."
+      ? `Two wallet confirmations: the launch, then your buy with ${NAT} (${LAUNCH.wrapped ? "wrapped" : "swapped to " + QS} automatically). Someone could buy in the few seconds between them; pay with ${QS} to buy inside the launch itself.`
       : "Bought in the same transaction as the launch, so nobody can buy before you.";
     updPreview();
   };
@@ -2285,7 +2372,7 @@ async function renderCreate() {
       let minOut = 0n;
       if (imdBuy > 0n) {
         minOut = withSlippage(tokensFor(imdBuy, await padR.startTick(quote)), 1000);
-        await ensureImdAllowance(imdBuy, LAUNCH.router, ch.imd);
+        await ensureImdAllowance(imdBuy, LAUNCH.router, quote);
       }
       const router = new ethers.Contract(LAUNCH.router, ROUTER_ABI, signer);
       toast(ethBuy ? "Step 1 of 2: confirm the launch in your wallet…" : "Confirm the launch in your wallet…", 8000);
@@ -2303,14 +2390,14 @@ async function renderCreate() {
           for (let i = 0; i < 6 && !info; i++) { try { info = await LAUNCH.v.getTokenInfo(token); } catch { await new Promise((r) => setTimeout(r, 1500)); } }
           if (!info) throw new Error("the new token isn't visible yet");
           const expected = await quoteSwapEth(LAUNCH, token, info.quoteIsCurrency0, true, ethBuy);
-          toast("Token launched! Step 2 of 2: confirm your ETH buy…", 10000);
+          toast(`Token launched! Step 2 of 2: confirm your ${NAT} buy…`, 10000);
           const tx2 = await new ethers.Contract(LAUNCH.ethRouter, ETH_ROUTER_ABI, signer)
             .buyWithEth(token, withSlippage(expected, 500), deadline(), { value: ethBuy });
           toast("Buying…", 15000);
           await tx2.wait();
           toast("Token launched and bought");
         } catch (e) {
-          toast(`Token launched, but the ETH buy didn't go through (${errMsg(e)}). You can buy it on the token page.`, 10000);
+          toast(`Token launched, but the ${NAT} buy didn't go through (${errMsg(e)}). You can buy it on the token page.`, 10000);
         }
       } else toast("Token launched");
       location.hash = token ? "#/t/" + token : "#/tokens";
@@ -2354,7 +2441,7 @@ async function renderToken(addr) {
               <div class="stat">Created by <a class="mono" href="${P.ch.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> · ${ago(p.createdAt)} · ${P.nft ? `<a href="#/nft" style="text-decoration:underline">Pepes Earn IMD NFT</a>` : `launchpad v${P.version} on ${esc(P.ch.name)}`}</div>
               ${links ? `<div class="links">${links}</div>` : ""}
               <div class="row ext" style="margin-top:8px">
-                <a class="btn" href="https://gmgn.ai/${P.ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>
+                ${P.ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${P.ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
                 <a class="btn" href="https://dexscreener.com/${P.ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
                 ${((a) => `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>`)(CONFIG.audits.tokens[addr.toLowerCase()] || (P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
               </div>
@@ -2384,7 +2471,7 @@ async function renderToken(addr) {
       <div class="mside">
         <div class="card">
           <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
-          ${q !== ZERO ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">ETH</button><button type="button" data-v="imd">IMD</button></div></div>` : ""}
+          ${q !== ZERO ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">${esc(P.ch.native?.symbol || "ETH")}</button><button type="button" data-v="imd">${esc(Q)}</button></div></div>` : ""}
           <label for="amt" style="margin-top:0" id="amtl"></label>
           <input id="amt" inputmode="decimal" placeholder="0.0" />
           <div class="quick" id="quick"></div>
@@ -2441,7 +2528,9 @@ async function renderToken(addr) {
   // Only offered once the router's code is confirmed on-chain, so ETH can never be sent to an empty address.
   let viaEth = q !== ZERO && P.ethLive;
   if (q !== ZERO && !viaEth) $("#via")?.parentElement.remove();
-  const payUnit = () => (q === ZERO || viaEth ? "ETH" : "IMD");
+  const NAT = P.ch.native?.symbol || "ETH";
+  const payNative = () => q === ZERO || viaEth; // paying / receiving the chain's own coin
+  const payUnit = () => (payNative() ? NAT : Q);
   const ethRouterW = () => new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer);
 
   async function loadPosition() {
@@ -2470,12 +2559,13 @@ async function renderToken(addr) {
     if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
     $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
     $("#trade").textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`;
-    const payBal = payUnit() === "ETH" ? ethBal : quoteBal;
+    const payBal = payNative() ? ethBal : quoteBal;
     $("#bal").textContent = account ? `Balance: ${fmt(buying ? payBal : tokBal)} ${buying ? payUnit() : "$" + info.symbol}` : "";
-    const opts = buying ? (payUnit() === "ETH" ?["0.01", "0.05", "0.1", "0.5"] : ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
-    $("#quick").innerHTML = opts.map((o) => `<button type="button">${o}</button>`).join("");
+    const opts = buying ? (payNative() ? NATIVE_QUICK[NAT] || NATIVE_QUICK.ETH : QUOTES[q.toLowerCase()]?.quick || ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
+    const short = (o) => (o.endsWith("%") ? o : Number(o) >= 1e6 ? Number(o) / 1e6 + "M" : Number(o) >= 1e3 ? Number(o) / 1e3 + "K" : o);
+    $("#quick").innerHTML = opts.map((o) => `<button type="button" data-v="${o}">${short(o)}</button>`).join("");
     $("#quick").querySelectorAll("button").forEach((b) => b.onclick = () => {
-      const t = b.textContent;
+      const t = b.dataset.v;
       $("#amt").value = t.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(t))) / 100n, 18) : t;
       preview();
     });
@@ -2566,6 +2656,7 @@ async function fetchTradeLogs(P, addr, createdBlock) {
   const padC = P.c;
   const tradeTopic = padC.interface.getEvent("Trade").topicHash;
   try {
+    if (!P.ch.blockscoutApi) throw new Error("no Blockscout"); // the RPC below instead
     const url = `${P.ch.blockscoutApi}/addresses/${P.pad}/logs?topic=${ethers.zeroPadValue(addr, 32)}`;
     const items = [];
     let next = null;

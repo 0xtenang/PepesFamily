@@ -20,6 +20,7 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/src/types/PoolOperation
 import {PadToken} from "./PadToken.sol";
 import {PepesFamilyRouter} from "./PepesFamilyRouter.sol";
 import {PepesFamilyEthRouter} from "./PepesFamilyEthRouter.sol";
+import {PepesFamilyNativeRouter} from "./PepesFamilyNativeRouter.sol";
 import {PepesFamilyLens} from "./PepesFamilyLens.sol";
 import {SafeTransfer} from "./lib/SafeTransfer.sol";
 
@@ -135,7 +136,9 @@ contract PepesFamily is IHooks, IUnlockCallback {
     /// @notice Launch tick per quote asset, expressed as the tick of (tokens per quote). Sets the starting market cap.
     mapping(address quote => int24) public startTick;
 
-    /// @notice Uniswap v4 IMD/ETH pool used by `ethRouter` (ETH is currency0, IMD currency1).
+    /// @notice Uniswap v4 IMD/ETH pool used by `ethRouter` (ETH is currency0, IMD currency1). With tickSpacing 0 the
+    ///         pair asset is the chain's wrapped native coin itself (WETH, WBNB, WHYPE): `ethRouter` is then a
+    ///         PepesFamilyNativeRouter, which wraps and unwraps instead of swapping through a pool.
     struct ImdEthPool {
         uint24 fee;
         int24 tickSpacing;
@@ -222,11 +225,13 @@ contract PepesFamily is IHooks, IUnlockCallback {
         owner = owner_;
         feeRecipient = feeRecipient_;
         router = address(new PepesFamilyRouter(poolManager_, address(this)));
-        ethRouter = address(
-            new PepesFamilyEthRouter(
-                poolManager_, address(this), imd, imdEthPool.fee, imdEthPool.tickSpacing, imdEthPool.hooks
-            )
-        );
+        ethRouter = imdEthPool.tickSpacing == 0
+            ? address(new PepesFamilyNativeRouter(poolManager_, address(this), imd))
+            : address(
+                new PepesFamilyEthRouter(
+                    poolManager_, address(this), imd, imdEthPool.fee, imdEthPool.tickSpacing, imdEthPool.hooks
+                )
+            );
         lens = address(new PepesFamilyLens(address(this), poolManager_));
         _setStartTick(imd, imdStartTick);
         emit OwnershipTransferred(address(0), owner_);
