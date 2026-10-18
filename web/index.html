@@ -232,6 +232,15 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .hall-card { background: var(--bg); border: 1.5px solid var(--strong); padding: 14px; max-width: 760px; width: 100%; }
 .hall-card img { width: 100%; display: block; border: 1px solid var(--line); }
 .hall-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
+.hall-online { color: #3ddc84; background: rgba(0,0,0,.6); padding: 3px 8px; }
+.hall-chat { position: absolute; left: 12px; bottom: 56px; width: min(380px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 6px; z-index: 1; }
+.hc-log { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.4; color: #e6ede6; text-shadow: 0 1px 2px #000; }
+.hc-log .hc-line, .hc-log .hc-sys { background: rgba(0,0,0,.55); padding: 2px 8px; align-self: flex-start; max-width: 100%; overflow-wrap: anywhere; }
+.hc-log .hc-line b { color: #3ddc84; font-weight: 600; }
+.hc-log .hc-sys { color: #9aa79a; font-style: italic; }
+.hall-chat input { width: 100%; background: rgba(5,6,5,.85); color: #e6ede6; border: 1px solid #3a4a3a; padding: 7px 10px; font: inherit; font-size: 13px; }
+.hall-chat input:focus { outline: none; border-color: #3ddc84; }
+@media (max-width: 600px), (pointer: coarse) { .hall-chat { top: 84px; bottom: auto; } .hc-log { max-height: 30vh; } }
 .hall-wear { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 10px; max-height: 52vh; overflow: auto; }
 .hall-wear button { display: flex; flex-direction: column; gap: 4px; padding: 4px; text-transform: none; letter-spacing: 0; }
 .hall-wear button.on { border: 2px solid var(--accent); }
@@ -297,6 +306,8 @@ const CONFIG = {
   // Pepes Family: 3,333 on-chain Pepes drawn from IMD's own Pepe (github.com/0xtenang/PepesFamilyNFT,
   // deployments/chain-4663.json), minted at the Hall's MINT kiosk (#/mint).
   pepesNft: "0xC105792e11A60Bd8F461E6e5094E18594574AABe",
+  // The multiplayer Hall's server (hall-server/, a Cloudflare Worker): wss://…/hall. Empty: the Hall is single player.
+  hallServer: "",
   pepesArt: "0xc084E16c5a3FcBd75F34f010a012c44Dc5Fe8a06",
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
@@ -987,6 +998,7 @@ async function renderHall() {
       },
       useAsLaunchImage(dataUrl) { HALL_SHOT = dataUrl; location.hash = "#/create"; },
       myPepes: holderPepes,
+      server: CONFIG.hallServer,
       async pepeImage(id) { return nftImage(await new ethers.Contract(CONFIG.pepesNft, NFT_ABI, CHAINS.robinhood.reader).tokenURI(id)); },
     });
     Hall.setAdmin(IS_ADMIN);
