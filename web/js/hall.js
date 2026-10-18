@@ -99,79 +99,192 @@
     return { skin: SKINS[skin], shirt: acc === 4 ? 0xc62828 : SHIRTS[shirt], shorts: SHORTS[shorts], hat: HATS[head], acc, cape: acc === 4 ? (skin === 5 ? 0x6a1b9a : 0xc62828) : 0 };
   }
 
-  /// A Pepe from simple shapes, cel-shaded and outlined; faces +z, feet at the origin, about 1.7 tall.
+  // Pepes are drawn, not modelled: flat cartoon sprites in the IMD team's reference style (thick outlines, a big
+  // head with two eye bumps, heavy lids, long lips, blue tee, tan shorts). Front, back and side views, a two-step
+  // walk and a blink; the sprite always turns to the camera (like paper cut-outs standing in a 3D room).
+  const hex = (n) => "#" + n.toString(16).padStart(6, "0");
+  const OUT = "#161616";
+  const SW = 200, SH = 300, RES = 1.4; // logical sprite size, and pixels per logical unit
+  let activeCamera = null;
+
+  // Drawing helpers on a 200 x 300 logical canvas (feet at y ~ 290).
+  function fillStroke(g, fill, w = 4) { g.fillStyle = fill; g.fill(); g.lineWidth = w; g.strokeStyle = OUT; g.stroke(); }
+  function ell(g, x, y, rx, ry) { g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); }
+  function rrect(g, x, y, w, h, r) { g.beginPath(); g.roundRect(x, y, w, h, r); }
+
+  /// The head outline seen from the front or back: a wide blob with two eye bumps on top.
+  function headPath(g) {
+    g.beginPath();
+    g.moveTo(22, 112);
+    g.bezierCurveTo(14, 70, 26, 34, 44, 26);   // left cheek up to the left bump
+    g.bezierCurveTo(64, 10, 92, 16, 100, 34);  // over the left bump to the dip
+    g.bezierCurveTo(108, 16, 136, 10, 156, 26); // over the right bump
+    g.bezierCurveTo(174, 34, 186, 70, 178, 112); // down the right cheek
+    g.bezierCurveTo(170, 140, 30, 140, 22, 112); // the chin
+    g.closePath();
+  }
+  function legsAndFeet(g, L, step, side) {
+    const lift = (i) => (step === 0 ? 0 : (i === 0) === (step === 1) ? 6 : 0);
+    const xs = side ? [88, 104] : [70, 118];
+    xs.forEach((x, i) => {
+      const up = lift(i);
+      rrect(g, x, 250 - up, 12, 34, 4); fillStroke(g, L.skin, 3.5);
+      ell(g, x + (side ? 12 : 6), 286 - up, side ? 14 : 12, 6); fillStroke(g, L.skin, 3.5);
+    });
+  }
+  function shorts(g, L, side) {
+    g.beginPath();
+    if (side) { g.moveTo(70, 212); g.lineTo(130, 212); g.lineTo(134, 256); g.lineTo(66, 256); g.closePath(); }
+    else { g.moveTo(56, 210); g.lineTo(144, 210); g.lineTo(150, 256); g.lineTo(106, 256); g.lineTo(100, 246); g.lineTo(94, 256); g.lineTo(50, 256); g.closePath(); }
+    fillStroke(g, L.shorts);
+  }
+  function arms(g, L, swing, side) {
+    if (side) { g.save(); g.translate(100, 150); g.rotate(swing * 0.25); rrect(g, -7, 0, 14, 62, 7); fillStroke(g, L.skin, 3.5); g.restore(); return; }
+    for (const [x, dir] of [[40, -1], [148, 1]]) { rrect(g, x, 160 + swing * dir * 3, 12, 54, 6); fillStroke(g, L.skin, 3.5); }
+  }
+  function shirt(g, L, side) {
+    g.beginPath();
+    if (side) { g.moveTo(68, 140); g.lineTo(132, 140); g.lineTo(136, 216); g.lineTo(64, 216); g.closePath(); }
+    else {
+      // short sleeves out at the shoulders, a slightly flared hem
+      g.moveTo(58, 138); g.lineTo(142, 138); g.lineTo(166, 150); g.lineTo(160, 178); g.lineTo(146, 174);
+      g.lineTo(150, 216); g.lineTo(50, 216); g.lineTo(54, 174); g.lineTo(40, 178); g.lineTo(34, 150); g.closePath();
+    }
+    fillStroke(g, L.shirt);
+  }
+  function hat(g, h, view) {
+    const back = view === "back", side = view === "side";
+    const cx = side ? 108 : 100;
+    if (h === "cap") { g.beginPath(); g.ellipse(cx, 34, 58, 30, 0, Math.PI, 0); g.closePath(); fillStroke(g, "#1d4ed8"); if (!back) { g.beginPath(); side ? g.ellipse(cx + 54, 34, 26, 7, 0, 0, Math.PI * 2) : g.ellipse(cx, 36, 44, 9, 0, 0, Math.PI * 2); fillStroke(g, "#1d4ed8"); } }
+    else if (h === "beanie") { g.beginPath(); g.ellipse(cx, 36, 62, 38, 0, Math.PI, 0); g.closePath(); fillStroke(g, "#d97706"); rrect(g, cx - 64, 30, 128, 14, 5); fillStroke(g, "#b45309"); ell(g, cx, -4, 9, 9); fillStroke(g, "#fde68a"); }
+    else if (h === "headphones") { g.beginPath(); g.ellipse(cx, 60, 78, 58, 0, Math.PI, 0); g.lineWidth = 7; g.strokeStyle = OUT; g.stroke(); if (!side) { ell(g, cx - 80, 76, 11, 18); fillStroke(g, "#e11d48"); ell(g, cx + 80, 76, 11, 18); fillStroke(g, "#e11d48"); } else { ell(g, cx - 6, 76, 13, 20); fillStroke(g, "#e11d48"); } }
+    else if (h === "party") { g.beginPath(); g.moveTo(cx - 20, 30); g.lineTo(cx, -26); g.lineTo(cx + 20, 30); g.closePath(); fillStroke(g, "#8b5cf6"); ell(g, cx, -28, 6, 6); fillStroke(g, "#fde047", 2.5); }
+    else if (h === "halo") { ell(g, cx, -2, 42, 9); g.lineWidth = 6; g.strokeStyle = "#fde047"; g.stroke(); }
+    else if (h === "crown") { g.beginPath(); g.moveTo(cx - 36, 34); g.lineTo(cx - 32, 0); g.lineTo(cx - 16, 18); g.lineTo(cx, -6); g.lineTo(cx + 16, 18); g.lineTo(cx + 32, 0); g.lineTo(cx + 36, 34); g.closePath(); fillStroke(g, "#f5c542"); ell(g, cx, 22, 4, 4); fillStroke(g, "#dc2626", 2); }
+  }
+
+  /// One frame: view "front" | "back" | "side" (facing right), step 0 (stand) | 1 | 2, blink.
+  function drawPepe(L, view, step, blink) {
+    const c = canvas(Math.round(SW * RES), Math.round(SH * RES)), g = c.getContext("2d");
+    g.scale(RES, RES); g.lineJoin = "round"; g.lineCap = "round";
+    const side = view === "side", swing = step === 0 ? 0 : step === 1 ? 1 : -1;
+    ell(g, 100, 291, 52, 7); g.fillStyle = "rgba(0,0,0,.16)"; g.fill();
+    if (L.cape) { g.beginPath(); g.moveTo(60, 142); g.lineTo(140, 142); g.lineTo(156, 250); g.lineTo(44, 250); g.closePath(); fillStroke(g, L.cape); }
+    legsAndFeet(g, L, step, side);
+    shorts(g, L, side);
+    if (!side) arms(g, L, swing, false);
+    shirt(g, L, side);
+    if (view === "back") {
+      if (L.acc === 1) { rrect(g, 64, 150, 72, 58, 12); fillStroke(g, "#e0a526"); rrect(g, 76, 160, 48, 16, 5); fillStroke(g, "#c98a12", 3); }
+      if (L.cape) { g.beginPath(); g.moveTo(58, 142); g.lineTo(142, 142); g.lineTo(158, 252); g.lineTo(42, 252); g.closePath(); fillStroke(g, L.cape); }
+    } else if (!side && L.acc === 1) { g.beginPath(); g.moveTo(70, 140); g.lineTo(74, 200); g.moveTo(130, 140); g.lineTo(126, 200); g.lineWidth = 5; g.strokeStyle = OUT; g.stroke(); }
+    if (L.acc === 2 && !side) { g.beginPath(); g.ellipse(view === "back" ? 44 : 156, 206, 15, 18, 0, 0, Math.PI * 2); fillStroke(g, "#f5c542", 3); }
+    if (side) arms(g, L, swing, true);
+
+    if (side) {
+      // profile facing right: round back of the head, the eye bump up front, lips sticking out
+      g.beginPath();
+      g.moveTo(52, 118);
+      g.bezierCurveTo(30, 96, 34, 44, 74, 34);
+      g.bezierCurveTo(100, 26, 118, 30, 130, 34);
+      g.bezierCurveTo(140, 8, 176, 10, 182, 44);
+      g.bezierCurveTo(190, 70, 190, 92, 186, 104);
+      g.bezierCurveTo(176, 136, 70, 142, 52, 118);
+      g.closePath(); fillStroke(g, L.skin);
+      // eye
+      ell(g, 160, 64, 24, 24); fillStroke(g, "#ffffff", 3.5);
+      ell(g, 168, 72, 11, 12); g.fillStyle = OUT; g.fill();
+      ell(g, 164, 67, 3.5, 3.5); g.fillStyle = "#fff"; g.fill();
+      g.save(); ell(g, 160, 64, 24, 24); g.clip();
+      g.beginPath(); g.rect(120, 20, 80, blink ? 70 : 38); g.fillStyle = L.skin; g.fill();
+      g.restore();
+      g.beginPath(); g.moveTo(136, blink ? 82 : 58); g.quadraticCurveTo(160, blink ? 86 : 54, 184, blink ? 82 : 60); g.lineWidth = 4; g.strokeStyle = OUT; g.stroke();
+      ell(g, 160, 64, 24, 24); g.lineWidth = 3.5; g.stroke();
+      // lips
+      g.beginPath(); g.moveTo(132, 106); g.bezierCurveTo(160, 98, 194, 98, 196, 110); g.bezierCurveTo(196, 124, 160, 126, 132, 120); g.closePath(); fillStroke(g, "#b4614a", 3.5);
+      g.beginPath(); g.moveTo(140, 113); g.quadraticCurveTo(170, 108, 194, 112); g.lineWidth = 3; g.strokeStyle = "#5a2a1e"; g.stroke();
+      hat(g, L.hat, "side");
+      return c;
+    }
+
+    headPath(g); fillStroke(g, L.skin, 4.5);
+    if (view === "back") {
+      g.beginPath(); g.moveTo(40, 40); g.quadraticCurveTo(56, 24, 76, 26); g.lineWidth = 3; g.strokeStyle = "rgba(255,255,255,.35)"; g.stroke();
+      hat(g, L.hat, "back");
+      return c;
+    }
+    // eyes: big whites, pupils looking a little down, heavy upper lids (closed when blinking)
+    for (const [x, px] of [[66, 72], [134, 128]]) {
+      ell(g, x, 72, 31, 27); fillStroke(g, "#ffffff", 3.5);
+      ell(g, px, 80, 15, 15); g.fillStyle = OUT; g.fill();
+      ell(g, px - 5, 75, 4.5, 4.5); g.fillStyle = "#fff"; g.fill();
+      g.save(); ell(g, x, 72, 31, 27); g.clip();
+      g.beginPath(); g.rect(x - 40, 30, 80, blink ? 80 : 36); g.fillStyle = L.skin; g.fill();
+      g.restore();
+      // the lid's edge
+      const ly = blink ? 96 : 66;
+      g.beginPath(); g.moveTo(x - 30, ly + 2); g.quadraticCurveTo(x, ly - 4, x + 30, ly + 2); g.lineWidth = 4; g.strokeStyle = OUT; g.stroke();
+      ell(g, x, 72, 31, 27); g.lineWidth = 3.5; g.stroke();
+    }
+    // lips: one long reddish-brown shape with a dark line where they meet
+    g.beginPath();
+    g.moveTo(34, 110);
+    g.bezierCurveTo(56, 92, 144, 92, 166, 110);
+    g.bezierCurveTo(156, 136, 44, 136, 34, 110);
+    g.closePath(); fillStroke(g, "#b4614a", 4);
+    g.beginPath(); g.moveTo(42, 111); g.bezierCurveTo(78, 104, 122, 104, 158, 111); g.lineWidth = 3.5; g.strokeStyle = "#5a2a1e"; g.stroke();
+    hat(g, L.hat, "front");
+    return c;
+  }
+
+  const spriteCache = new Map();
+  /// All frames of one look, as textures (shared by every Pepe with that look).
+  function pepeFrames(look) {
+    const key = JSON.stringify(look);
+    if (!spriteCache.has(key)) {
+      const L = { ...look, skin: hex(look.skin), shirt: hex(look.shirt), shorts: hex(look.shorts), cape: look.cape ? hex(look.cape) : "" };
+      const f = {};
+      for (const view of ["front", "back", "side"]) f[view] = [0, 1, 2].map((st) => tex(drawPepe(L, view, st, false)));
+      f.blink = tex(drawPepe(L, "front", 0, true));
+      f.sideBlink = tex(drawPepe(L, "side", 0, true));
+      spriteCache.set(key, f);
+    }
+    return spriteCache.get(key);
+  }
+
+  /// A Pepe in the room: a camera-facing cut-out showing the right view for where it faces. Feet at the origin.
   function makePepe(look) {
-    const root = new T.Group(), body = new T.Group();
-    root.add(body);
-    const mats = new Map();
-    const m = (c, extra) => { const k = c + JSON.stringify(extra || {}); if (!mats.has(k)) mats.set(k, toon(c, extra)); return mats.get(k); };
-    const add = (parent, geo, color, x = 0, y = 0, z = 0, extra, outline = true) => {
-      const mesh = new T.Mesh(geo, m(color, extra));
-      mesh.position.set(x, y, z);
-      parent.add(mesh);
-      if (outline) { const o = new T.Mesh(geo, OUTLINE); o.position.copy(mesh.position); o.scale.setScalar(1.06); parent.add(o); mesh.userData.outline = o; }
-      return mesh;
-    };
-    const legs = [];
-    for (const s of [-1, 1]) {
-      const hip = new T.Group(); hip.position.set(s * 0.11, 0.62, 0); body.add(hip);
-      add(hip, new T.CylinderGeometry(0.06, 0.055, 0.56, 8), look.skin, 0, -0.3, 0);
-      const foot = add(hip, new T.SphereGeometry(0.09, 10, 8), look.skin, 0, -0.58, 0.05); foot.scale.set(1, 0.5, 1.4);
-      legs.push(hip);
-    }
-    const shorts = add(body, new T.CylinderGeometry(0.27, 0.3, 0.3, 14), look.shorts, 0, 0.72, 0); shorts.scale.z = 0.8;
-    const torso = add(body, new T.CylinderGeometry(0.25, 0.3, 0.5, 14), look.shirt, 0, 1.08, 0); torso.scale.z = 0.8;
-    const arms = [];
-    for (const s of [-1, 1]) {
-      const sh = new T.Group(); sh.position.set(s * 0.3, 1.26, 0); sh.rotation.z = s * 0.12; body.add(sh);
-      add(sh, new T.CylinderGeometry(0.075, 0.07, 0.2, 8), look.shirt, 0, -0.08, 0);
-      add(sh, new T.CylinderGeometry(0.05, 0.045, 0.32, 8), look.skin, 0, -0.32, 0);
-      add(sh, new T.SphereGeometry(0.06, 8, 6), look.skin, 0, -0.5, 0);
-      arms.push(sh);
-    }
-    if (look.cape) add(body, new T.CylinderGeometry(0.24, 0.4, 0.8, 16, 1, true, Math.PI * 0.55, Math.PI * 0.9), look.cape, 0, 0.95, 0.06, { side: T.DoubleSide }, false);
-    if (look.acc === 1) add(body, new T.BoxGeometry(0.34, 0.36, 0.16), 0xe0a526, 0, 1.08, -0.3);
-    if (look.acc === 2) { const b = add(body, new T.SphereGeometry(0.15, 10, 8), 0xf5c542, 0.36, 0.75, 0.05); b.scale.y = 1.15; }
-
-    // head: a wide frog skull, two bulging eyes with heavy lids, long lips
-    const head = new T.Group(); head.position.set(0, 1.38, 0); body.add(head);
-    const skull = add(head, new T.SphereGeometry(0.25, 22, 16), look.skin, 0, 0.12, 0); skull.scale.set(1.3, 0.82, 1.05);
-    const eyes = [];
-    for (const s of [-1, 1]) {
-      const bulge = add(head, new T.SphereGeometry(0.13, 16, 12), look.skin, s * 0.13, 0.25, 0.07); bulge.scale.set(1, 0.95, 0.9);
-      const eye = new T.Group(); eye.position.set(s * 0.13, 0.25, 0.13); head.add(eye);
-      const ball = add(eye, new T.SphereGeometry(0.1, 14, 10), 0xffffff, 0, 0, 0, undefined, false); ball.scale.set(1, 0.85, 0.75);
-      add(eye, new T.SphereGeometry(0.04, 10, 8), 0x161616, -s * 0.015, -0.015, 0.065, undefined, false);
-      eyes.push(eye);
-      const lid = add(head, new T.SphereGeometry(0.108, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), look.skin, s * 0.13, 0.258, 0.135, undefined, false);
-      lid.rotation.x = 0.55; lid.scale.set(1.04, 1, 0.82);
-    }
-    for (const [y, rad, color] of [[0.05, 0.25, 0xa9503f], [0.02, 0.235, 0x8a3c30]]) {
-      const g = new T.Group(); g.position.set(0, y, 0); g.rotation.y = -Math.PI * 0.2; g.scale.set(1.12, 1, 1); head.add(g);
-      const lip = new T.Mesh(new T.TorusGeometry(rad, 0.026, 6, 24, Math.PI * 0.6), m(color)); lip.rotation.x = Math.PI / 2; g.add(lip);
-    }
-    const hat = (h) => {
-      if (h === "cap") { const c = add(head, new T.SphereGeometry(0.27, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), 0x1d4ed8, 0, 0.22, -0.06); c.scale.set(1.2, 0.9, 1.05); const b = add(head, new T.CylinderGeometry(0.16, 0.16, 0.02, 16), 0x1d4ed8, 0, 0.32, 0.17); b.scale.z = 0.8; }
-      else if (h === "beanie") { const c = add(head, new T.SphereGeometry(0.28, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.45), 0xd97706, 0, 0.22, -0.06); c.scale.set(1.2, 1, 1.05); }
-      else if (h === "headphones") { const b = add(head, new T.TorusGeometry(0.3, 0.025, 6, 20, Math.PI), 0x111111, 0, 0.16, -0.04); b.scale.x = 1.15; for (const s of [-1, 1]) { const c = add(head, new T.CylinderGeometry(0.08, 0.08, 0.06, 14), 0xe11d48, s * 0.34, 0.14, -0.04); c.rotation.z = Math.PI / 2; } }
-      else if (h === "party") { add(head, new T.ConeGeometry(0.12, 0.36, 14), 0x8b5cf6, 0, 0.5, -0.06); }
-      else if (h === "halo") { const r = add(head, new T.TorusGeometry(0.2, 0.022, 6, 24), 0xfde047, 0, 0.58, -0.04, { emissive: 0x4a3b00 }, false); r.rotation.x = Math.PI / 2; }
-      else if (h === "crown") { add(head, new T.CylinderGeometry(0.17, 0.17, 0.1, 16, 1, true), 0xf5c542, 0, 0.38, -0.04, { emissive: 0x3a2800, side: T.DoubleSide }); for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; add(head, new T.ConeGeometry(0.035, 0.1, 6), 0xf5c542, Math.sin(a) * 0.17, 0.47, Math.cos(a) * 0.17 - 0.04, undefined, false); } }
-    };
-    hat(look.hat);
-
+    const frames = pepeFrames(look);
+    const root = new T.Group();
+    const H = 1.85, Wd = H * SW / SH;
+    const mat = new T.MeshBasicMaterial({ map: frames.front[0], transparent: true, alphaTest: 0.35, side: T.DoubleSide });
+    const card = new T.Mesh(new T.PlaneGeometry(Wd, H), mat);
+    card.position.y = H / 2 - 0.05;
+    root.add(card);
     let phase = Math.random() * 6, blink = 2 + Math.random() * 3;
+    const wp = new T.Vector3();
     return {
-      root, head,
+      root,
       update(dt, speed, t) {
-        phase += dt * (3 + 8 * speed);
-        const s = Math.sin(phase);
-        legs[0].rotation.x = s * 0.7 * speed; legs[1].rotation.x = -s * 0.7 * speed;
-        arms[0].rotation.x = -s * 0.6 * speed; arms[1].rotation.x = s * 0.6 * speed;
-        body.position.y = Math.abs(Math.cos(phase)) * 0.05 * speed + Math.sin(t * 2.1 + phase) * 0.006 * (1 - speed);
+        phase += dt * (2 + 7 * speed);
         blink -= dt;
-        for (const e of eyes) e.scale.y = blink < 0.12 ? 0.15 : 1;
+        const closed = blink < 0.13;
         if (blink < 0) blink = 2 + Math.random() * 4;
+        // which side of this Pepe the camera sees
+        root.getWorldPosition(wp);
+        const cam = activeCamera ? activeCamera.position : wp;
+        const toCam = Math.atan2(cam.x - wp.x, cam.z - wp.z);
+        let rel = toCam - root.rotation.y; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+        card.rotation.y = rel; // turn the cut-out to face the camera
+        const step = speed > 0.05 ? (Math.floor(phase) % 4 === 0 ? 1 : Math.floor(phase) % 4 === 2 ? 2 : 0) : 0;
+        let map;
+        if (Math.abs(rel) < Math.PI / 4) map = closed && !step ? frames.blink : frames.front[step];
+        else if (Math.abs(rel) > (3 * Math.PI) / 4) map = frames.back[step];
+        else map = closed && !step ? frames.sideBlink : frames.side[step];
+        // side view faces right; mirror it when the Pepe faces the camera's left
+        card.scale.x = Math.abs(rel) >= Math.PI / 4 && Math.abs(rel) <= (3 * Math.PI) / 4 && rel > 0 ? -1 : 1;
+        if (mat.map !== map) { mat.map = map; mat.needsUpdate = true; }
+        card.position.y = H / 2 - 0.05 + (speed > 0.05 ? Math.abs(Math.sin(phase * Math.PI / 2)) * 0.05 : Math.sin(t * 2 + phase) * 0.008);
       },
     };
   }
@@ -201,6 +314,7 @@
     const scene = new T.Scene();
     scene.background = new T.Color(0x0b0b0b);
     const camera = new T.PerspectiveCamera(55, 1, 0.1, 200);
+    activeCamera = camera;
     scene.add(new T.HemisphereLight(0xffffff, 0x888888, 1.6));
     const sun = new T.DirectionalLight(0xffffff, 1.4); sun.position.set(6, 14, 12); scene.add(sun);
 
@@ -265,7 +379,9 @@
     const crowd = [];
     const cr = rnd(91);
     for (let i = 0; i < 7; i++) {
-      const look = { skin: cr() < 0.85 ? 0x64a84d : SKINS[1 + Math.floor(cr() * 3)], shirt: cr() < 0.6 ? 0x2c60cc : SHIRTS[Math.floor(cr() * SHIRTS.length)], shorts: SHORTS[Math.floor(cr() * 3)], hat: cr() < 0.3 ? HATS[1 + Math.floor(cr() * 3)] : "none", acc: 0 };
+      // mostly the classic Pepe, a few in other colours (a handful of looks keeps the sprite textures shared)
+      const LOCALS = [CLASSIC, CLASSIC, CLASSIC, { ...CLASSIC, shirt: 0xd23c3c }, { ...CLASSIC, shorts: 0x6b6b6b }, { ...CLASSIC, hat: "cap" }];
+      const look = LOCALS[Math.floor(cr() * LOCALS.length)];
       const p = makePepe(look);
       p.root.position.set(-7 + i * 2.3 + (cr() - 0.5), 0, 5.5 + cr() * 3);
       p.root.rotation.y = Math.PI + (cr() - 0.5) * 0.5; // facing the wall
@@ -489,5 +605,10 @@
     const s = state; state = null; s.stop();
   }
 
-  window.Hall = { mount, unmount, earnLook };
+  /// A Pepe drawn on its own canvas (for previews and avatars): view "front" | "back" | "side".
+  function pepeCanvas(look = CLASSIC, view = "front") {
+    return drawPepe({ ...look, skin: hex(look.skin), shirt: hex(look.shirt), shorts: hex(look.shorts), cape: look.cape ? hex(look.cape) : "" }, view, 0, false);
+  }
+
+  window.Hall = { mount, unmount, earnLook, pepeCanvas };
 })();
