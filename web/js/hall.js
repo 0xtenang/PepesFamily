@@ -422,8 +422,9 @@
       kiosks.push(k);
       return k;
     }
-    kiosk(-8, "LAUNCH", "launch a token", "#/create");
-    kiosk(-14, "TOKENS", "browse every token", "#/tokens");
+    kiosk(-5, "MINT", "Pepes Family NFT", "#/mint");
+    kiosk(-10, "LAUNCH", "launch a token", "#/create");
+    kiosk(-15, "TOKENS", "browse every token", "#/tokens");
     kiosk(8, "REWARDS", "claim your IMD", "#/rewards");
     // the admin terminal only stands there for the launchpad's owner or fee recipient (see setAdmin)
     const admin = kiosk(14, "ADMIN", "collect fees", "#/admin");

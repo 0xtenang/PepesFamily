@@ -144,6 +144,15 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .ext .btn { padding: 4px 10px; font-size: 11px; }
 .scroll-x { overflow-x: auto; }
 .sharebtn { margin-top: 4px; padding: 2px 8px; font-size: 11px; }
+/* Pepes Family mint */
+.mint-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
+.mint-pics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.mint-pics img, .mint-mine img { width: 100%; aspect-ratio: 1; display: block; border: 1px solid var(--line); background: var(--panel-2); }
+.mint-bar { height: 8px; border: 1px solid var(--strong); margin: 8px 0 4px; }
+.mint-bar i { display: block; height: 100%; background: var(--accent); }
+.mint-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.mint-mine figure { margin: 0; font-size: 12px; }
+@media (max-width: 760px) { .mint-top { grid-template-columns: 1fr; } }
 .share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border: 1px solid var(--line); background: #000; }
 #rf input { flex: 1; min-width: 0; }
 .modal .card.big { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
@@ -280,6 +289,10 @@ const CONFIG = {
     router: "0x3a6ce89cc881aa054d289C7a9456AF4bc3217bcC",
     ethRouter: "0xB5f81908d652332850dFFCcd898d7e0e0d70467F",
   },
+  // Pepes Family: 3,333 on-chain Pepes drawn from IMD's own Pepe (github.com/0xtenang/PepesFamilyNFT,
+  // deployments/chain-4663.json), minted at the Hall's MINT kiosk (#/mint).
+  pepesNft: "0xC105792e11A60Bd8F461E6e5094E18594574AABe",
+  pepesArt: "0xc084E16c5a3FcBd75F34f010a012c44Dc5Fe8a06",
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
   // Images shown instead of a token's on-chain metadata image (token address in lower case -> path on this site).
@@ -857,6 +870,7 @@ function windowTitle(h) {
   if (h === "/create") return "Launch a token";
   if (h === "/tokens") return "Tokens";
   if (h === "/admin") return "Admin";
+  if (h === "/mint") return "Mint Pepes Family";
   if (h === "/rewards" || h.startsWith("/rewards/")) return "Rewards";
   return null;
 }
@@ -880,6 +894,7 @@ function route() {
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
   if (h === "/admin") return renderAdmin();
+  if (h === "/mint") return renderMint();
   if (h.startsWith("/rewards")) return renderRewards(h.slice(9) || null);
   return renderHome();
 }
@@ -939,7 +954,7 @@ async function renderHall() {
   const fallback = (why) => {
     // no 3D here (no WebGL, or the scripts didn't load): the same places, as plain links
     world.innerHTML = `<div class="hall-off"><div><p>${esc(why)}</p><div class="grid">
-      <a href="#/create">LAUNCH</a><a href="#/tokens">TOKENS</a><a href="#/rewards">REWARDS</a></div></div></div>`;
+      <a href="#/mint">MINT</a><a href="#/create">LAUNCH</a><a href="#/tokens">TOKENS</a><a href="#/rewards">REWARDS</a></div></div></div>`;
   };
   try {
     if (!document.createElement("canvas").getContext("webgl2") && !document.createElement("canvas").getContext("webgl")) throw new Error("This browser can't show the 3D Hall.");
@@ -1809,6 +1824,112 @@ async function shareCard(total, sub, top) {
   g.fillStyle = "#8c8c8c"; g.font = F(400, 20); g.fillText("Every trade pays its holders", 60, floor + 36);
   g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesfamily.fun", W - 60, floor + 36);
   return c.toDataURL("image/png");
+}
+
+// ---------------------------------------------------------------- Pepes Family mint
+const NFT_ABI = [
+  "function mint(uint256 quantity) payable",
+  "function price() view returns (uint256)",
+  "function saleOpen() view returns (bool)",
+  "function totalMinted() view returns (uint256)",
+  "function walletLimit() view returns (uint256)",
+  "function mintedBy(address) view returns (uint256)",
+  "function MAX_SUPPLY() view returns (uint256)",
+  "function MAX_PER_TX() view returns (uint256)",
+  "function tokensOfOwner(address) view returns (uint256[])",
+  "function tokenURI(uint256) view returns (string)",
+  "function seed() view returns (uint256)",
+];
+const NFT_ART_ABI = ["function render(uint256) view returns (string)", "function sealedSvg() view returns (string)"];
+const svgUrl = (svg) => "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+/// The image of a token from its on-chain tokenURI (a data: JSON with a data: SVG image).
+function nftImage(uri) {
+  try {
+    const json = JSON.parse(uri.startsWith("data:application/json;base64,") ? decodeURIComponent(escape(atob(uri.slice(29)))) : decodeURIComponent(uri.slice(uri.indexOf(",") + 1)));
+    const img = String(json.image || "");
+    return img.startsWith("data:image/") ? img : "";
+  } catch { return ""; }
+}
+
+async function renderMint() {
+  const app = $("#app"), gen = routeGen;
+  const ch = CHAINS.robinhood;
+  const nftR = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, ch.reader);
+  const artR = new ethers.Contract(CONFIG.pepesArt, NFT_ART_ABI, ch.reader);
+  app.innerHTML = `<div class="muted">Reading the collection…</div>`;
+  let st;
+  try {
+    const [price, open, minted, limit, max, perTx, seed, mine] = await Promise.all([
+      nftR.price(), nftR.saleOpen(), nftR.totalMinted(), nftR.walletLimit(), nftR.MAX_SUPPLY(), nftR.MAX_PER_TX(), nftR.seed(),
+      account ? nftR.mintedBy(account) : Promise.resolve(0n),
+    ]);
+    st = { price, open, minted: Number(minted), limit: Number(limit), max: Number(max), perTx: Number(perTx), revealed: seed !== 0n, mine: Number(mine) };
+  } catch (e) { if (gen === routeGen) app.innerHTML = `<div class="card empty">Couldn't read the collection: ${esc(errMsg(e))}</div>`; return; }
+  if (gen !== routeGen) return;
+  const left = st.max - st.minted;
+  const canMint = Math.max(0, Math.min(st.perTx, st.limit - st.mine, left));
+  const usdEach = Number(ethers.formatEther(st.price)) * quoteUsd(ZERO);
+  let qty = Math.min(1, canMint);
+  const state = !st.open ? (st.minted >= st.max ? "Sold out" : "The mint is closed") : left === 0 ? "Sold out" : "";
+  app.innerHTML = `
+    <div class="mint-top">
+      <div><div class="mint-pics" id="mpics">${[0, 1, 2, 3].map(() => `<img alt="A Pepes Family Pepe" />`).join("")}</div>
+        <p class="stat" style="margin:8px 0 0">Some of the 3,333 looks, drawn live by the contract. Each Pepe is sealed until the reveal after the mint, then shows its own look.</p></div>
+      <div>
+        <h1 style="margin:0 0 4px">Pepes Family</h1>
+        <p class="stat" style="margin:0 0 14px">3,333 Pepes drawn from IMD's own Pepe, stored and drawn entirely on Robinhood Chain: no IPFS, no server. No two look alike.</p>
+        <div class="stats q" style="margin:0 0 14px">
+          <div class="card"><div class="k">Price</div><div class="v">${fmt(st.price, 6)} ETH</div><div class="stat">${usdEach ? "≈ " + fmtUsd(usdEach) : ""} each</div></div>
+          <div class="card"><div class="k">Minted</div><div class="v">${st.minted.toLocaleString()} / ${st.max.toLocaleString()}</div><div class="mint-bar"><i style="width:${(100 * st.minted / st.max).toFixed(2)}%"></i></div></div>
+        </div>
+        ${state ? `<div class="card empty" style="padding:24px">${state}</div>` : `
+        <div class="card">
+          <div class="stat" style="margin-bottom:8px">${account ? `You've minted ${st.mine} of ${st.limit} a wallet.` : `Up to ${st.limit} a wallet.`}</div>
+          ${account && canMint === 0 ? `<p style="margin:0">You've reached the limit for this wallet.</p>` : `
+          <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
+            <div class="seg" id="mqty">${Array.from({ length: account ? canMint : Math.min(st.perTx, st.limit, left) }, (_, i) => `<button type="button" data-q="${i + 1}">${i + 1}</button>`).join("")}</div>
+            <span class="stat" id="mtotal"></span>
+          </div>
+          <button class="primary" id="mintbtn" style="width:100%;margin-top:12px">${account ? "Mint" : "Connect wallet to mint"}</button>`}
+        </div>`}
+        <p class="stat" style="margin:12px 0 0">5% royalty on resales, enforced on marketplaces. Wallets only (no contracts). <a href="${ch.explorer}/address/${CONFIG.pepesNft}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Contract ↗</a></p>
+      </div>
+    </div>
+    <div id="mmine"></div>`;
+  // a few looks, drawn live by the art contract
+  const picks = Array.from({ length: 4 }, () => Math.floor(Math.random() * 3333));
+  app.querySelectorAll("#mpics img").forEach((im, i) => artR.render(picks[i]).then((svg) => { im.src = svgUrl(svg); }).catch(() => {}));
+  const setQty = (q) => {
+    qty = q;
+    app.querySelectorAll("#mqty button").forEach((b) => b.classList.toggle("on", Number(b.dataset.q) === q));
+    const t = $("#mtotal"); if (t) t.textContent = `${q} × ${fmt(st.price, 6)} = ${fmt(st.price * BigInt(q), 6)} ETH${usdEach ? ` (≈ ${fmtUsd(usdEach * q)})` : ""}`;
+  };
+  app.querySelectorAll("#mqty button").forEach((b) => (b.onclick = () => setQty(Number(b.dataset.q))));
+  if (qty) setQty(qty);
+  const btn = $("#mintbtn");
+  if (btn) btn.onclick = async () => {
+    if (!account) { try { await connect(ch); } catch (e) { toast(errMsg(e), 7000); } return; } // connecting re-renders the page
+    btn.disabled = true;
+    try {
+      await requireWallet(ch);
+      const nft = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, signer);
+      const price = await nftR.price(); // the price now, in case the owner changed it
+      toast("Confirm the mint in your wallet…", 10000);
+      const tx = await nft.mint(qty, { value: price * BigInt(qty) });
+      toast("Minting…", 30000);
+      await tx.wait();
+      toast(`Minted ${qty} Pepe${qty > 1 ? "s" : ""} 🐸`, 6000);
+      if (gen === routeGen) renderMint();
+    } catch (e) { toast(errMsg(e), 8000); btn.disabled = false; }
+  };
+  // this wallet's Pepes
+  if (!account) return;
+  try {
+    const ids = await nftR.tokensOfOwner(account);
+    if (gen !== routeGen || !ids.length) return;
+    $("#mmine").innerHTML = `${sec(1, "Your Pepes")}<div class="mint-mine">${ids.map((id) => `<figure><img data-id="${id}" alt="Pepes Family #${id}" /><figcaption>#${id}${st.revealed ? "" : " · sealed"}</figcaption></figure>`).join("")}</div>`;
+    for (const id of ids.slice(0, 60)) nftR.tokenURI(id).then((u) => { const im = app.querySelector(`img[data-id="${id}"]`); const src = nftImage(u); if (im && src) im.src = src; }).catch(() => {});
+  } catch {}
 }
 
 // ---------------------------------------------------------------- Launch image
