@@ -240,13 +240,11 @@
       kiosks.push(k);
       return k;
     }
-    kiosk(-16, "LAUNCH", "launch a token", "#/create");
-    kiosk(-10.5, "TOKENS", "browse every token", "#/tokens");
-    kiosk(10.5, "REWARDS", "claim your IMD", "#/rewards");
-    kiosk(16, "NFT", "Pepes Earn IMD", "#/nft");
-    kiosk(5.5, "WORLD", "enter Pepes World", "/world/");
+    kiosk(-8, "LAUNCH", "launch a token", "#/create");
+    kiosk(-14, "TOKENS", "browse every token", "#/tokens");
+    kiosk(8, "REWARDS", "claim your IMD", "#/rewards");
     // the admin terminal only stands there for the launchpad's owner or fee recipient (see setAdmin)
-    const admin = kiosk(-5.5, "ADMIN", "collect fees", "#/admin");
+    const admin = kiosk(14, "ADMIN", "collect fees", "#/admin");
     admin.g.visible = false; admin.off = true;
 
     // token booths: the top tokens by market cap, each on its own screen along the wall

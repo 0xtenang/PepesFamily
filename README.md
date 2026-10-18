@@ -148,7 +148,9 @@ v4 is v3 with one addition: **holder rewards are meant to be claimed.** Launches
 
 ### Pepes Earn IMD (NFT collection)
 
-Live since 2026-10-05 (block 80291676), all contracts source-verified:
+Live since 2026-10-05 (block 80291676), all contracts source-verified. Removed from the website on 2026-10-18: the
+contracts keep working on chain, and `$EARN` can still be traded on its token page (`#/t/<address>`) and its rewards
+claimed on the Rewards page; the NFT page is gone.
 
 | Contract | Address |
 | --- | --- |
@@ -171,11 +173,12 @@ On-chain Pepes backed by 2,000 `$EARN` tokens ([DN404](https://github.com/Vector
 
 The per-call cap and the hourly pace make sandwiching the buyback cost more in the `$Pepes` pool's fees than it can gain, so it needs no trusted caller; the `$Pepes` pool's hook rejects outside liquidity, so its depth can't be inflated. Royalties are not converted on-chain at all, which removes the swap the re-check found exploitable with just-in-time liquidity. IMD Swarm audit (2026-10-04), re-check and final check: all findings fixed; the tests reproduce the attacks and assert the attacker loses.
 
-Deployment order (one account): `PepesEarnRenderer`, `PepesEarnIMD` (CREATE2, hook flags `0x28CC`), `PepesEarnToken(earnIMD, renderer)` (creates the mirror), then `earnIMD.openPool(token)` from the owner. `script/DeployEarn.s.sol` does all of it and writes `deployments/robinhood-earn.json`; copy those addresses into `CONFIG.earn` in `web/index.html` to switch the site's NFT tab from preview to live. Tests: `test/PepesEarn.t.sol`, and on a mainnet fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesEarnForkTest`.
+Deployment order (one account): `PepesEarnRenderer`, `PepesEarnIMD` (CREATE2, hook flags `0x28CC`), `PepesEarnToken(earnIMD, renderer)` (creates the mirror), then `earnIMD.openPool(token)` from the owner. `script/DeployEarn.s.sol` does all of it and writes `deployments/robinhood-earn.json`. Tests: `test/PepesEarn.t.sol`, and on a mainnet fork `FORK_RPC=https://robinhood.drpc.org forge test --mc PepesEarnForkTest`.
 
 ### Pepes World (web game)
 
-A single-player browser game at [pepesfamily.fun/world](https://pepesfamily.fun/world/) (`web/world/index.html`, three.js): walk a tiny Pepe planet and deliver letters to villagers, who are on-chain Pepes Earn IMD NFTs (#1 The King lives in the castle). The player's character is their own NFT, drawn by the renderer. Daily goal and streak are kept in the browser.
+Removed from the website on 2026-10-18 (the vault contract stays on chain; its owner can still withdraw the pass
+deposits). It was a single-player browser game at pepesfamily.fun/world (three.js): walk a tiny Pepe planet and deliver letters to villagers, who are on-chain Pepes Earn IMD NFTs (#1 The King lives in the castle). The player's character is their own NFT, drawn by the renderer. Daily goal and streak are kept in the browser.
 
 Vault: [`0xE38cE23F33D5901402352392b49fb6e658801b51`](https://robinhoodchain.blockscout.com/address/0xE38cE23F33D5901402352392b49fb6e658801b51) (source-verified, deployed from commit `e626c32`, recorded in `contracts/deployments/robinhood-world.json`).
 

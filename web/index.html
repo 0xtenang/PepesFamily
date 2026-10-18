@@ -146,13 +146,6 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .sharebtn { margin-top: 4px; padding: 2px 8px; font-size: 11px; }
 .share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border: 1px solid var(--line); background: #000; }
 #rf input { flex: 1; min-width: 0; }
-/* Pepes Earn IMD NFT */
-.nftgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
-.nftc { padding: 0; display: flex; flex-direction: column; text-align: left; text-transform: none; letter-spacing: 0; border-color: var(--line); }
-.nftc:hover { border-color: var(--strong); background: var(--bg); }
-.nftc .nimg, .nbig { display: block; width: 100%; aspect-ratio: 1; background: var(--panel-2); }
-.nftc .nimg img, .nbig img { width: 100%; height: 100%; display: block; }
-.nftc .cap { display: flex; flex-direction: column; padding: 6px 8px; font-size: 12px; line-height: 1.4; }
 .modal .card.big { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
 .warn-box { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--warn); color: var(--text); font-size: 12px; }
 .koth { border: 1.5px solid var(--strong); margin: 6px 0 14px; }
@@ -236,7 +229,7 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 </head>
 <body>
 <!-- The whole site is the Hall: a 3D room you walk around in. Every page (launch, a token, the token list,
-     rewards, the NFT, admin) opens as a window over it from a kiosk or a token's screen; there is no other menu. -->
+     rewards, admin) opens as a window over it from a kiosk or a token's screen; there is no other menu. -->
 <div id="world"></div>
 <div class="hud"><button id="connect">Connect</button></div>
 <section class="win" id="win" hidden role="dialog" aria-modal="true" aria-labelledby="wintitle">
@@ -279,13 +272,11 @@ const CONFIG = {
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
   // King of the hill spotlights launches, so the house token (Pepes) is left out. Remove an address to include it.
   kingExclude: ["0xe2c46c7068566740a33a4c93f5445b07bcfe5644"],
-  // Pepes Earn IMD NFT collection (#/nft), from contracts/deployments/robinhood-earn.json.
-  // With `hook` empty the tab shows a preview instead.
+  // Pepes Earn IMD ($EARN, the NFT collection's token), from contracts/deployments/robinhood-earn.json. The site no
+  // longer has an NFT page, but $EARN holders can still trade it on its token page and claim on the Rewards page.
   earn: {
     hook: "0x41Edd4c96a25e9aC6e4CF80C40EB6B85c77aA8CC",
     token: "0xf2363c208B1772C3c9dB7a3fe84d75Bf2881fc20",
-    mirror: "0x0e4bf5b83740F9E93ED739b2064165561CE75489",
-    renderer: "0xdb42735B94b45195cD175aE74C0AE5B40D9351cB",
     router: "0x3a6ce89cc881aa054d289C7a9456AF4bc3217bcC",
     ethRouter: "0xB5f81908d652332850dFFCcd898d7e0e0d70467F",
   },
@@ -313,14 +304,6 @@ const CONFIG = {
       title: "PepesFamily launchpad",
       result: "7 findings: 1 medium, 3 low, 3 info",
       note: "Medium: a third-party swap with a tight price limit that only partly fills pays 4% of the requested amount. Our routers always fill fully and are not affected.",
-    },
-    nft: {
-      url: "https://explorer.imd.fun/jobs/e6eda4d8-f50d-47cd-9464-9a272283ccd3",
-      title: "Pepes Earn IMD NFT",
-      result: "3 rounds: 10 findings → 5 → 3 (no high or medium in the final check)",
-      note: "Audited three times before deployment (audit, re-check, final check); every finding is fixed in the deployed code: royalties now go straight to the protocol (nothing is swapped, so nothing can be sandwiched), the $Pepes buyback is capped and hourly, the 30-day expiry can't be gamed with dust, deployment was one step, and only claiming, sending, or receiving at least one whole $EARN (one NFT) counts as activity for the 30-day rule; dust doesn't. Source verified on Sourcify.",
-      recheck: "https://explorer.imd.fun/jobs/f6d3cd0e-8371-417b-80d6-7b99fc9efa0c",
-      final: "https://explorer.imd.fun/jobs/a58eb2c6-bfc3-441e-86d8-432c2ab15114",
     },
     tokens: {
       "0xe2c46c7068566740a33a4c93f5445b07bcfe5644": {
@@ -401,28 +384,6 @@ const QUOTER_ABI = [
   `function quoteExactInputSingle(tuple(${KEY_T} poolKey, bool zeroForOne, uint128 exactAmount, bytes hookData) params) returns (uint256 amountOut, uint256 gasEstimate)`,
   `function quoteExactOutputSingle(tuple(${KEY_T} poolKey, bool zeroForOne, uint128 exactAmount, bytes hookData) params) returns (uint256 amountIn, uint256 gasEstimate)`,
 ];
-const EARN_ABI = [
-  "function balanceOf(address) view returns (uint256)",
-  "function withdrawableDividendOf(address) view returns (uint256)",
-  "function withdrawnDividends(address) view returns (uint256)",
-  "function claim() returns (uint256)",
-  "function lastActive(address) view returns (uint256)",
-  "function expiredRewardsOf(address) view returns (uint256)",
-  "function recycle(address) returns (uint256)",
-  "function ownedIds(address, uint256, uint256) view returns (uint256[])",
-  "function buybackReserve() view returns (uint256)",
-  "function totalRecycled() view returns (uint256)",
-  "function totalPepesBurned() view returns (uint256)",
-  "function buybackAndBurnPepes(uint256 minPepesOut, uint256 deadline) returns (uint256)",
-  "function maxBuyback() view returns (uint256)",
-  "function lastBuyback() view returns (uint256)",
-];
-const MIRROR_ABI = [
-  "function totalSupply() view returns (uint256)",
-  "function balanceOf(address) view returns (uint256)",
-  "function ownerAt(uint256) view returns (address)",
-];
-const RENDERER_ABI = ["function tokenURI(uint256) pure returns (string)"];
 const TOKEN_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function withdrawableDividendOf(address) view returns (uint256)",
@@ -897,7 +858,6 @@ function windowTitle(h) {
   if (h === "/tokens") return "Tokens";
   if (h === "/admin") return "Admin";
   if (h === "/rewards" || h.startsWith("/rewards/")) return "Rewards";
-  if (h === "/nft") return "Pepes Earn IMD NFT";
   return null;
 }
 function route() {
@@ -921,7 +881,6 @@ function route() {
   if (h === "/create") return renderCreate();
   if (h === "/admin") return renderAdmin();
   if (h.startsWith("/rewards")) return renderRewards(h.slice(9) || null);
-  if (h === "/nft") return renderNft();
   return renderHome();
 }
 // Esc closes the window (unless it is closing something inside it, like a menu or a field being edited)
@@ -980,7 +939,7 @@ async function renderHall() {
   const fallback = (why) => {
     // no 3D here (no WebGL, or the scripts didn't load): the same places, as plain links
     world.innerHTML = `<div class="hall-off"><div><p>${esc(why)}</p><div class="grid">
-      <a href="#/create">LAUNCH</a><a href="#/tokens">TOKENS</a><a href="#/rewards">REWARDS</a><a href="#/nft">NFT</a><a href="/world/">WORLD</a></div></div></div>`;
+      <a href="#/create">LAUNCH</a><a href="#/tokens">TOKENS</a><a href="#/rewards">REWARDS</a></div></div></div>`;
   };
   try {
     if (!document.createElement("canvas").getContext("webgl2") && !document.createElement("canvas").getContext("webgl")) throw new Error("This browser can't show the 3D Hall.");
@@ -1078,13 +1037,6 @@ async function renderHome() {
           <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
           <div class="stat">${esc(a.note)}</div>
         </a>`).join("")}
-      ${((a) => `<div class="card">
-          <span class="h">Audited by IMD Swarm</span>
-          <div style="font-weight:600">${esc(a.title)}</div>
-          <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
-          <div class="stat">${esc(a.note)}</div>
-          <div class="links" style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noopener noreferrer">Audit ↗</a> · <a href="${a.recheck}" target="_blank" rel="noopener noreferrer">Re-check ↗</a> · <a href="${a.final}" target="_blank" rel="noopener noreferrer">Final check ↗</a></div>
-        </div>`)(CONFIG.audits.nft)}
     </div>`;
   loadKing().catch((e) => console.warn("king of the hill", e));
   loadTotals().catch((e) => console.warn("totals", e));
@@ -1857,397 +1809,6 @@ async function shareCard(total, sub, top) {
   g.fillStyle = "#8c8c8c"; g.font = F(400, 20); g.fillText("Every trade pays its holders", 60, floor + 36);
   g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesfamily.fun", W - 60, floor + 36);
   return c.toDataURL("image/png");
-}
-
-// ---------------------------------------------------------------- Pepes Earn IMD NFT
-const EARN = CONFIG.earn;
-const EARN_TOTAL = 2000;
-const DAY = 86400;
-
-/// Name, image (SVG data: URI) and traits of NFT `id`, drawn by the on-chain renderer. Works for every id 1..2000,
-/// minted or not; cached because each call renders the SVG on-chain.
-const nftMetaCache = new Map();
-function nftMeta(id) {
-  if (!nftMetaCache.has(id)) {
-    const p = new ethers.Contract(EARN.renderer, RENDERER_ABI, reader).tokenURI(id).then((uri) => {
-      const json = JSON.parse(new TextDecoder().decode(ethers.decodeBase64(uri.slice(uri.indexOf(",") + 1))));
-      return {
-        name: String(json.name || `Pepes Earn IMD #${id}`),
-        image: typeof json.image === "string" && json.image.startsWith("data:image/svg+xml;base64,") ? json.image : "",
-        attributes: Array.isArray(json.attributes) ? json.attributes : [],
-      };
-    });
-    p.catch(() => nftMetaCache.delete(id));
-    nftMetaCache.set(id, p);
-  }
-  return nftMetaCache.get(id);
-}
-const pad4 = (id) => String(id).padStart(4, "0");
-/// A clickable NFT tile; the image fills in once the renderer answers.
-const nftTile = (id, sub = "") =>
-  `<button type="button" class="nftc" data-nft="${id}"><span class="nimg" data-img="${id}"></span><span class="cap"><b>#${pad4(id)}</b>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</span></button>`;
-function hydrateNfts(root) {
-  root.querySelectorAll("[data-img]").forEach((el) => {
-    const id = Number(el.dataset.img);
-    el.removeAttribute("data-img");
-    nftMeta(id).then((m) => { if (m.image) el.innerHTML = `<img src="${esc(m.image)}" alt="${esc(m.name)}" loading="lazy">`; }).catch(() => {});
-  });
-  root.querySelectorAll("button[data-nft]").forEach((b) => (b.onclick = () => showNft(Number(b.dataset.nft))));
-}
-
-async function showNft(id) {
-  const opener = document.activeElement;
-  const m = document.createElement("div");
-  m.className = "modal";
-  m.innerHTML = `<div class="card big" role="dialog" aria-modal="true" aria-labelledby="nfttitle" tabindex="-1">
-    <span class="h" id="nfttitle" style="margin:0 0 8px">Pepes Earn IMD #${id}</span>
-    <div class="nbig" data-img="${id}"></div><div id="nftinfo" class="stat">Loading…</div><button type="button" data-close="1">Close</button></div>`;
-  const dialog = m.firstElementChild;
-  // Everything behind the dialog is inert while it is open; focus moves in, stays in, and returns on close.
-  const behind = [...document.body.children];
-  behind.forEach((el) => { el.inert = true; });
-  const close = () => {
-    behind.forEach((el) => { el.inert = false; });
-    m.remove();
-    document.removeEventListener("keydown", onKey, true);
-    if (opener && document.contains(opener)) opener.focus();
-  };
-  const onKey = (ev) => {
-    if (ev.key === "Escape") { ev.preventDefault(); return close(); }
-    if (ev.key !== "Tab") return;
-    const f = [...dialog.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])')];
-    if (!f.length) return;
-    const first = f[0], last = f[f.length - 1];
-    if (ev.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { ev.preventDefault(); last.focus(); }
-    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
-  };
-  m.onclick = (ev) => { if (ev.target === m || ev.target.closest("[data-close]")) close(); };
-  document.addEventListener("keydown", onKey, true);
-  document.body.appendChild(m);
-  dialog.querySelector("[data-close]").focus();
-  hydrateNfts(m);
-  try {
-    const [meta, owner] = await Promise.all([nftMeta(id), new ethers.Contract(EARN.mirror, MIRROR_ABI, reader).ownerAt(id)]);
-    const minted = owner !== ZERO;
-    $("#nftinfo", m).innerHTML = `<table>${meta.attributes.map((a) => `<tr><td class="muted">${esc(a.trait_type)}</td><td>${esc(a.value)}</td></tr>`).join("")}
-      <tr><td class="muted">Owner</td><td>${minted ? `<a class="mono" href="${CONFIG.explorer}/address/${owner}" target="_blank" rel="noopener">${short(owner)} ↗</a>` : "Not minted yet: buy from the pool to mint"}</td></tr></table>
-      ${minted ? `<a class="stat" href="${CONFIG.explorer}/token/${EARN.mirror}/instance/${id}" target="_blank" rel="noopener" style="text-decoration:underline">View on explorer ↗</a>` : ""}`;
-  } catch (e) { $("#nftinfo", m).textContent = errMsg(e); }
-}
-
-/// Before deployment: what the collection is, with sample art.
-function renderNftPreview() {
-  $("#app").innerHTML = `
-    <div class="hero"><div><h1>Pepes Earn IMD NFT</h1>
-      <p>2,000 on-chain Pepes. 1 $EARN = 1 NFT. Every trade pays 3% to holders in IMD.</p></div></div>
-    <div class="card" style="margin-bottom:14px"><span class="h">Coming soon</span>
-      <p class="stat" style="margin:0">Audited by IMD Swarm; opening once the audit fixes are done and re-checked. Here's what the collection looks like: every image is drawn on-chain.</p></div>
-    ${nftAuditCard("margin-bottom:14px")}
-    <img class="share-img" src="/earn-preview.jpg" alt="Sample Pepes Earn IMD NFTs" style="aspect-ratio:auto;max-width:900px">
-    ${nftHowItWorks(1)}`;
-}
-
-/// The collection's IMD Swarm audit (CONFIG.audits.nft).
-function nftAuditCard(style = "") {
-  const a = CONFIG.audits.nft;
-  return `<div class="card" style="${style}">
-    <span class="h">Audited by IMD Swarm</span>
-    <div class="stat" style="margin:4px 0 8px"><b>${esc(a.result)}</b></div>
-    <div class="stat">${esc(a.note)}</div>
-    <div class="links" style="margin-top:8px"><a href="${a.url}" target="_blank" rel="noopener noreferrer">Audit report ↗</a>${a.recheck ? ` · <a href="${a.recheck}" target="_blank" rel="noopener noreferrer">Re-check ↗</a>` : ""}${a.final ? ` · <a href="${a.final}" target="_blank" rel="noopener noreferrer">Final check ↗</a>` : ""}</div></div>`;
-}
-
-function nftHowItWorks(n) {
-  return `${sec(n, "How it works")}
-    <div class="grid">
-      <div class="card"><span class="h">1 token = 1 NFT</span><p class="stat" style="margin:0">Each NFT is backed by 1 $EARN. Buy 3 $EARN and 3 NFTs appear in your wallet; sell one and one disappears.</p></div>
-      <div class="card"><span class="h">Always tradeable</span><p class="stat" style="margin:0">Buy or sell any time in the $EARN / IMD pool, pay with IMD or ETH. NFTs can also be traded on marketplaces (1% royalty to the protocol) and sold back to the pool later.</p></div>
-      <div class="card"><span class="h">3% to holders, in IMD</span><p class="stat" style="margin:0">Every pool trade pays 4%: 3% to holders by balance, 1% protocol. Claim your IMD here anytime.</p></div>
-      <div class="card"><span class="h">Claim within 30 days</span><p class="stat" style="margin:0">If a wallet doesn't claim, send $EARN or receive a whole $EARN (an NFT) for 30 days, its older unclaimed rewards buy back and burn $Pepes. What you earned in the last 30 days is always safe.</p></div>
-      <div class="card"><span class="h">Fully on-chain</span><p class="stat" style="margin:0">2,000 back-facing Pepes drawn by the contract itself. No IPFS, no server. #1 The King, #777 Gold Pepe.</p></div>
-      <div class="card"><span class="h">Locked forever</span><p class="stat" style="margin:0">All $EARN starts in the pool, liquidity locked forever. No team allocation: everyone mints by buying.</p></div>
-    </div>`;
-}
-
-let nftSide = "buy", nftViaEth = true, nftPage = 0;
-async function renderNft() {
-  const app = $("#app");
-  const P = PADS.find((p) => p.nft);
-  if (!EARN.hook || !P?.live) return renderNftPreview();
-  app.innerHTML = `<div class="muted">Loading…</div>`;
-  const tokR = new ethers.Contract(EARN.token, EARN_ABI, reader);
-  const mirR = new ethers.Contract(EARN.mirror, MIRROR_ABI, reader);
-  let info, minted, burned, reserve, recycled, owner;
-  try {
-    [info, minted, burned, reserve, recycled, owner] = await Promise.all([
-      P.v.getTokenInfo(EARN.token), mirR.totalSupply(), tokR.totalPepesBurned(), tokR.buybackReserve(), tokR.totalRecycled(), P.c.owner(),
-    ]);
-  } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load the collection: ${esc(errMsg(e))}</div>`); }
-  if (!$("#app")) return;
-  const q = info.quote;
-  const priceImd = priceOf(info.sqrtPriceX96, info.quoteIsCurrency0); // IMD per $EARN = per NFT
-  if (!P.ethLive) nftViaEth = false;
-
-  app.innerHTML = `
-    <div class="hero"><div><h1>Pepes Earn IMD NFT</h1>
-      <p>2,000 on-chain Pepes. 1 $EARN = 1 NFT. Every trade pays 3% to holders in IMD.</p></div></div>
-    <div class="mfirst">
-    <div class="stats mrest" style="margin:0 0 6px">
-      <div class="card"><div class="k">Price per NFT</div><div class="v">${quoteUsd(q) ? fmtUsd(priceImd * quoteUsd(q)) : priceImd.toPrecision(4) + " IMD"}</div><div class="stat">${priceImd.toPrecision(4)} IMD at the pool price</div></div>
-      <div class="card"><div class="k">Minted</div><div class="v">${Number(minted).toLocaleString()} / ${EARN_TOTAL.toLocaleString()}</div><div class="stat">NFTs held in wallets</div></div>
-      <div class="card"><div class="k">Paid to holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">3% of every trade, in IMD</div></div>
-      <div class="card"><div class="k">$Pepes burned</div><div class="v">${fmt(burned)}</div><div class="stat">from expired rewards · ${fmt(recycled)} IMD recycled</div></div>
-    </div>
-    <div class="two mflat">
-      <div>
-        ${sec(1, "My NFTs")}<div id="mynfts" class="card">${account ? "Loading…" : `Connect your wallet to see your NFTs. <button class="primary" id="nftconn" style="margin-left:8px">Connect</button>`}</div>
-        ${sec(2, "Collection", `<span class="stat" id="pageinfo"></span>`)}
-        <div class="row" style="margin-bottom:10px"><button type="button" id="pgprev">‹ Prev</button><button type="button" id="pgnext">Next ›</button>
-          <span class="spacer"></span><form id="goto" class="row" style="flex-wrap:nowrap"><input id="gotoid" inputmode="numeric" placeholder="#1–2000" style="width:110px"><button type="submit">View</button></form></div>
-        <div id="browse" class="nftgrid"></div>
-      </div>
-      <div class="mside">
-        <div class="card" style="margin-top:26px">
-          <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
-          ${P.ethLive ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="nvial">Pay with</span><span class="spacer"></span><div class="seg" id="nvia"><button type="button" data-v="eth">ETH</button><button type="button" data-v="imd">IMD</button></div></div>` : ""}
-          <label for="ncount" style="margin-top:0" id="ncountl">Number of NFTs</label>
-          <input id="ncount" inputmode="numeric" value="1" />
-          <div class="quick" id="nquick"></div>
-          <div class="stat" id="nbal" style="margin-top:8px"></div>
-          <div class="preview" id="npv">&nbsp;</div>
-          <button class="primary full" id="ntrade"></button>
-          <div class="fees">4% fee: 1% protocol, 3% to $EARN holders. Each whole $EARN you hold is one NFT.</div>
-        </div>
-        <div class="card" style="margin-top:14px"><span class="h">Your IMD rewards</span><div id="nrew" class="stat">${account ? "Loading…" : "Connect a wallet to see your rewards."}</div></div>
-        ${nftAuditCard("margin-top:14px")}
-        ${account ? `<div class="card" style="margin-top:14px" id="nadmin"><span class="h">Community tools</span><div class="stat">Loading…</div></div>` : ""}
-      </div>
-    </div>
-    </div>
-    ${nftHowItWorks(3)}
-    <p class="stat">$EARN <a class="mono" href="${CONFIG.explorer}/token/${EARN.token}" target="_blank" rel="noopener">${short(EARN.token)} ↗</a> · NFT <a class="mono" href="${CONFIG.explorer}/token/${EARN.mirror}" target="_blank" rel="noopener">${short(EARN.mirror)} ↗</a> · <a href="#/t/${EARN.token}" style="text-decoration:underline">Trades and chart</a></p>`;
-  $("#nftconn")?.addEventListener("click", () => connect().catch((e) => toast(errMsg(e), 7000)));
-
-  // -------- collection browser: 12 per page, any id (unminted ones render too)
-  const pages = Math.ceil(EARN_TOTAL / 12);
-  const showPage = async (pg) => {
-    nftPage = Math.max(0, Math.min(pages - 1, pg));
-    const ids = Array.from({ length: 12 }, (_, i) => nftPage * 12 + i + 1).filter((id) => id <= EARN_TOTAL);
-    $("#pageinfo").textContent = `#${ids[0]}–#${ids[ids.length - 1]} of ${EARN_TOTAL.toLocaleString()}`;
-    $("#browse").innerHTML = ids.map((id) => nftTile(id)).join("");
-    hydrateNfts($("#browse"));
-    const owners = await Promise.all(ids.map((id) => mirR.ownerAt(id).catch(() => ZERO)));
-    owners.forEach((o, i) => {
-      const cap = $(`#browse [data-nft="${ids[i]}"] .cap`);
-      if (cap) cap.insertAdjacentHTML("beforeend", `<span class="muted">${o === ZERO ? "not minted" : short(o)}</span>`);
-    });
-  };
-  $("#pgprev").onclick = () => showPage(nftPage - 1);
-  $("#pgnext").onclick = () => showPage(nftPage + 1);
-  $("#goto").onsubmit = (e) => {
-    e.preventDefault();
-    const id = parseInt($("#gotoid").value.replace("#", ""), 10);
-    if (!(id >= 1 && id <= EARN_TOTAL)) return toast("Enter a number from 1 to 2000");
-    showPage(Math.floor((id - 1) / 12));
-    showNft(id);
-  };
-  showPage(nftPage);
-
-  // -------- trading by NFT count
-  let earnBal = 0n, ethBal = 0n, imdBal = 0n;
-  const key = async () => [...(await P.c.poolKey(EARN.token))];
-  const count = () => { const n = parseInt($("#ncount").value, 10); return n > 0 && n <= EARN_TOTAL ? n : 0; };
-  const payUnit = () => (nftViaEth ? "ETH" : "IMD");
-  /// What a buyer pays for exactly `n` $EARN (fee included), plus 1% so a moving price still delivers n NFTs;
-  /// any leftover arrives as a fraction of $EARN.
-  async function quoteBuy(n) {
-    const imdIn = (await quoterR.quoteExactOutputSingle.staticCall([await key(), info.quoteIsCurrency0, BigInt(n) * ONE, "0x"]))[0];
-    const imdPay = imdIn + imdIn / 100n;
-    if (!nftViaEth) return imdPay;
-    const ethIn = (await quoterR.quoteExactOutputSingle.staticCall([CONFIG.imdEthKey, true, imdPay, "0x"]))[0];
-    return ethIn + ethIn / 100n;
-  }
-  const sellAmount = () => {
-    if ($("#ncount").dataset.all === "1") return earnBal;
-    const n = count();
-    return n ? BigInt(n) * ONE : 0n;
-  };
-  async function quoteSell(amt) {
-    return nftViaEth ? quoteSwapEth(P, EARN.token, info.quoteIsCurrency0, false, amt) : quoteSwap(P, EARN.token, info.quoteIsCurrency0, false, amt);
-  }
-  let pvSeq = 0;
-  async function preview() {
-    const seq = ++pvSeq, buying = nftSide === "buy";
-    const n = count();
-    if (buying ? !n : !sellAmount()) return ($("#npv").innerHTML = "&nbsp;");
-    $("#npv").textContent = "Quoting…";
-    try {
-      if (buying) {
-        const pay = await quoteBuy(n);
-        if (seq === pvSeq) $("#npv").textContent = `You pay ≈ ${fmt(pay, 6)} ${payUnit()}${quoteUsd(nftViaEth ? ZERO : q) ? ` (≈ ${usd(pay, nftViaEth ? ZERO : q)})` : ""} for ${n} NFT${n > 1 ? "s" : ""}`;
-      } else {
-        const out = await quoteSell(sellAmount());
-        if (seq === pvSeq) $("#npv").textContent = `You receive ≈ ${fmt(out, 6)} ${payUnit()}`;
-      }
-    } catch { if (seq === pvSeq) $("#npv").textContent = "Can't quote this amount"; }
-  }
-  function setSide(s) {
-    nftSide = s;
-    app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === s));
-    app.querySelectorAll("#nvia button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "eth") === nftViaEth));
-    const buying = s === "buy";
-    if ($("#nvial")) $("#nvial").textContent = buying ? "Pay with" : "Receive in";
-    $("#ncountl").textContent = buying ? "Number of NFTs to buy" : "Number of NFTs to sell";
-    $("#ncount").dataset.all = "";
-    $("#ntrade").textContent = buying ? "Buy NFTs" : "Sell NFTs";
-    const whole = earnBal / ONE;
-    $("#nbal").textContent = account ? (buying ? `Balance: ${fmt(nftViaEth ? ethBal : imdBal)} ${payUnit()}` : `You hold ${fmt(earnBal)} $EARN = ${whole} NFT${whole === 1n ? "" : "s"}`) : "";
-    const opts = buying ? ["1", "5", "10"] : ["1", "5", "All"];
-    $("#nquick").innerHTML = opts.map((o) => `<button type="button">${o}</button>`).join("");
-    $("#nquick").querySelectorAll("button").forEach((b) => (b.onclick = () => {
-      if (b.textContent === "All") { $("#ncount").value = String(whole); $("#ncount").dataset.all = "1"; }
-      else { $("#ncount").value = b.textContent; $("#ncount").dataset.all = ""; }
-      preview();
-    }));
-    preview();
-  }
-  app.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => setSide(b.dataset.s)));
-  app.querySelectorAll("#nvia button").forEach((b) => (b.onclick = () => { nftViaEth = b.dataset.v === "eth"; setSide(nftSide); }));
-  $("#ncount").oninput = () => { $("#ncount").dataset.all = ""; preview(); };
-
-  $("#ntrade").onclick = async () => {
-    const btn = $("#ntrade");
-    btn.disabled = true;
-    try {
-      await requireWallet();
-      const dl = deadline();
-      let tx;
-      if (nftSide === "buy") {
-        const n = count();
-        if (!n) throw new Error("Enter how many NFTs to buy");
-        const pay = await quoteBuy(n);
-        const minOut = BigInt(n) * ONE;
-        if (nftViaEth) {
-          toast("Confirm in your wallet…", 8000);
-          tx = await new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer).buyWithEth(EARN.token, minOut, dl, { value: pay });
-        } else {
-          await ensureImdAllowance(pay, P.router);
-          toast("Confirm in your wallet…", 8000);
-          tx = await new ethers.Contract(P.router, ROUTER_ABI, signer).buy(EARN.token, pay, minOut, dl);
-        }
-      } else {
-        const amt = sellAmount();
-        if (!amt) throw new Error("Enter how many NFTs to sell");
-        if (amt > earnBal) throw new Error("You don't hold that many");
-        const minOut = withSlippage(await quoteSell(amt), 300);
-        const spender = nftViaEth ? P.ethRouter : P.router;
-        await authorizeSell(P, EARN.token, spender, amt, dl);
-        toast("Confirm in your wallet…", 8000);
-        tx = nftViaEth
-          ? await new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer).sellForEth(EARN.token, amt, minOut, dl)
-          : await new ethers.Contract(P.router, ROUTER_ABI, signer).sell(EARN.token, amt, minOut, dl);
-      }
-      toast("Transaction sent…", 15000);
-      await tx.wait();
-      toast(nftSide === "buy" ? "NFTs bought" : "NFTs sold");
-      renderNft();
-    } catch (e) { toast(errMsg(e), 7000); btn.disabled = false; }
-  };
-  setSide(nftSide);
-
-  if (!account) return;
-  // -------- my NFTs, rewards, owner tools
-  try {
-    const [bal, nfts, ids, eb, ib, w, done, last, expired] = await Promise.all([
-      tokR.balanceOf(account), mirR.balanceOf(account), tokR.ownedIds(account, 0, 60), reader.getBalance(account),
-      new ethers.Contract(CONFIG.imd, ERC20_ABI, reader).balanceOf(account),
-      tokR.withdrawableDividendOf(account), tokR.withdrawnDividends(account), tokR.lastActive(account), tokR.expiredRewardsOf(account),
-    ]);
-    if (!$("#mynfts")) return;
-    earnBal = bal; ethBal = eb; imdBal = ib;
-    setSide(nftSide);
-    const frac = bal % ONE;
-    $("#mynfts").innerHTML = ids.length
-      ? `<div class="nftgrid">${ids.map((id) => nftTile(Number(id))).join("")}</div>
-         <p class="stat" style="margin:10px 0 0">${nfts} NFT${nfts === 1n ? "" : "s"}${nfts > BigInt(ids.length) ? ` (showing ${ids.length})` : ""}${frac ? ` · plus ${fmt(frac)} $EARN, which becomes an NFT when it adds up to a whole token` : ""}</p>`
-      : `No NFTs in this wallet yet.${frac ? ` You hold ${fmt(frac)} $EARN: a whole token makes an NFT.` : " Buy one to mint it."}`;
-    hydrateNfts($("#mynfts"));
-
-    // withdrawnDividends also counts rewards that expired and were recycled; those weren't claimed
-    const lostN = done > 0n ? await recycledOf(EARN.token, account) : 0n;
-    const claimedN = done - (lostN ?? 0n);
-    const now = Date.now() / 1000;
-    const expiresAt = Number(last) + 30 * DAY;
-    const daysLeft = Math.ceil((expiresAt - now) / DAY);
-    let clock = "";
-    if (w > 0n && last > 0n) {
-      clock = expired > 0n
-        ? `<div class="warn-box">${fmt(expired, 6)} IMD (≈ ${usd(expired, q)}) of your rewards expired after 30 days without activity. You can still claim it until someone recycles it into the $Pepes buyback: claim now.</div>`
-        : `<div class="stat" style="margin-top:6px">Claim within <b>${daysLeft} day${daysLeft === 1 ? "" : "s"}</b> (or send $EARN, or buy a whole NFT) to keep all of it. After 30 days without activity, older unclaimed rewards buy back and burn $Pepes.</div>`;
-    }
-    $("#nrew").innerHTML = `<div style="margin-top:6px">Ready to claim: <b>${fmt(w, 6)} IMD</b>${quoteUsd(q) ? ` (≈ ${usd(w, q)})` : ""}<br>Claimed so far: ${fmt(claimedN, 6)} IMD${lostN === null ? " (may include expired rewards)" : lostN > 0n ? `<br>Expired earlier: ${fmt(lostN, 6)} IMD (went to the $Pepes buyback)` : ""}</div>${clock}
-      <button class="full" id="nclaim" ${w === 0n ? "disabled" : ""} style="margin-top:10px">Claim IMD</button>`;
-    $("#nclaim").onclick = async () => {
-      try {
-        await requireWallet();
-        toast("Confirm the claim in your wallet…", 8000);
-        const tx = await new ethers.Contract(EARN.token, EARN_ABI, signer).claim();
-        toast("Claiming…", 15000);
-        await tx.wait();
-        toast("Rewards claimed");
-        renderNft();
-      } catch (e) { toast(errMsg(e), 7000); }
-    };
-    renderNftTools(reserve);
-  } catch (e) {
-    if ($("#mynfts")) $("#mynfts").textContent = `Couldn't load your NFTs: ${errMsg(e)}`;
-  }
-}
-
-/// Community tools, open to every wallet (the contracts cap and pace them so nobody can profit from timing them):
-/// $Pepes buyback-and-burn from the expired-rewards reserve and recycling expired rewards.
-async function renderNftTools(reserve) {
-  const el = $("#nadmin");
-  if (!el) return;
-  const tokR = new ethers.Contract(EARN.token, EARN_ABI, reader);
-  const v1 = PADS.find((p) => p.version === 1 && p.live);
-  const now = Date.now() / 1000;
-  let maxBuy = 0n, lastBuy = 0n;
-  try {
-    [maxBuy, lastBuy] = await Promise.all([tokR.maxBuyback(), tokR.lastBuyback()]);
-  } catch (e) { return (el.innerHTML = `<span class="h">Community tools</span><div class="stat">${esc(errMsg(e))}</div>`); }
-  const buyNow = reserve < maxBuy ? reserve : maxBuy;
-  const wait = (last) => Math.max(0, Math.ceil((Number(last) + 3600 - now) / 60));
-  const buyWait = wait(lastBuy);
-  let pepesQuote = 0n;
-  try {
-    if (buyNow > 0n && v1) {
-      const info = await v1.v.getTokenInfo(CONFIG.pepes);
-      pepesQuote = await quoteSwap(v1, CONFIG.pepes, info.quoteIsCurrency0, true, buyNow);
-    }
-  } catch {}
-  el.innerHTML = `<span class="h">Community tools</span>
-    <p class="stat" style="margin:0 0 8px">Anyone can run these. The buyback is limited per call and to once an hour, so nobody can profit from timing it, and the reserve can only buy $Pepes for the burn.</p>
-    <div class="stat">Buyback reserve: <b>${fmt(reserve, 6)} IMD</b>${buyNow > 0n && buyNow < reserve ? ` · next burn uses ${fmt(buyNow, 6)} IMD` : ""}${pepesQuote ? ` → ≈ ${fmt(pepesQuote)} $Pepes` : ""}</div>
-    <button class="full" id="nbuyback" ${buyNow === 0n || buyWait ? "disabled" : ""}>${buyWait && buyNow ? `Next buyback in ${buyWait} min` : "Buy back &amp; burn $Pepes"}</button>
-    <label for="nrecycle">Recycle a wallet's expired rewards</label>
-    <form id="nrecf" class="row" style="flex-wrap:nowrap"><input id="nrecycle" placeholder="0x…" spellcheck="false"><button type="submit">Recycle</button></form>
-    <p class="stat" style="margin:10px 0 0">Nobody can withdraw the reserve. Protocol fees and holder payouts: <a href="#/admin" style="text-decoration:underline">Admin</a>.</p>`;
-  const run = async (btn, fn, done) => {
-    btn.disabled = true;
-    try { await requireWallet(); toast("Confirm in your wallet…", 8000); const tx = await fn(); toast("Sent…", 15000); await tx.wait(); toast(done); renderNft(); }
-    catch (e) { toast(errMsg(e), 7000); btn.disabled = false; }
-  };
-  $("#nbuyback").onclick = () => run($("#nbuyback"), () =>
-    new ethers.Contract(EARN.token, EARN_ABI, signer).buybackAndBurnPepes(withSlippage(pepesQuote, 300), deadline()), "$Pepes bought back and burned");
-  $("#nrecf").onsubmit = async (e) => {
-    e.preventDefault();
-    const who = $("#nrecycle").value.trim();
-    if (!ethers.isAddress(who)) return toast("Enter a valid address");
-    const exp = await tokR.expiredRewardsOf(who).catch(() => 0n);
-    if (exp === 0n) return toast("Nothing has expired for this wallet");
-    run($("#nrecf button"), () => new ethers.Contract(EARN.token, EARN_ABI, signer).recycle(who), `${fmt(exp, 6)} IMD recycled`);
-  };
 }
 
 // ---------------------------------------------------------------- Launch image
