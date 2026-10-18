@@ -1,13 +1,12 @@
 # Hall server
 
-The multiplayer Hall on pepesfamily.fun: who is in the Hall, where they stand, what they look like (their Pepes
-Family NFT), their nicknames and the chat. A Cloudflare Worker (`index.js`) with one Durable Object per room of 60
-players; WebSocket hibernation, so idle players cost nothing. It keeps only the last 40 chat lines of each room.
+The multiplayer Hall on pepesfamily.fun: who is in the Hall, where they stand and what they look like (their Pepes
+Family NFT). A Cloudflare Worker (`index.js`) with one Durable Object per room of 60 players; WebSocket hibernation,
+so idle players cost nothing. Nothing is stored. Nicknames and chat were removed on 2026-10-18: players join under a
+throwaway name nobody sees, and the server ignores chat.
 
-The server checks everything: nicknames (2-16 letters, numbers, spaces, `.` `_` `-`; nothing that passes for staff,
-like admin, mod, official, IMD or PepesFamily), chat (200 characters, one line every 1.5 s and 6 in 20 s, no
-repeats; links and wallet addresses are replaced with `[link]` and `[address]`, the usual way scams travel), positions
-(kept inside the room) and message rates. Only the site's own addresses may connect.
+The server checks positions (kept inside the room), looks and message rates, and only lets the site's own addresses
+connect.
 
 ## Deploy
 

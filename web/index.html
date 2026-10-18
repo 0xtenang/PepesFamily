@@ -234,14 +234,6 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .hall-card img { width: 100%; display: block; border: 1px solid var(--line); }
 .hall-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
 .hall-online { color: #3ddc84; background: rgba(0,0,0,.6); padding: 3px 8px; }
-.hall-chat { position: absolute; left: 12px; bottom: 56px; width: min(380px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 6px; z-index: 1; }
-.hc-log { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.4; color: #e6ede6; text-shadow: 0 1px 2px #000; }
-.hc-log .hc-line, .hc-log .hc-sys { background: rgba(0,0,0,.55); padding: 2px 8px; align-self: flex-start; max-width: 100%; overflow-wrap: anywhere; }
-.hc-log .hc-line b { color: #3ddc84; font-weight: 600; }
-.hc-log .hc-sys { color: #9aa79a; font-style: italic; }
-.hall-chat input { width: 100%; background: rgba(5,6,5,.85); color: #e6ede6; border: 1px solid #3a4a3a; padding: 7px 10px; font: inherit; font-size: 13px; }
-.hall-chat input:focus { outline: none; border-color: #3ddc84; }
-@media (max-width: 600px), (pointer: coarse) { .hall-chat { top: 84px; bottom: auto; } .hc-log { max-height: 30vh; } }
 .hall-wear { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 10px; max-height: 52vh; overflow: auto; }
 .hall-wear button { display: flex; flex-direction: column; gap: 4px; padding: 4px; text-transform: none; letter-spacing: 0; }
 .hall-wear button.on { border: 2px solid var(--accent); }
@@ -290,9 +282,6 @@ const CONFIG = {
     // (CREATE2); each lights up here once its contract exists on its chain.
     { version: 5, chain: "ethereum", quote: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", pad: "0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC", router: "0xAdBF95c54Cb0b292F1D1544C716E4f86c2987Ab1", ethRouter: "0x20c8e761D9466b4A17014F33A9E1B1052732428d", lens: "0x78e8f790ae6506B90B3DbF6020539a496FD87604", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", quote: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", pad: "0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC", router: "0x701Cc95886ad032b18f5e2513aEcA8f8BB942A7b", ethRouter: "0xC6E9bbd4902f5596dc577d1be104F71f469E68EF", lens: "0xc7F2AA94AC971830428748C7e647DE4407550aea", permit: true, expiry: true, split: true },
-    { version: 5, chain: "bsc", quote: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", pad: "0xbeCc01b1Ec3D78E34953432255e7FcfDe47Ea8cC", router: "0xa34A348b57b0099C5533c272442452f60c3E135e", ethRouter: "0x2E5F4Ea419875DcDf0c2bea89B7352f2C7CBD835", lens: "0x85E706d2F4942DBE8964D5b5ba4500128d69bD6f", permit: true, expiry: true, split: true },
-    { version: 5, chain: "base", quote: "0xB2000000000000000000004c27f6523082f41D01", pad: "0xceA0c4Dc22fa07EeA1313d4b3A1B8f5f46FEa8CC", router: "0xee0dF7ea65Ad3a7c3f0E7c52F5De2e3b567c00Ea", ethRouter: "0x7d8815A781a08640decaF7d298aC7319Ac49527F", lens: "0xE6fEdfd9B8c862d3CEf2C0f72210794658D0Eb79", permit: true, expiry: true, split: true },
-    { version: 5, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC", router: "0x5df991A1c82fBd56eA0b8Cdc3b9749f2286615D4", ethRouter: "0x4927CfFA45cf2Aaa568f73aE9c8d988acaECF7Bb", lens: "0x9F2333517B84e83e59d9a0166752978AF2b7a694", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", pad: "0xa89083083119B70c06b372dC85Dc6155a8F568CC", router: "0x28d22B5Ea3631D7f4d5157134DFf09b94d015D16", ethRouter: "0x3cC32f0ff08109D75AC86A9fE7da85DE51C00A3C", lens: "0xfda1aD95068d23b8491D0787Cc374767b0c67864", permit: true, expiry: true, split: true },
     { version: 5, pad: "0xC26003787503b978033427F77047fAF5551Ca8CC", router: "0x515aC666729a73761DA06b323133286C8a968CDf", ethRouter: "0x349059fc128bEe463C1Ee6a732F8201907a78035", lens: "0xd43CE11019393b4C60304978E3d789D316414B20", permit: true, expiry: true, split: true },
     { version: 4, pad: "0x6C08cfB2aB8Dab6d4Bc22ab8F1C248a0268D28cc", router: "0xDB202196E62413c0eFB59e926EA1BD4817dB7226", ethRouter: "0x19f112328cFb44191704Dba441050008Fe85C361", permit: true, expiry: true },
@@ -374,22 +363,6 @@ const CHAINS = {
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
     gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" }, blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
     stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
-  },
-  bsc: {
-    key: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
-    explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
-    gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BNB Smart Chain: low gas, paired with BNB.",
-  },
-  base: {
-    key: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
-    explorer: "https://basescan.org", blockscoutApi: "https://base.blockscout.com/api/v2", quoter: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D",
-    gmgn: "base", dex: "base", native: { name: "Ether", symbol: "ETH" }, blurb: "Base: low gas, paired with $BASECAT.",
-    stateView: "0xA3c0c9b65baD0b08107Aa264b0f3dB444b867A71",
-  },
-  hyperevm: {
-    key: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
-    explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
-    gmgn: "", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
   },
 };
 
@@ -546,12 +519,7 @@ addQuote("ethereum", "0x6982508145454Ce325dDbE47a25d4ec3d2311933", "PEPE", {
   ethKey: [ZERO, "0x6982508145454Ce325dDbE47a25d4ec3d2311933", 10000, 200, ZERO], usd: () => prices.pepeEth * prices.ethUsd,
   quick: ["1000000", "5000000", "10000000", "50000000"] });
 addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
-addQuote("bsc", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", { wrapped: true, usd: () => prices.bnbUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
-addQuote("base", "0xB2000000000000000000004c27f6523082f41D01", "BASECAT", {
-  ethKey: [ZERO, "0xB2000000000000000000004c27f6523082f41D01", 2000, 20, ZERO], usd: () => prices.basecatEth * prices.ethUsd,
-  quick: ["1000", "5000", "10000", "50000"] });
-addQuote("hyperevm", "0x5555555555555555555555555555555555555555", "WHYPE", { wrapped: true, usd: () => prices.hypeUsd, quick: ["0.5", "1", "5", "10"] });
-const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], BNB: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "5", "10"] };
+const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"] };
 const SUPPLY = 10n ** 27n;
 const ONE = 10n ** 18n;
 
@@ -624,7 +592,7 @@ async function quoteSwap(P, token, quoteIsCurrency0, isBuy, amount) {
 }
 
 /// Same, but paying/receiving ETH on an IMD pair: routes through the IMD/ETH pool (as PepesFamilyEthRouter does).
-/// A wrapped-coin pair (WETH, WBNB, WHYPE) wraps 1:1 instead (PepesFamilyNativeRouter).
+/// A wrapped-coin pair (WETH) wraps 1:1 instead (PepesFamilyNativeRouter).
 async function quoteSwapEth(P, token, quoteIsCurrency0, isBuy, amount) {
   if (P.wrapped) return quoteSwap(P, token, quoteIsCurrency0, isBuy, amount);
   if (isBuy) return quoteSwap(P, token, quoteIsCurrency0, true, await quoteExact(P.ethKey, true, amount, P.ch));
@@ -659,7 +627,7 @@ async function authorizeSell(P, token, spender, amount, dl) {
 
 // ---------------------------------------------------------------- USD prices
 const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
-const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, basecatEth: 0, bnbUsd: 0, hypeUsd: 0 };
+const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0 };
 /// ETH per token, from a Uniswap v4 ETH/token pool's price (both 18 decimals), read on its chain.
 async function ethPerToken(ch, poolId) {
   const [sq] = await new ethers.Contract(ch.stateView, STATEVIEW_ABI, ch.reader).getSlot0(poolId);
@@ -676,13 +644,8 @@ async function loadPrices() {
     $("#sb-eth").textContent = fmtUsd(prices.ethUsd);
     $("#sb-imd").textContent = fmtUsd(prices.imdEth * prices.ethUsd);
   } catch (e) { console.warn("price load failed", e); }
-  // the other pair assets: PEPE and BASECAT from their ETH pools; BNB and HYPE from CoinGecko
-  await Promise.all([
-    ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {}),
-    ethPerToken(CHAINS.base, "0x18816b0a9ffba7fae928ed0315c756ffe9fba1eb6eaf18236ce82c700ddd20d7").then((v) => (prices.basecatEth = v)).catch(() => {}),
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=binancecoin,hyperliquid&vs_currencies=usd", { signal: AbortSignal.timeout(8000) })
-      .then((r) => r.json()).then((j) => { prices.bnbUsd = j?.binancecoin?.usd || 0; prices.hypeUsd = j?.hyperliquid?.usd || 0; }).catch(() => {}),
-  ]);
+  // PEPE, from the PEPE/ETH v4 pool on Ethereum
+  await ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {});
 }
 const quoteUsd = (q) => {
   if (q === ZERO) return prices.ethUsd;
@@ -1764,7 +1727,7 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, BNB, BASECAT or HYPE.\n\n${tags}\nhttps://pepesfamily.fun`;
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH or PEPE.\n\n${tags}\nhttps://pepesfamily.fun`;
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);

@@ -436,10 +436,9 @@
     el.innerHTML = `
       <canvas class="hall-c" aria-label="PepesFamily: walk your Pepe to a screen to launch, trade or claim"></canvas>
       <div class="hall-top"><b>PEPESFAMILY</b><span class="hall-live" id="hlive">reading the chain…</span><span class="hall-online" id="honline" hidden></span></div>
-      <div class="hall-chat" id="hchat" hidden><div class="hc-log" id="hclog" aria-live="polite"></div><form id="hcform" autocomplete="off"><input id="hcin" maxlength="200" placeholder="Press Enter to chat" aria-label="Chat message" enterkeyhint="send"></form></div>
       <div class="hall-prompt" id="hprompt" hidden></div>
       <div class="hall-help" id="hhelp">WASD / arrows to walk · Shift to run · drag to look · E to use a screen</div>
-      <div class="hall-btns"><button type="button" id="hchatbtn" hidden aria-label="Chat">💬</button><button type="button" id="hname" hidden title="Change your nickname"></button><button type="button" id="hwear" hidden title="Walk the Hall as one of your Pepes Family NFTs"></button><button type="button" id="hshot" title="Take a picture (C)">📸 Picture</button><button type="button" id="hhelpbtn" aria-label="Help">?</button></div>
+      <div class="hall-btns"><button type="button" id="hwear" hidden title="Walk the Hall as one of your Pepes Family NFTs"></button><button type="button" id="hshot" title="Take a picture (C)">📸 Picture</button><button type="button" id="hhelpbtn" aria-label="Help">?</button></div>
       <div class="hall-joy" id="hjoy" hidden><div class="hall-knob" id="hknob"></div></div>
       <div class="hall-modal" id="hmodal" hidden></div>`;
     container.appendChild(el);
@@ -603,47 +602,18 @@
       };
       m.onkeydown = (e) => { if (e.key === "Escape") { m.hidden = true; m.innerHTML = ""; } };
     }
-    // ---------------- multiplayer: the other players, their nicknames and the chat (hall-server/, a Cloudflare
-    // Durable Object). Without a server set (api.server) the Hall stays single player.
+    // ---------------- multiplayer: the other players walking around (hall-server/, a Cloudflare Durable Object).
+    // No nicknames and no chat: you join under a throwaway name only the server sees. Without a server set
+    // (api.server) the Hall stays single player.
     const myLook = () => { const p = wearing && wearing !== "default" ? mine.find((x) => String(x.id) === String(wearing)) : null; return p ? lookOf(p.spec) : null; };
-    /// A camera-facing label: a name tag, or a speech bubble (wrapped, up to 3 lines).
-    function label(text, bubble) {
-      const c = canvas(512, bubble ? 200 : 64), g = c.getContext("2d");
-      g.font = bubble ? "500 30px monospace" : "bold 30px monospace";
-      let lines = [text];
-      if (bubble) {
-        lines = []; let cur = "";
-        for (const w of text.split(" ")) { const tryLine = cur ? cur + " " + w : w; if (g.measureText(tryLine).width > 470 && cur) { lines.push(cur); cur = w; } else cur = tryLine; }
-        if (cur) lines.push(cur);
-        if (lines.length > 3) { lines = lines.slice(0, 3); lines[2] = lines[2].slice(0, 26) + "…"; }
-        lines = lines.map((l) => (g.measureText(l).width > 490 ? l.slice(0, 28) + "…" : l));
-      }
-      const w = Math.min(500, Math.max(...lines.map((l) => g.measureText(l).width)) + 28), h = bubble ? lines.length * 38 + 22 : 46;
-      const x0 = (512 - w) / 2, y0 = (c.height - h) / 2;
-      g.fillStyle = bubble ? "rgba(255,255,255,.95)" : "rgba(5,6,5,.78)"; g.fillRect(x0, y0, w, h);
-      if (bubble) { g.strokeStyle = "#151515"; g.lineWidth = 3; g.strokeRect(x0, y0, w, h); }
-      g.fillStyle = bubble ? "#151515" : "#e6ede6"; g.textAlign = "center"; g.textBaseline = "middle";
-      lines.forEach((l, i) => g.fillText(l, 256, y0 + (bubble ? 30 + i * 38 : h / 2 + 1)));
-      const t = tex(c); const sp = new T.Sprite(new T.SpriteMaterial({ map: t, depthWrite: false, transparent: true }));
-      const sw = bubble ? 3.6 : 3.2; sp.scale.set(sw, sw * c.height / 512, 1); sp.renderOrder = 5;
-      return sp;
-    }
-    const others = new Map(); // id -> { pepe, tag, bubble, until, to: {x, z, h, s, a}, a }
-    function setTag(o, name) {
-      if (o.tag) { o.pepe.root.remove(o.tag); o.tag.material.map.dispose(); o.tag.material.dispose(); }
-      o.name = name; o.tag = label(name, false); o.tag.position.y = 2.4; o.pepe.root.add(o.tag);
-    }
-    function sayOver(o, text) {
-      if (o.bubble) { o.pepe.root.remove(o.bubble); o.bubble.material.map.dispose(); o.bubble.material.dispose(); }
-      o.bubble = label(text, true); o.bubble.position.y = 3.3; o.pepe.root.add(o.bubble); o.until = t0 + 6;
-    }
+    const others = new Map(); // id -> { pepe, to: {x, z, h, s, a} }
     function addOther(p) {
       if (others.has(p.id)) return;
       const pepe = makePepe();
       pepe.root.position.set(p.x, 0, p.z); pepe.root.rotation.y = p.h;
       scene.add(pepe.root);
-      const o = { pepe, to: { x: p.x, z: p.z, h: p.h, s: p.s || 0, a: p.a || "" }, a: "" };
-      setTag(o, p.name); others.set(p.id, o); setLook(o, p.look);
+      const o = { pepe, to: { x: p.x, z: p.z, h: p.h, s: p.s || 0, a: p.a || "" } };
+      others.set(p.id, o); setLook(o, p.look);
     }
     function setLook(o, look) {
       o.lookKey = look ? JSON.stringify(look) : "";
@@ -654,79 +624,40 @@
     function dropOther(id) {
       const o = others.get(id); if (!o) return;
       scene.remove(o.pepe.root);
-      o.pepe.root.traverse((x) => { if (x.isSprite) { x.material.map?.dispose(); x.material.dispose(); } });
       others.delete(id);
     }
-    // your own name tag and bubble
-    const me = { pepe: player, tag: null, bubble: null, until: 0 };
-    const NAME_RE = /^[\p{L}\p{N} _.\-]{2,16}$/u;
-    const savedName = () => { try { return localStorage.getItem("hall:name") || ""; } catch { return ""; } };
-    const chatLog = (who, text, sys) => {
-      const log = $("hclog"), line = document.createElement("div");
-      line.className = sys ? "hc-sys" : "hc-line";
-      if (who) { const b = document.createElement("b"); b.textContent = who + " "; line.appendChild(b); }
-      line.appendChild(document.createTextNode(text));
-      log.appendChild(line);
-      while (log.children.length > 60) log.firstElementChild.remove();
-      log.scrollTop = log.scrollHeight;
-    };
+    const joinName = "Pepe" + Math.floor(1000 + Math.random() * 9000); // the server wants a name; nobody sees it
     const net = (() => {
-      let ws = null, myId = 0, joined = false, room = 1, backoff = 1500, retry = 0, last = { x: 1e9, z: 0, h: 0, s: -1 }, sentAt = 0, closed = false;
+      let ws = null, joined = false, room = 1, backoff = 1500, retry = 0, last = { x: 1e9, z: 0, h: 0, s: -1 }, sentAt = 0, closed = false;
       const online = () => { const el = $("honline"); el.hidden = !joined; el.textContent = `● ${others.size + 1} online`; };
       const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
       function open() {
-        if (closed || !api.server || !savedName()) return;
+        if (closed || !api.server) return;
         try { ws = new WebSocket(api.server + "?room=" + room); } catch { return later(); }
-        ws.onopen = () => { backoff = 1500; send({ t: "hello", name: savedName(), look: myLook() }); };
+        ws.onopen = () => { backoff = 1500; send({ t: "hello", name: joinName, look: myLook() }); };
         ws.onmessage = (e) => {
           let m; try { m = JSON.parse(e.data); } catch { return; }
           if (m.t === "welcome") {
-            myId = m.id; joined = true; room = m.room || room;
+            joined = true; room = m.room || room;
             for (const id of [...others.keys()]) dropOther(id);
             m.players.forEach(addOther);
-            $("hclog").innerHTML = "";
-            m.chat.forEach((c) => chatLog(c.name + ":", c.text));
-            chatLog("", `You're in the Hall as ${m.name}${room > 1 ? ` (room ${room})` : ""}. Say hi!`, true);
-            setTag(me, m.name); $("hname").textContent = "👤 " + m.name;
-            if (m.name !== savedName()) { try { localStorage.setItem("hall:name", m.name); } catch {} }
             last.x = 1e9; online();
-          } else if (m.t === "join") { addOther(m.p); chatLog("", `${m.p.name} came in`, true); online(); }
-          else if (m.t === "leave") { const o = others.get(m.id); if (o) chatLog("", `${o.name} left`, true); dropOther(m.id); online(); }
+          } else if (m.t === "join") { addOther(m.p); online(); }
+          else if (m.t === "leave") { dropOther(m.id); online(); }
           else if (m.t === "move") { const o = others.get(m.id); if (o) o.to = { x: m.x, z: m.z, h: m.h, s: m.s, a: m.a }; }
           else if (m.t === "look") { const o = others.get(m.id); if (o) setLook(o, m.look); }
-          else if (m.t === "name") {
-            if (m.id === myId) { setTag(me, m.name); $("hname").textContent = "👤 " + m.name; try { localStorage.setItem("hall:name", m.name); } catch {} chatLog("", `You're now ${m.name}`, true); }
-            else { const o = others.get(m.id); if (o) { chatLog("", `${o.name} is now ${m.name}`, true); setTag(o, m.name); } }
-          } else if (m.t === "chat") {
-            chatLog(m.name + ":", m.text);
-            const o = m.id === myId ? me : others.get(m.id); if (o) sayOver(o, m.text);
-          } else if (m.t === "error") {
-            chatLog("", m.text, true);
-            if (!joined) { try { localStorage.removeItem("hall:name"); } catch {} namePicker(m.text); }
-          } else if (m.t === "full") { room = room % 20 + 1; }
+          else if (m.t === "full") { room = room % 20 + 1; }
         };
         ws.onclose = () => {
-          const was = joined; joined = false; ws = null;
+          joined = false; ws = null;
           for (const id of [...others.keys()]) dropOther(id);
           online();
-          if (was) chatLog("", "Connection lost: reconnecting…", true);
           later();
         };
       }
       function later() { if (closed || !state) return; clearTimeout(retry); retry = setTimeout(open, backoff); backoff = Math.min(30000, backoff * 1.7); }
       return {
-        start() {
-          if (!api.server) return;
-          $("hchat").hidden = coarse; $("hchatbtn").hidden = !coarse; $("hname").hidden = false;
-          $("hname").textContent = "👤 " + (savedName() || "Nickname");
-          if (savedName()) open(); else namePicker();
-        },
-        rename(name) {
-          try { localStorage.setItem("hall:name", name); } catch {}
-          $("hname").textContent = "👤 " + name;
-          if (joined) send({ t: "name", name }); else if (!ws) open();
-        },
-        say(text) { if (joined) send({ t: "chat", text }); else chatLog("", "Not connected yet…", true); },
+        start() { if (api.server) open(); },
         sendLook() { if (joined) send({ t: "look", look: myLook() }); },
         /// Where you are, at most 5 times a second and only when something changed.
         tick(now, x, z, h, s) {
@@ -737,40 +668,9 @@
           sentAt = now; last = { x, z, h, s: q };
           send({ t: "move", x, z, h, s: q, a: "" });
         },
-        get on() { return joined; },
         stop() { closed = true; clearTimeout(retry); try { ws?.close(1000, "bye"); } catch {} },
       };
     })();
-    function namePicker(err) {
-      const m = $("hmodal");
-      m.innerHTML = `<div class="hall-card" role="dialog" aria-modal="true" aria-label="Pick a nickname"><b>Pick a nickname</b>
-        <p class="stat">Everyone in the Hall sees it above your Pepe and next to what you say.</p>
-        <form id="hnform" autocomplete="off"><input id="hnin" maxlength="16" placeholder="2-16 letters or numbers" aria-label="Nickname" style="width:100%" />
-        <p class="stat" id="hnerr" style="color:#ff7b72;min-height:1.2em;margin:6px 0">${err ? err.replace(/[<>&]/g, "") : ""}</p>
-        <div class="hall-row"><button type="submit" class="primary">Enter the Hall</button>${savedName() ? '<button type="button" data-a="close">Cancel</button>' : ""}</div></form></div>`;
-      m.hidden = false;
-      const inp = m.querySelector("#hnin");
-      inp.value = savedName() || "Pepe" + Math.floor(1000 + Math.random() * 9000);
-      inp.focus(); inp.select();
-      m.querySelector("#hnform").onsubmit = (e) => {
-        e.preventDefault();
-        const v = inp.value.replace(/\s+/g, " ").trim();
-        if (!NAME_RE.test(v)) { m.querySelector("#hnerr").textContent = "2-16 letters, numbers, spaces, . _ or -"; return; }
-        m.hidden = true; m.innerHTML = "";
-        net.rename(v);
-      };
-      m.onclick = (e) => { if (e.target.closest('[data-a="close"]')) { m.hidden = true; m.innerHTML = ""; } };
-      m.onkeydown = (e) => { if (e.key === "Escape" && savedName()) { m.hidden = true; m.innerHTML = ""; } };
-    }
-    $("hcform").onsubmit = (e) => {
-      e.preventDefault();
-      const inp = $("hcin"), v = inp.value.trim();
-      if (v) net.say(v);
-      inp.value = ""; inp.blur();
-    };
-    $("hcin").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.target.blur(); } });
-    $("hname").onclick = () => namePicker();
-    $("hchatbtn").onclick = () => { const c = $("hchat"); c.hidden = !c.hidden; if (!c.hidden) { $("hhelp").hidden = true; $("hcin").focus(); } };
 
     // ---------------- input
     const keys = new Set();
@@ -779,7 +679,6 @@
       if (paused || e.target.closest?.("input, textarea, select") || !$("hmodal").hidden) return;
       const k = e.key.toLowerCase();
       if (e.type === "keydown") {
-        if (k === "enter" && net.on) { e.preventDefault(); $("hchat").hidden = false; $("hcin").focus(); return; } // Enter: chat
         if (k === "e" || k === "enter") { near?.go(); return; }
         if (k === "c") { shot(); return; }
         if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
@@ -960,16 +859,14 @@
       // look past your Pepe and up at the big screen
       camera.lookAt(tmp.set(pos.x + Math.sin(camYaw) * 4, 4.6, pos.z + Math.cos(camYaw) * 4));
       facing(crew.root); facing(dog.root);
-      // the other players glide to where they are; bubbles fade after a while
+      // the other players glide to where they are
       for (const o of others.values()) {
         const r = o.pepe.root, k = Math.min(1, dt * 8);
         const far = Math.hypot(o.to.x - r.position.x, o.to.z - r.position.z);
         if (far > 6) r.position.set(o.to.x, 0, o.to.z); else { r.position.x += (o.to.x - r.position.x) * k; r.position.z += (o.to.z - r.position.z) * k; }
         let dh = o.to.h - r.rotation.y; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); r.rotation.y += dh * k;
         o.pepe.update(dt, Math.min(1, Math.max(o.to.s, far > 0.15 ? 0.6 : 0)));
-        if (o.bubble && t0 > o.until) { r.remove(o.bubble); o.bubble.material.map.dispose(); o.bubble.material.dispose(); o.bubble = null; }
       }
-      if (me.bubble && t0 > me.until) { player.root.remove(me.bubble); me.bubble.material.map.dispose(); me.bubble.material.dispose(); me.bubble = null; }
       net.tick(t0, Math.round(pos.x * 100) / 100, Math.round(pos.z * 100) / 100, heading, speed);
       // what is within reach
       const targets = [...kiosks.filter((k) => !k.off), ...booths.map((b) => b.target).filter(Boolean), { x: 0, z: 1.2, r: 4, label: "The big screen: every launch and trade", go: () => api.go("#/tokens") }];

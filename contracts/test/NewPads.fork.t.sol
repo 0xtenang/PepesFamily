@@ -16,20 +16,16 @@ interface IWrapped {
     function deposit() external payable;
 }
 
-/// @notice The launchpads added on 2026-10-18, each on a fork of its chain with the settings it deploys with
+/// @notice The launchpads added on 2026-10-18 ($PEPE and WETH on Ethereum), each on a fork of its chain with the settings it deploys with
 ///         (script/Chains.sol `pad`): the real PoolManager, pair asset and V4Quoter, and the ETH router (through
 ///         the ETH/asset v4 pool) or the native router (wrapping the chain's coin). Each test is skipped without its RPC.
-///   FORK_RPC_ETH=https://ethereum-rpc.publicnode.com FORK_RPC_BSC=https://bsc-dataseed.bnbchain.org \
-///   FORK_RPC_HYPER=https://rpc.hyperliquid.xyz/evm forge test --mc NewPadsForkTest -vv
-/// Base's $BASECAT is a Base native token (code 0xef): a fork can't run it, so it is tested live, with a small launch.
+///   FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc NewPadsForkTest -vv
 contract NewPadsForkTest is Test {
     address bob = makeAddr("bob");
     address carol = makeAddr("carol");
 
     function test_ethereumPepe() public { _run("ethereum-pepe", "FORK_RPC_ETH"); }
     function test_ethereumWeth() public { _run("ethereum-weth", "FORK_RPC_ETH"); }
-    function test_bscWbnb() public { _run("bsc-wbnb", "FORK_RPC_BSC"); }
-    function test_hyperevmWhype() public { _run("hyperevm-whype", "FORK_RPC_HYPER"); }
 
     function _run(string memory key, string memory rpcEnv) internal {
         string memory rpc = vm.envOr(rpcEnv, string(""));

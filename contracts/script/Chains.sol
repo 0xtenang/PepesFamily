@@ -53,7 +53,7 @@ library Chains {
         uint256 startMcap; // starting market cap, in quote wei (about $3,700 on 2026-10-18, like IMD's 635)
     }
 
-    /// @notice The launchpads added on 2026-10-18 (and the two IMD ones, for completeness).
+    /// @notice The launchpads added on 2026-10-18, PEPE and WETH on Ethereum (and the two IMD ones, for completeness).
     function pad(string memory key) internal pure returns (Pad memory) {
         bytes32 k = keccak256(bytes(key));
         PepesFamily.ImdEthPool memory wrappedNative = PepesFamily.ImdEthPool({fee: 0, tickSpacing: 0, hooks: address(0)});
@@ -74,21 +74,6 @@ library Chains {
             // WETH: launches pair with ETH itself
             return Pad(key, 1, IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90), 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
                 0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203, wrappedNative, 1.5e18);
-        }
-        if (k == keccak256("bsc-wbnb")) {
-            // BNB Smart Chain, WBNB
-            return Pad(key, 56, IPoolManager(0x28e2Ea090877bF75740558f6BFB36A5ffeE9e9dF), 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c,
-                0x9F75dD27D6664c475B90e105573E550ff69437B0, wrappedNative, 5e18);
-        }
-        if (k == keccak256("base-basecat")) {
-            // Base, $BASECAT (a Base native token, code 0xef); BASECAT/ETH v4 pool 0x18816b0a…20d7 (0.2%, spacing 20)
-            return Pad(key, 8453, IPoolManager(0x498581fF718922c3f8e6A244956aF099B2652b2b), 0xB2000000000000000000004c27f6523082f41D01,
-                0x0d5e0F971ED27FBfF6c2837bf31316121532048D, PepesFamily.ImdEthPool({fee: 2_000, tickSpacing: 20, hooks: address(0)}), 275_000e18);
-        }
-        if (k == keccak256("hyperevm-whype")) {
-            // HyperEVM, WHYPE
-            return Pad(key, 999, IPoolManager(0x12D4Fd9C5DeDd00ab8a0bCe2CF0167bbf94b6B1F), 0x5555555555555555555555555555555555555555,
-                0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e, wrappedNative, 47e18);
         }
         revert("Chains: unknown launchpad");
     }

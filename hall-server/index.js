@@ -1,18 +1,16 @@
-// PepesFamily Hall server: the shared Hall (who is there, where they stand, what they look like) and its chat, for
+// PepesFamily Hall server: the shared Hall (who is there, where they stand, what they look like), for
 // the multiplayer Hall on pepesfamily.fun. A Cloudflare Worker with one Durable Object per room ("hall-1",
 // "hall-2", ...; a room holds MAX_PLAYERS, the next one takes the rest). WebSocket hibernation: idle players cost
-// nothing. No accounts, no wallets, nothing stored but the last chat lines of each room.
+// nothing. No accounts, no wallets, nothing stored. (Nicknames and chat were removed: names are never shown.)
 //
 // Protocol (JSON text frames, client -> server):
 //   {t:"hello", name, look}          join (name 2-16 chars; look: {skin, shirt, shorts, extra} small ints, or null)
 //   {t:"move", x, z, h, s, a}        where you are: position, heading, speed 0-2, act ("" or "cheer")
 //   {t:"look", look}                 you put on another Pepe (or null)
-//   {t:"name", name}                 a new nickname
-//   {t:"chat", text}                 say something (1-200 chars; links and wallet addresses are hidden)
 // Server -> client:
 //   {t:"welcome", id, name, players:[{id,name,look,x,z,h,s,a}], chat:[{id,name,text,ts}], room}
 //   {t:"join", p}  {t:"leave", id}  {t:"move", id, x, z, h, s, a}  {t:"look", id, look}  {t:"name", id, name}
-//   {t:"chat", id, name, text, ts}   {t:"full"}   {t:"error", text}
+//   {t:"full"}   {t:"error", text}
 
 const MAX_PLAYERS = 60;
 const CHAT_KEEP = 40;
@@ -140,7 +138,7 @@ export class Hall {
       p.name = this.uniqueName(name, ws); p.look = cleanLook(m.look); p.joined = true;
       ws.serializeAttachment(p);
       const others = this.players(ws).map(({ p: o }) => ({ id: o.id, name: o.name, look: o.look, x: o.x, z: o.z, h: o.h, s: o.s, a: o.a }));
-      this.send(ws, { t: "welcome", id: p.id, name: p.name, room: p.room, players: others, chat: await this.loadChat() });
+      this.send(ws, { t: "welcome", id: p.id, name: p.name, room: p.room, players: others, chat: [] });
       this.broadcast({ t: "join", p: { id: p.id, name: p.name, look: p.look, x: p.x, z: p.z, h: p.h, s: 0, a: "" } }, ws);
       return;
     }
@@ -154,29 +152,8 @@ export class Hall {
     } else if (m.t === "look") {
       p.look = cleanLook(m.look); ws.serializeAttachment(p);
       this.broadcast({ t: "look", id: p.id, look: p.look }, ws);
-    } else if (m.t === "name") {
-      const name = cleanName(m.name);
-      if (!name) { this.send(ws, { t: "error", text: "That nickname can't be used." }); return; }
-      p.name = this.uniqueName(name, ws); ws.serializeAttachment(p);
-      this.send(ws, { t: "name", id: p.id, name: p.name });
-      this.broadcast({ t: "name", id: p.id, name: p.name }, ws);
-    } else if (m.t === "chat") {
-      const text = cleanText(m.text);
-      if (!text) return;
-      // slow down: one line every 1.5 s, at most 6 in 20 s, no repeating the last line
-      p.chats = (p.chats || []).filter((c) => now - c.ts < 20000);
-      if (now - p.lastChat < 1500 || p.chats.length >= 6 || p.chats.some((c) => c.text === text)) {
-        ws.serializeAttachment(p);
-        this.send(ws, { t: "error", text: "Slow down a little." });
-        return;
-      }
-      p.lastChat = now; p.chats.push({ ts: now, text }); ws.serializeAttachment(p);
-      const line = { id: p.id, name: p.name, text, ts: now };
-      const chat = await this.loadChat();
-      chat.push(line); while (chat.length > CHAT_KEEP) chat.shift();
-      this.ctx.storage.put("chat", chat);
-      this.broadcast({ t: "chat", ...line });
     }
+    // (nicknames and chat were removed on 2026-10-18: "name" and "chat" messages are ignored)
   }
 
   async webSocketClose(ws) { this.left(ws); }
