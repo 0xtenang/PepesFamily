@@ -181,8 +181,9 @@
     frontQuarter: 13, frontQuarterWalk: [21, 13, 22, 13], // front three-quarter, facing right
     front: 14, frontWalk: [19, 14, 20, 14], frontUp: 15, frontScratch: 16,
   };
-  let sheet = null;
+  let sheet = null, sheetDone = null;
   const sheetMaps = []; // the sheet and every Pepe's copy of it, refreshed once the image has loaded
+  const sheetReady = new Promise((res) => { sheetDone = res; }); // the atlas canvas, once drawn
   const sheetTexture = () => {
     if (!sheet) {
       const c = canvas(COLS * FW, ROWS * FH), g = c.getContext("2d");
@@ -198,6 +199,7 @@
           g.drawImage(c, sx + x0, sy + HEM + LIFT, x1 - x0, FH - HEM - LIFT, dx + x0, dy + HEM, x1 - x0, FH - HEM - LIFT); // and back, raised
         });
         for (const m of sheetMaps) m.needsUpdate = true;
+        sheetDone(c);
       };
       img.src = SHEET;
     }
@@ -205,9 +207,83 @@
   };
   let activeCamera = null;
 
+  // ------------------------------------------------------------------ wearing a Pepes Family NFT
+  // A revealed Pepes Family NFT's look (skin, shirt, shorts, extra) put on the Hall's Pepe, the way the NFT contract
+  // draws it (github.com/0xtenang/PepesFamilyNFT, tools/gen_imd_art.py): colour-keyed masks pick out the skin, the
+  // shirt and the shorts (the shorts only below y 175, so the lips are never caught), and each is retinted from the
+  // pixel's lightness, keeping IMD's lines and shading; headphones, a halo or shades go on as the contract places
+  // them. The atlas cells are the sheet's 240 x 284 frames, the same space the contract draws in.
+  const LOOK = {
+    skin: [null, "8aa86b", "7fd3e8", "f29bb3", "4a4a4a", "9b7fe0", "e6b422"],
+    shirt: [null, "d23c3c", "1f1f1f", "ececec", "3ddc84", "7a4fd6", "f28c28", "8a8f98", "f5d33b"],
+    shorts: [null, "6b6b6b", "3d5a80", "2a2a2a", "a83232", "e8e8e8"],
+    base: { skin: 124, shirt: 71, shorts: 145 },
+    shortsFrom: 175,
+  };
+  /// The look in an NFT's trait spec (32 bits: pose 5, skin 3, shirt 4, shorts 3, background 4, extra 4, 1/1 3).
+  const lookOf = (v) => ({ skin: (v >>> 5) & 7, shirt: (v >>> 8) & 15, shorts: (v >>> 12) & 7, extra: (v >>> 19) & 15 });
+  const EXTRA_NONE = 0, EXTRA_HEADPHONES = 1, EXTRA_SHADES = 2, EXTRA_HALO = 3;
+  const XLINE = 'stroke="#1c1c1c" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"';
+  const HP_FRONT = '<g transform="translate(0 16)"><path d="M-64 42C-66-22 66-22 64 42" fill="none" stroke-width="7"/><path d="M-64 42C-66-22 66-22 64 42" fill="none" stroke="#4b5563" stroke-width="3"/><ellipse cx="-64" cy="46" rx="10" ry="16" fill="#e11d48"/><ellipse cx="64" cy="46" rx="10" ry="16" fill="#e11d48"/></g>';
+  const XSVG = {
+    [EXTRA_HEADPHONES]: { back: HP_FRONT, front: HP_FRONT, side: '<g transform="translate(0 10)"><path d="M-48 40C-56-16 4-24 14 30" fill="none" stroke-width="7"/><path d="M-48 40C-56-16 4-24 14 30" fill="none" stroke="#4b5563" stroke-width="3"/><ellipse cx="-22" cy="44" rx="12" ry="17" fill="#e11d48"/></g>' },
+    [EXTRA_HALO]: { all: '<g transform="translate(0 4)"><ellipse cy="-26" rx="40" ry="9" fill="none" stroke-width="7"/><ellipse cy="-26" rx="40" ry="9" fill="none" stroke="#fde047" stroke-width="3.5"/></g>' },
+    [EXTRA_SHADES]: { front: '<path d="M-50-12h42c3 0 4 2 4 5v8c0 10-6 15-16 15h-18c-10 0-16-5-16-15v-8c0-3 1-5 4-5Z" fill="#111"/><path d="M50-12h-42c-3 0-4 2-4 5v8c0 10 6 15 16 15h18c10 0 16-5 16-15v-8c0-3-1-5-4-5Z" fill="#111"/><path d="M-4-6h8" fill="none"/><path d="M-40-6h8M16-6h8" stroke="#fff" stroke-width="2.5" opacity=".75"/>' },
+  };
+  // per sheet frame: where head extras go (x, y, scale %, tilt), and the view; the eyes on the front frames
+  const XHAT = [[129, 67, 102, 0], [129, 67, 98, 0], [130, 60, 103, 0], [122, 79, 92, 0], [123, 80, 96, 0], [130, 74, 104, 0], [127, 72, 104, 0], [129, 68, 94, 0], [130, 66, 94, 0], [128, 65, 88, 0], [134, 71, 85, 0], [128, 68, 85, 0], [121, 71, 99, 0], [121, 89, 98, 0], [119, 79, 100, 0], [122, 66, 94, -6], [118, 79, 104, 0], [120, 24, 104, 0], [122, 68, 104, 0]];
+  const XEYES = { 13: [159, 118, 71], 14: [121, 110, 101], 15: [121, 79, 63], 16: [122, 110, 100] };
+  const XVIEW = (f) => (f < 7 || f > 16 ? "back" : f < 13 ? "side" : "front");
+  const sourceFrame = (cellIndex) => (cellIndex < SHEET_FRAMES ? cellIndex : STEPS[cellIndex - SHEET_FRAMES][0]); // step frames copy 14 / 13
+  const hexRgb = (h) => [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const looks = new Map(); // look key -> Promise of its texture
+
+  /// The atlas recoloured (and dressed) for `look`, as a texture; built once per look.
+  function lookTexture(look) {
+    const key = `${look.skin}.${look.shirt}.${look.shorts}.${look.extra}`;
+    if (!looks.has(key)) looks.set(key, sheetReady.then(async (base) => {
+      const c = canvas(base.width, base.height), g = c.getContext("2d");
+      g.drawImage(base, 0, 0);
+      const img = g.getImageData(0, 0, c.width, c.height), d = img.data, W = c.width;
+      const tint = (name) => { const h = LOOK[name][look[name]]; if (!h) return null; const b = LOOK.base[name]; return hexRgb(h).map((v) => v / b); };
+      const tSkin = tint("skin"), tShirt = tint("shirt"), tShorts = tint("shorts");
+      if (tSkin || tShirt || tShorts) for (let i = 0; i < d.length; i += 4) {
+        const A = d[i + 3] / 255; if (A === 0) continue;
+        const R = d[i] / 255, G = d[i + 1] / 255, B = d[i + 2] / 255, L = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+        let r = d[i], gg = d[i + 1], b = d[i + 2];
+        const mix = (t, w) => { if (w <= 0) return; r += (clamp01(L * t[0]) * 255 - r) * w; gg += (clamp01(L * t[1]) * 255 - gg) * w; b += (clamp01(L * t[2]) * 255 - b) * w; };
+        if (tSkin) mix(tSkin, clamp01(-10 * R + 20 * G - 10 * B - 0.8) * A);
+        if (tShirt) mix(tShirt, clamp01(-6 * R - 3 * G + 6 * B - 0.4) * A);
+        if (tShorts && ((i / 4 / W) | 0) % FH >= LOOK.shortsFrom) mix(tShorts, clamp01(14 * R - 14 * G - 0.45) * clamp01(-27.2 * R + 40 * G + 0.05) * A);
+        d[i] = r; d[i + 1] = gg; d[i + 2] = b;
+      }
+      g.putImageData(img, 0, 0);
+      const designs = XSVG[look.extra];
+      if (designs) {
+        let parts = "";
+        for (let k = 0; k < FRAMES; k++) {
+          const f = sourceFrame(k), view = XVIEW(f), x0 = (k % COLS) * FW, y0 = Math.floor(k / COLS) * FH;
+          const art = designs.all || designs[view];
+          if (!art) continue;
+          let at;
+          if (look.extra === EXTRA_SHADES) { const e = XEYES[f]; if (!e) continue; at = `translate(${x0 + e[0]} ${y0 + e[1]}) scale(${e[2] / 100})`; }
+          else { const [hx, hy, hs, hr] = XHAT[f]; at = `translate(${x0 + hx} ${y0 + hy}) rotate(${hr}) scale(${hs / 100})`; }
+          parts += `<g transform="${at}" ${XLINE}>${art}</g>`;
+        }
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}">${parts}</svg>`;
+        const im = new Image(); im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+        try { await im.decode(); g.drawImage(im, 0, 0); } catch {}
+      }
+      const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace;
+      return t;
+    }));
+    return looks.get(key);
+  }
+
   /// A Pepe in the room, feet at the origin. root.rotation.y is the way it faces; update() picks the frame.
   function makePepe(opts = {}) {
-    const map = sheetTexture().clone(); // shares the image; its own frame offset
+    let map = sheetTexture().clone(); // shares the image; its own frame offset
     map.repeat.set(1 / COLS, 1 / ROWS); sheetMaps.push(map);
     const root = new T.Group();
     const H = 2.05, Wd = H * FW / FH;
@@ -226,6 +302,13 @@
     const show = (i) => { map.offset.set((i % COLS) / COLS, 1 - (Math.floor(i / COLS) + 1) / ROWS); };
     return {
       root,
+      /// Wear a look's texture (from lookTexture), or IMD's own Pepe again with null.
+      wear(tex) {
+        const m = (tex || sheetTexture()).clone();
+        m.repeat.set(1 / COLS, 1 / ROWS); m.offset.copy(map.offset); m.needsUpdate = true;
+        if (!tex) sheetMaps.push(m); // IMD's sheet may still be loading
+        mat.map = m; mat.needsUpdate = true; map = m;
+      },
       /// Arms up for a couple of seconds (when a trade or launch lands on the big screen).
       cheer() { act = "cheer"; actT = 2.2; },
       update(dt, speed) {
@@ -355,7 +438,7 @@
       <div class="hall-top"><b>PEPESFAMILY</b><span class="hall-live" id="hlive">reading the chain…</span></div>
       <div class="hall-prompt" id="hprompt" hidden></div>
       <div class="hall-help" id="hhelp">WASD / arrows to walk · Shift to run · drag to look · E to use a screen</div>
-      <div class="hall-btns"><button type="button" id="hshot" title="Take a picture (C)">📸 Picture</button><button type="button" id="hhelpbtn" aria-label="Help">?</button></div>
+      <div class="hall-btns"><button type="button" id="hwear" hidden title="Walk the Hall as one of your Pepes Family NFTs"></button><button type="button" id="hshot" title="Take a picture (C)">📸 Picture</button><button type="button" id="hhelpbtn" aria-label="Help">?</button></div>
       <div class="hall-joy" id="hjoy" hidden><div class="hall-knob" id="hknob"></div></div>
       <div class="hall-modal" id="hmodal" hidden></div>`;
     container.appendChild(el);
@@ -467,6 +550,56 @@
     let pos = new T.Vector3(-1.2, 0, 3.4), heading = Math.PI; // beside the man, facing the wall (-z), as on imd.fun
     try { const s = JSON.parse(sessionStorage.getItem("hall:pos") || "null"); if (s) { pos.set(s.x, 0, s.z); heading = s.h; } } catch {}
     let camYaw = heading, camPitch = 0.06;
+
+    // ---------------- your Pepes Family NFTs: walk the Hall as one of them
+    let mine = [], wearer = "", wearing = null, wearGen = 0;
+    const wearKey = () => "hall:wear:" + wearer.toLowerCase();
+    const savedWear = () => { try { return localStorage.getItem(wearKey()); } catch { return null; } };
+    function applyWear(id) {
+      wearing = id;
+      try { localStorage.setItem(wearKey(), String(id)); } catch {}
+      const b = $("hwear");
+      if (id === "default") { player.wear(null); b.textContent = "🐸 Wear your Pepe"; return; }
+      const p = mine.find((x) => String(x.id) === String(id));
+      if (!p) return;
+      b.textContent = `🐸 #${p.id}`;
+      lookTexture(lookOf(p.spec)).then((t) => { if (state && wearing === id) player.wear(t); }).catch(() => {});
+    }
+    async function wearRefresh() {
+      const gen = ++wearGen;
+      let r = null;
+      try { r = await api.myPepes?.(); } catch {}
+      if (!state || gen !== wearGen) return;
+      const b = $("hwear");
+      mine = r?.list || []; wearer = r?.account || "";
+      if (!mine.length) { b.hidden = true; wearing = null; player.wear(null); return; }
+      b.hidden = false;
+      if (!r.revealed) { b.textContent = `🐸 ${mine.length} sealed`; wearing = null; player.wear(null); b.dataset.sealed = "1"; return; }
+      delete b.dataset.sealed;
+      const saved = savedWear();
+      applyWear(saved === "default" || mine.some((x) => String(x.id) === saved) ? saved : String(mine[0].id));
+    }
+    function wearPicker() {
+      const m = $("hmodal"), b = $("hwear");
+      if (b.dataset.sealed) {
+        m.innerHTML = `<div class="hall-card" role="dialog" aria-modal="true" aria-label="Your Pepes"><b>Your ${mine.length} Pepe${mine.length > 1 ? "s are" : " is"} sealed</b>
+          <p class="stat">Pepes Family NFTs show their looks at the reveal, after the mint. Then you can walk the Hall as one of yours: its skin, shirt, shorts and headphones, halo or shades.</p>
+          <div class="hall-row"><button type="button" data-a="close">Close</button></div></div>`;
+      } else {
+        m.innerHTML = `<div class="hall-card" role="dialog" aria-modal="true" aria-label="Wear a Pepe"><b>Walk the Hall as…</b>
+          <div class="hall-wear">${[{ id: "default" }, ...mine.slice(0, 120)].map((p) => `<button type="button" data-wear="${p.id}" class="${String(p.id) === String(wearing) ? "on" : ""}">${p.id === "default" ? `<span class="hw-img hw-def"></span>IMD's Pepe` : `<img data-id="${p.id}" alt="" />#${p.id}`}</button>`).join("")}</div>
+          <div class="hall-row"><button type="button" data-a="close">Close</button></div></div>`;
+        for (const p of mine.slice(0, 120)) api.pepeImage?.(p.id).then((src) => { const im = m.querySelector(`img[data-id="${p.id}"]`); if (im && src) im.src = src; }).catch(() => {});
+      }
+      m.hidden = false;
+      m.querySelector('[data-a="close"]').focus();
+      m.onclick = (e) => {
+        const w = e.target.closest("[data-wear]")?.dataset.wear;
+        if (w) { applyWear(w); m.hidden = true; m.innerHTML = ""; return; }
+        if (e.target === m || e.target.closest('[data-a="close"]')) { m.hidden = true; m.innerHTML = ""; }
+      };
+      m.onkeydown = (e) => { if (e.key === "Escape") { m.hidden = true; m.innerHTML = ""; } };
+    }
     // ---------------- input
     const keys = new Set();
     let paused = false, drawn = 0;
@@ -505,6 +638,7 @@
     }
     $("hprompt").onclick = () => near?.go();
     $("hshot").onclick = () => shot();
+    $("hwear").onclick = () => wearPicker();
     $("hhelpbtn").onclick = () => { const h = $("hhelp"); h.hidden = !h.hidden; };
     setTimeout(() => { if (state) $("hhelp").hidden = true; }, 9000); // the ? button brings it back
 
@@ -672,6 +806,7 @@
       el,
       pause(p) { paused = !!p; keys.clear(); joy.x = joy.y = 0; drag = null; drawn = Math.min(drawn, 25); }, // a few more frames: the textures that just loaded
       setAdmin(on) { admin.off = !on; admin.g.visible = !!on; },
+      wearRefresh,
       stop() {
         cancelAnimationFrame(raf); clearInterval(dataTimer); ro.disconnect();
         removeEventListener("keydown", onKey); removeEventListener("keyup", onKey); removeEventListener("blur", onBlur);
@@ -681,17 +816,20 @@
         el.remove();
       },
     };
+    wearRefresh(); // a wallet already connected: put on its Pepe
   }
 
   /// Holds the Hall still (no input, no drawing) while a window is open over it, and lets it go again.
   function pause(p) { state?.pause(p); }
   /// Shows or hides the admin terminal.
   function setAdmin(on) { state?.setAdmin(on); }
+  /// The wallet (or what it holds) changed: look again for its Pepes Family NFTs.
+  function walletChanged() { state?.wearRefresh(); }
 
   function unmount() {
     if (!state) return;
     const s = state; state = null; s.stop();
   }
 
-  window.Hall = { mount, unmount, pause, setAdmin };
+  window.Hall = { mount, unmount, pause, setAdmin, walletChanged };
 })();
