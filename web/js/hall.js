@@ -82,17 +82,39 @@
   // ------------------------------------------------------------------ Pepes
   // The Pepe is IMD's own character art (imd.fun's sprite sheet, used at the IMD team's request): 19 frames of
   // 240 x 284 in one image, shown on a camera-facing card that picks the frame for the view and the motion.
-  const SHEET = "/img/imd-pepe.webp", FRAMES = 19, FW = 240, FH = 284;
+  const SHEET = "/img/imd-pepe.webp", SHEET_FRAMES = 19, FW = 240, FH = 284;
+  // IMD's sheet has no walking frames for the front views, so four are made from its front (14) and front
+  // three-quarter (13) frames: one foot raised (that leg tucked up under the shorts), then the other.
+  const STEPS = [[14, 0, 120], [14, 120, 240], [13, 0, 128], [13, 128, 240]]; // frame, the leg's columns
+  const HEM = 261, LIFT = 6; // where the legs come out of the shorts; how far a foot rises
+  const FRAMES = SHEET_FRAMES + STEPS.length, COLS = 12, ROWS = Math.ceil(FRAMES / COLS); // an atlas of 12 x 2
   const F = {
     back: 3, backAlt: 4, backWalk: [1, 2], backScratch: [5, 6], cheer: [17, 18],
     backQuarter: 12, backQuarterWalk: [9, 11],   // back three-quarter, facing right
     side: 7, sideWalk: [8, 9, 10, 11],           // profile facing right
-    frontQuarter: 13,                            // front three-quarter, facing right
-    front: 14, frontUp: 15, frontScratch: 16,
+    frontQuarter: 13, frontQuarterWalk: [21, 13, 22, 13], // front three-quarter, facing right
+    front: 14, frontWalk: [19, 14, 20, 14], frontUp: 15, frontScratch: 16,
   };
   let sheet = null;
+  const sheetMaps = []; // the sheet and every Pepe's copy of it, refreshed once the image has loaded
   const sheetTexture = () => {
-    if (!sheet) { sheet = new T.TextureLoader().load(SHEET); sheet.colorSpace = T.SRGBColorSpace; sheet.repeat.set(1 / FRAMES, 1); }
+    if (!sheet) {
+      const c = canvas(COLS * FW, ROWS * FH), g = c.getContext("2d");
+      sheet = new T.CanvasTexture(c); sheet.colorSpace = T.SRGBColorSpace; sheetMaps.push(sheet);
+      const img = new Image();
+      img.onload = () => {
+        const cell = (i) => [(i % COLS) * FW, Math.floor(i / COLS) * FH];
+        for (let i = 0; i < SHEET_FRAMES; i++) g.drawImage(img, i * FW, 0, FW, FH, ...cell(i), FW, FH);
+        STEPS.forEach(([f, x0, x1], k) => {
+          const [sx, sy] = cell(f), [dx, dy] = cell(SHEET_FRAMES + k);
+          g.drawImage(c, sx, sy, FW, FH, dx, dy, FW, FH);
+          g.clearRect(dx + x0, dy + HEM, x1 - x0, FH - HEM); // that leg, gone
+          g.drawImage(c, sx + x0, sy + HEM + LIFT, x1 - x0, FH - HEM - LIFT, dx + x0, dy + HEM, x1 - x0, FH - HEM - LIFT); // and back, raised
+        });
+        for (const m of sheetMaps) m.needsUpdate = true;
+      };
+      img.src = SHEET;
+    }
     return sheet;
   };
   let activeCamera = null;
@@ -100,7 +122,7 @@
   /// A Pepe in the room, feet at the origin. root.rotation.y is the way it faces; update() picks the frame.
   function makePepe(opts = {}) {
     const map = sheetTexture().clone(); // shares the image; its own frame offset
-    map.repeat.set(1 / FRAMES, 1);
+    map.repeat.set(1 / COLS, 1 / ROWS); sheetMaps.push(map);
     const root = new T.Group();
     const H = 2.05, Wd = H * FW / FH;
     const mat = new T.MeshBasicMaterial({ map, transparent: true, alphaTest: 0.4, side: T.DoubleSide });
@@ -115,7 +137,7 @@
     }
     let phase = Math.random() * 4, idle = 3 + Math.random() * 6, act = null, actT = 0;
     const wp = new T.Vector3();
-    const show = (i) => { map.offset.x = i / FRAMES; };
+    const show = (i) => { map.offset.set((i % COLS) / COLS, 1 - (Math.floor(i / COLS) + 1) / ROWS); };
     return {
       root,
       /// Arms up for a couple of seconds (the crowd does this when a trade or launch lands on the big screen).
@@ -139,8 +161,8 @@
         if (act) { actT -= dt; if (actT < 0) act = null; }
         let f;
         if (act === "cheer" && deg > 112.5) f = cycle(F.cheer);
-        else if (deg < 22.5) f = act === "scratch" ? F.frontScratch : act === "look" ? F.frontUp : F.front;
-        else if (deg < 67.5) f = F.frontQuarter;
+        else if (deg < 22.5) f = moving ? cycle(F.frontWalk) : act === "scratch" ? F.frontScratch : act === "look" ? F.frontUp : F.front;
+        else if (deg < 67.5) f = moving ? cycle(F.frontQuarterWalk) : F.frontQuarter;
         else if (deg < 112.5) f = moving ? cycle(F.sideWalk) : F.side;
         else if (deg < 157.5) f = moving ? cycle(F.backQuarterWalk) : F.backQuarter;
         else f = moving ? cycle(F.backWalk) : act === "scratch" ? cycle(F.backScratch) : act === "look" ? F.backAlt : F.back;
