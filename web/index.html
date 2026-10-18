@@ -280,6 +280,8 @@ const CONFIG = {
   pads: [
     // 2026-10-18: one launchpad per pair asset (contracts/script/Chains.sol `pad`). Addresses are fixed in advance
     // (CREATE2); each lights up here once its contract exists on its chain.
+    { version: 5, quote: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", pad: "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", router: "0x8d617D6c1776cA90e99c5FAb7c632D3c3159E6c1", ethRouter: "0x7399E141677519f0d4eB493b4546e87bd5B5e67c", lens: "0xd458bCa018677D3869eB23f02433b9DFFE1f9615", permit: true, expiry: true, split: true },
+    { version: 5, quote: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", pad: "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC", router: "0x7C0e35703aC820A613A8b820B08B5F5C3f52B0e6", ethRouter: "0x3f08F91457Be1bcA3f24147D694964f5dEdb98f2", lens: "0xD858C0aE063A8A4e9C3ddcb02dEC6d96B2586873", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", quote: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", pad: "0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC", router: "0xAdBF95c54Cb0b292F1D1544C716E4f86c2987Ab1", ethRouter: "0x20c8e761D9466b4A17014F33A9E1B1052732428d", lens: "0x78e8f790ae6506B90B3DbF6020539a496FD87604", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", quote: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", pad: "0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC", router: "0x701Cc95886ad032b18f5e2513aEcA8f8BB942A7b", ethRouter: "0xC6E9bbd4902f5596dc577d1be104F71f469E68EF", lens: "0xc7F2AA94AC971830428748C7e647DE4407550aea", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", pad: "0xa89083083119B70c06b372dC85Dc6155a8F568CC", router: "0x28d22B5Ea3631D7f4d5157134DFf09b94d015D16", ethRouter: "0x3cC32f0ff08109D75AC86A9fE7da85DE51C00A3C", lens: "0xfda1aD95068d23b8491D0787Cc374767b0c67864", permit: true, expiry: true, split: true },
@@ -354,7 +356,7 @@ const CHAINS = {
   robinhood: {
     key: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
     explorer: CONFIG.explorer, blockscoutApi: CONFIG.blockscoutApi, quoter: CONFIG.quoter, imd: CONFIG.imd, imdEthKey: CONFIG.imdEthKey,
-    gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, blurb: "Robinhood Chain: low gas, home of $PEPES.",
+    gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, stateView: CONFIG.stateView, blurb: "Robinhood Chain: low gas, home of $PEPES.",
   },
   ethereum: {
     key: "ethereum", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
@@ -518,6 +520,10 @@ addQuote("ethereum", CHAINS.ethereum.imd, "IMD", { ethKey: CHAINS.ethereum.imdEt
 addQuote("ethereum", "0x6982508145454Ce325dDbE47a25d4ec3d2311933", "PEPE", {
   ethKey: [ZERO, "0x6982508145454Ce325dDbE47a25d4ec3d2311933", 10000, 200, ZERO], usd: () => prices.pepeEth * prices.ethUsd,
   quick: ["1000000", "5000000", "10000000", "50000000"] });
+addQuote("robinhood", "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
+addQuote("robinhood", "0x020bfC650A365f8BB26819deAAbF3E21291018b4", "CASHCAT", {
+  ethKey: [ZERO, "0x020bfC650A365f8BB26819deAAbF3E21291018b4", 20000, 400, ZERO], usd: () => prices.cashcatEth * prices.ethUsd,
+  quick: ["100", "500", "1000", "5000"] });
 addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"] };
 const SUPPLY = 10n ** 27n;
@@ -569,6 +575,8 @@ async function loadPads() {
     const L = (LAUNCHES[P.ch.key] ||= []);
     if (!L.some((x) => x.quote.toLowerCase() === P.quote.toLowerCase())) L.push(P);
   }
+  // IMD first on each chain: the default pair (the Launch form, and the launchpad the admin page reads)
+  for (const L of Object.values(LAUNCHES)) L.sort((a, b) => (b.quote.toLowerCase() === (b.ch.imd || "").toLowerCase()) - (a.quote.toLowerCase() === (a.ch.imd || "").toLowerCase()));
   LAUNCH = LAUNCHES.robinhood?.[0] || PADS.find((P) => P.live && !P.nft) || null;
   padR = LAUNCH?.c || null;
 }
@@ -627,7 +635,7 @@ async function authorizeSell(P, token, spender, amount, dl) {
 
 // ---------------------------------------------------------------- USD prices
 const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
-const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0 };
+const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, cashcatEth: 0 };
 /// ETH per token, from a Uniswap v4 ETH/token pool's price (both 18 decimals), read on its chain.
 async function ethPerToken(ch, poolId) {
   const [sq] = await new ethers.Contract(ch.stateView, STATEVIEW_ABI, ch.reader).getSlot0(poolId);
@@ -644,8 +652,11 @@ async function loadPrices() {
     $("#sb-eth").textContent = fmtUsd(prices.ethUsd);
     $("#sb-imd").textContent = fmtUsd(prices.imdEth * prices.ethUsd);
   } catch (e) { console.warn("price load failed", e); }
-  // PEPE, from the PEPE/ETH v4 pool on Ethereum
-  await ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {});
+  // PEPE from the PEPE/ETH v4 pool on Ethereum, CASHCAT from the CASHCAT/ETH v4 pool on Robinhood Chain
+  await Promise.all([
+    ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {}),
+    ethPerToken(CHAINS.robinhood, "0xf7dc0af99fce7169eb76854c0b39beb9915526894d42229946e5cb469cab50b1").then((v) => (prices.cashcatEth = v)).catch(() => {}),
+  ]);
 }
 const quoteUsd = (q) => {
   if (q === ZERO) return prices.ethUsd;
@@ -1727,7 +1738,7 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH or PEPE.\n\n${tags}\nhttps://pepesfamily.fun`;
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE or CASHCAT.\n\n${tags}\nhttps://pepesfamily.fun`;
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);

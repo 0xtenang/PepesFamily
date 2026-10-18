@@ -16,16 +16,18 @@ interface IWrapped {
     function deposit() external payable;
 }
 
-/// @notice The launchpads added on 2026-10-18 ($PEPE and WETH on Ethereum), each on a fork of its chain with the settings it deploys with
+/// @notice The launchpads added on 2026-10-18 ($PEPE and ETH on Ethereum, ETH and $CASHCAT on Robinhood Chain), each on a fork of its chain with the settings it deploys with
 ///         (script/Chains.sol `pad`): the real PoolManager, pair asset and V4Quoter, and the ETH router (through
 ///         the ETH/asset v4 pool) or the native router (wrapping the chain's coin). Each test is skipped without its RPC.
-///   FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc NewPadsForkTest -vv
+///   FORK_RPC_ETH=https://ethereum-rpc.publicnode.com FORK_RPC=https://robinhood.drpc.org forge test --mc NewPadsForkTest -vv
 contract NewPadsForkTest is Test {
     address bob = makeAddr("bob");
     address carol = makeAddr("carol");
 
     function test_ethereumPepe() public { _run("ethereum-pepe", "FORK_RPC_ETH"); }
     function test_ethereumWeth() public { _run("ethereum-weth", "FORK_RPC_ETH"); }
+    function test_robinhoodWeth() public { _run("robinhood-weth", "FORK_RPC"); }
+    function test_robinhoodCashcat() public { _run("robinhood-cashcat", "FORK_RPC"); }
 
     function _run(string memory key, string memory rpcEnv) internal {
         string memory rpc = vm.envOr(rpcEnv, string(""));

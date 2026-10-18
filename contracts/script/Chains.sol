@@ -53,7 +53,8 @@ library Chains {
         uint256 startMcap; // starting market cap, in quote wei (about $3,700 on 2026-10-18, like IMD's 635)
     }
 
-    /// @notice The launchpads added on 2026-10-18, PEPE and WETH on Ethereum (and the two IMD ones, for completeness).
+    /// @notice The launchpads added on 2026-10-18: $PEPE and ETH on Ethereum, ETH and $CASHCAT on Robinhood Chain (and the
+    ///         two IMD ones, for completeness).
     function pad(string memory key) internal pure returns (Pad memory) {
         bytes32 k = keccak256(bytes(key));
         PepesFamily.ImdEthPool memory wrappedNative = PepesFamily.ImdEthPool({fee: 0, tickSpacing: 0, hooks: address(0)});
@@ -74,6 +75,17 @@ library Chains {
             // WETH: launches pair with ETH itself
             return Pad(key, 1, IPoolManager(0x000000000004444c5dc75cB358380D2e3dE08A90), 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2,
                 0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203, wrappedNative, 1.5e18);
+        }
+        if (k == keccak256("robinhood-weth")) {
+            // Robinhood Chain, WETH (Arbitrum's aeWETH, behind a proxy): launches pair with ETH itself
+            Config memory c = get(4663);
+            return Pad(key, 4663, c.poolManager, 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73, c.quoter, wrappedNative, 1.5e18);
+        }
+        if (k == keccak256("robinhood-cashcat")) {
+            // Robinhood Chain, $CASHCAT; CASHCAT/ETH v4 pool 0xf7dc0af9…50b1 (2% fee, tick spacing 400, no hooks)
+            Config memory c = get(4663);
+            return Pad(key, 4663, c.poolManager, 0x020bfC650A365f8BB26819deAAbF3E21291018b4, c.quoter,
+                PepesFamily.ImdEthPool({fee: 20_000, tickSpacing: 400, hooks: address(0)}), 35_000e18);
         }
         revert("Chains: unknown launchpad");
     }

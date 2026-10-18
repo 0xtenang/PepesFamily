@@ -116,10 +116,10 @@ Ethereum v5 deployment (block 26153625, commit `490e84e`, recorded in `contracts
 
 Owner and fee recipient are `0x3c8A…691C` on both chains. Expired holder rewards on Ethereum go to the same fee address for the manual $PEPES buyback and burn. `CHAIN_ID=1 forge script script/PadDeployData.s.sol` prints Ethereum's deployment data; `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc EthereumForkTest` runs launch, split, quoter, ETH-router and expiry tests on Ethereum state; `CHAIN_ID=1 ./script/verify-tokens.sh` verifies Ethereum launches. Base will follow once IMD is available there.
 
-### More pairs on Ethereum: $PEPE and ETH (2026-10-18, not deployed yet)
+### More pairs: $PEPE and ETH on Ethereum, ETH and $CASHCAT on Robinhood Chain (2026-10-18)
 
-Each pair asset is its own deployment of the same v5 contracts (a launchpad takes one pair asset), so launches on
-Ethereum can also pair with $PEPE or with ETH itself. (BNB Smart Chain, Base and HyperEVM were prepared too, then left
+Each pair asset is its own deployment of the same v5 contracts (a launchpad takes one pair asset), so launches can
+also pair with $PEPE or ETH on Ethereum, and with ETH or $CASHCAT on Robinhood Chain. (BNB Smart Chain, Base and HyperEVM were prepared too, then left
 out: the site stays on Ethereum and Robinhood Chain.) Settings: `script/Chains.sol` (`pad(key)`); deployment data: `PAD=<key> forge script
 script/PadDeployData.s.sol`. Every new pair starts at about the same $3,700 market cap as IMD launches (the owner can
 change it with `setStartTick`). The addresses are fixed in advance (CREATE2), and the website lights each launchpad up
@@ -129,13 +129,15 @@ once its contract exists.
 | --- | --- | --- | --- | --- | --- |
 | `ethereum-pepe` | Ethereum | $PEPE `0x6982…1933` | ETH router through the PEPE/ETH v4 pool (1%, spacing 200) | 950M PEPE | `0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC` |
 | `ethereum-weth` | Ethereum | WETH (ETH) | native router: wraps and unwraps | 1.5 ETH | `0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC` |
+| `robinhood-weth` | Robinhood Chain | WETH (ETH; Arbitrum aeWETH `0x0Bd7…AD73`) | native router: wraps and unwraps | 1.5 ETH | `0xf41b697c584F0dD38b9E65D72D49F768388d28CC` |
+| `robinhood-cashcat` | Robinhood Chain | $CASHCAT `0x020b…18b4` | ETH router through the CASHCAT/ETH v4 pool (2%, spacing 400) | 35K CASHCAT | `0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC` |
 
 For a wrapped-coin pair (WETH) the launchpad's `ethRouter` is the new `PepesFamilyNativeRouter`: same
 functions as `PepesFamilyEthRouter` (`buyWithEth`, `sellForEth`, `sellForEthWithPermit`), but it wraps the coin sent
 and unwraps on a sale instead of swapping through a pool (`ImdEthPool.tickSpacing == 0` selects it). Holder rewards
 and creator earnings are paid in the wrapped coin. Not audited. Tests: `forge test --mc NativeRouterTest`, and on an
-Ethereum fork `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc NewPadsForkTest` (launch, the quoter,
-buying and selling with ETH, holder rewards, protocol fees). Deploy page: `deploy-ui/v5-pairs.html` (local workspace).
+Ethereum and a Robinhood fork `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com FORK_RPC=https://robinhood.drpc.org forge
+test --mc NewPadsForkTest` (launch, the quoter, buying and selling with ETH, holder rewards, protocol fees). Deploy page: `deploy-ui/v5-pairs.html` (local workspace).
 
 ### Launchpad v5
 
