@@ -1,5 +1,5 @@
 // PepesFamily Hall: a 3D room in the style of the IMD swarm wall, where your Pepe walks up to screens to launch,
-// trade and claim. Phase 1 is single player: the other Pepes are locals watching the big screen.
+// trade and claim. Laid out like imd.fun: the instrument wall, the big screen, the man at his desk and his dog.
 // Classic script (no modules): uses the THREE global from /js/three-0.160.0.min.js and exposes window.Hall.
 (() => {
   "use strict";
@@ -19,53 +19,138 @@
   const toon = (color, extra = {}) => new T.MeshToonMaterial({ color, gradientMap: GRADIENT, ...extra });
   const OUTLINE = new T.MeshBasicMaterial({ color: 0x111111, side: T.BackSide });
 
-  // ------------------------------------------------------------------ the panel wall (drawn once, like the IMD wall)
-  function wallTexture() {
-    const W = 2048, H = 640, c = canvas(W, H), g = c.getContext("2d"), r = rnd(4663);
-    g.fillStyle = "#e9e9e6"; g.fillRect(0, 0, W, H);
-    const cell = 32;
-    // big modules first, then fill the gaps with small ones
-    const used = new Set(), key = (x, y) => x + "," + y;
-    const free = (x, y, w, h) => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) if (used.has(key(x + i, y + j)) || x + i >= W / cell || y + j >= H / cell) return false; return true; };
-    const take = (x, y, w, h) => { for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) used.add(key(x + i, y + j)); };
+  // ------------------------------------------------------------------ the instrument wall (as on imd.fun)
+  // A packed patchwork of instrument modules (knob banks, patch bays, scopes, meters, readouts, dials, LEDs, small
+  // buttons), big ones above and small ones below, some lit green. Seeded, so it is the same wall on every visit;
+  // tick() redraws the moving parts (needles, waves, bars, counters, LEDs, which modules are lit) a few times a second.
+  function makeWall(WW, WH) {
+    const c = canvas(WW, WH), g = c.getContext("2d"), r = rnd(4663);
+    const CELL = 16, COLS = Math.floor(WW / CELL), ROWS = Math.floor(WH / CELL);
+    const DARK = "#0d110d", PANEL_A = "#dcdcd8", PANEL_B = "#cfcfca", DIM = "#2c3a2c";
+    // pack the grid row by row: every free cell starts a module as big as fits (bigger towards the top)
+    const used = new Uint8Array(COLS * ROWS);
     const mods = [];
-    for (let n = 0; n < 140; n++) {
-      const w = 2 + Math.floor(r() * 6), h = 2 + Math.floor(r() * 4);
-      const x = Math.floor(r() * (W / cell - w)), y = Math.floor(r() * (H / cell - h));
-      if (free(x, y, w, h)) { take(x, y, w, h); mods.push([x, y, w, h]); }
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+      if (used[y * COLS + x]) continue;
+      const top = 1 - y / ROWS; // 1 at the top, 0 at the bottom
+      const big = r() < 0.18 + top * 0.5;
+      let w = big ? 4 + Math.floor(r() * (6 + top * 10)) : 1 + Math.floor(r() * (r() < 0.6 ? 2 : 4));
+      let h = big ? 3 + Math.floor(r() * (3 + top * 6)) : 1 + Math.floor(r() * (r() < 0.7 ? 1 : 3));
+      w = Math.min(w, COLS - x); h = Math.min(h, ROWS - y);
+      for (let i = 1; i < w; i++) if (used[y * COLS + x + i]) { w = i; break; }
+      for (let j = 1; j < h; j++) { let ok = true; for (let i = 0; i < w; i++) if (used[(y + j) * COLS + x + i]) { ok = false; break; } if (!ok) { h = j; break; } }
+      for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) used[(y + j) * COLS + x + i] = 1;
+      const m = { x: x * CELL, y: y * CELL, w: w * CELL, h: h * CELL, seed: Math.floor(r() * 1e9), panel: r() < 0.18 ? PANEL_B : PANEL_A, lit: r() < 0.06 };
+      const small = w * h <= 3;
+      const KINDS_BIG = ["knobs", "patch", "scope", "bars", "seg", "sliders", "leds", "gauge", "keys", "vent", "label", "radar", "mixer", "matrix"];
+      const KINDS_SMALL = ["ring", "dot", "square", "plus", "diamond", "dial", "led", "switch", "sun", "grid4", "bar1", "wave1"];
+      m.kind = small ? KINDS_SMALL[Math.floor(r() * KINDS_SMALL.length)] : KINDS_BIG[Math.floor(r() * KINDS_BIG.length)];
+      m.moves = ["scope", "bars", "seg", "leds", "gauge", "radar", "dial", "led", "wave1", "bar1", "matrix", "sliders"].includes(m.kind) && r() < 0.75;
+      mods.push(m);
     }
-    for (let x = 0; x < W / cell; x++) for (let y = 0; y < H / cell; y++) if (!used.has(key(x, y))) mods.push([x, y, 1, 1]);
-    for (const [x, y, w, h] of mods) {
-      const px = x * cell + 2, py = y * cell + 2, pw = w * cell - 4, ph = h * cell - 4;
-      g.fillStyle = r() < 0.15 ? PANEL2 : PANEL; g.fillRect(px, py, pw, ph);
-      g.strokeStyle = INK; g.lineWidth = 2; g.strokeRect(px, py, pw, ph);
-      const kind = w * h === 1 ? Math.floor(r() * 4) : 4 + Math.floor(r() * 5);
-      g.lineWidth = 2;
-      if (kind === 0) { g.beginPath(); g.arc(px + pw / 2, py + ph / 2, pw * 0.32, 0, 7); g.stroke(); }
-      else if (kind === 1) { g.fillStyle = INK; g.fillRect(px + pw * 0.3, py + ph * 0.3, pw * 0.4, ph * 0.4); }
-      else if (kind === 2) { g.beginPath(); g.arc(px + pw / 2, py + ph / 2, pw * 0.3, 0, 7); g.stroke(); g.beginPath(); g.moveTo(px + pw / 2, py + ph / 2); g.lineTo(px + pw * 0.75, py + ph * 0.3); g.stroke(); }
-      else if (kind === 3) { g.fillStyle = r() < 0.3 ? GREEN : INK; g.beginPath(); g.arc(px + pw / 2, py + ph / 2, 3, 0, 7); g.fill(); }
-      else if (kind === 4 || kind === 5) {
-        // a screen: black or green-framed, with a wave or bars
-        g.fillStyle = "#101410"; g.fillRect(px + 6, py + 6, pw - 12, ph - 12);
-        g.strokeStyle = GREEN; g.lineWidth = 2; g.beginPath();
-        if (kind === 4) { for (let i = 0; i <= 20; i++) { const xx = px + 8 + (pw - 16) * i / 20, yy = py + ph / 2 + Math.sin(i * 0.9 + r() * 6) * (ph / 4 - 4); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); } g.stroke(); }
-        else { g.fillStyle = GREEN; const bars = Math.floor(pw / 9); for (let i = 0; i < bars; i++) { const bh = (ph - 20) * (0.2 + r() * 0.8); g.fillRect(px + 9 + i * 8, py + ph - 10 - bh, 5, bh); } }
-      } else if (kind === 6) {
-        // rows of knobs
-        const n = Math.max(2, Math.floor(pw / 26)), rows = Math.max(1, Math.floor(ph / 30));
-        for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) { g.beginPath(); g.arc(px + 14 + i * (pw - 28) / Math.max(1, n - 1), py + 16 + j * 28, 7, 0, 7); g.stroke(); }
-      } else if (kind === 7) {
-        // digital readout
-        g.fillStyle = "#101410"; g.fillRect(px + 6, py + ph / 2 - 14, pw - 12, 28);
-        g.fillStyle = GREEN; g.font = "bold 20px monospace"; g.fillText(String(Math.floor(r() * 99999)).padStart(5, "0"), px + 10, py + ph / 2 + 7);
-      } else {
-        // sliders
-        const n = Math.max(2, Math.floor(pw / 18));
-        for (let i = 0; i < n; i++) { const xx = px + 10 + i * 16; g.beginPath(); g.moveTo(xx, py + 8); g.lineTo(xx, py + ph - 8); g.stroke(); g.fillStyle = INK; g.fillRect(xx - 5, py + 8 + r() * (ph - 24), 10, 8); }
+    const line = (x1, y1, x2, y2) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
+    const circ = (x, y, rad, fill) => { g.beginPath(); g.arc(x, y, rad, 0, 7); fill ? g.fill() : g.stroke(); };
+    const screenBox = (x, y, w, h) => { g.fillStyle = DARK; g.fillRect(x, y, w, h); g.strokeStyle = "#111"; g.lineWidth = 2; g.strokeRect(x, y, w, h); };
+    const LABELS = ["ACTIVE", "AUTO", "REMOTE", "RUN", "LOAD", "SWARM", "LIVE", "SYNC", "MANUAL", "LEVEL", "NORMAL"];
+    function draw(m, t) {
+      const rr = rnd(m.seed), { x, y, w, h } = m;
+      const px = x + 2, py = y + 2, pw = w - 4, ph = h - 4, cx = px + pw / 2, cy = py + ph / 2;
+      g.fillStyle = "#e9e9e6"; g.fillRect(x, y, w, h);
+      g.fillStyle = m.panel; g.fillRect(px, py, pw, ph);
+      g.strokeStyle = "#151515"; g.lineWidth = 2; g.strokeRect(px, py, pw, ph);
+      g.strokeStyle = "#151515"; g.fillStyle = "#151515"; g.lineWidth = 2;
+      const k = m.kind, live = m.moves ? t : 0;
+      if (k === "ring") circ(cx, cy, Math.min(pw, ph) * 0.3);
+      else if (k === "dot") circ(cx, cy, Math.min(pw, ph) * 0.22, true);
+      else if (k === "square") g.strokeRect(cx - pw * 0.25, cy - ph * 0.25, pw * 0.5, ph * 0.5);
+      else if (k === "plus") { line(cx - pw * 0.25, cy, cx + pw * 0.25, cy); line(cx, cy - ph * 0.25, cx, cy + ph * 0.25); }
+      else if (k === "diamond") { g.beginPath(); g.moveTo(cx, cy - ph * 0.3); g.lineTo(cx + pw * 0.3, cy); g.lineTo(cx, cy + ph * 0.3); g.lineTo(cx - pw * 0.3, cy); g.closePath(); g.stroke(); }
+      else if (k === "dial") { const rad = Math.min(pw, ph) * 0.34; circ(cx, cy, rad); const a = -2.2 + rr() * 4.4 + Math.sin(live * (0.6 + rr()) + rr() * 6) * 0.8; line(cx, cy, cx + Math.sin(a) * rad, cy - Math.cos(a) * rad); }
+      else if (k === "led") { g.fillStyle = (Math.sin(live * (1 + rr() * 3) + rr() * 6) > 0.3 || (!m.moves && rr() < 0.3)) ? GREEN : "#151515"; circ(cx, cy, Math.min(pw, ph) * 0.2, true); }
+      else if (k === "switch") { g.strokeRect(cx - pw * 0.15, cy - ph * 0.3, pw * 0.3, ph * 0.6); g.fillRect(cx - pw * 0.15, rr() < 0.5 ? cy - ph * 0.3 : cy, pw * 0.3, ph * 0.3); }
+      else if (k === "sun") { for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r1 = Math.min(pw, ph) * 0.12, r2 = Math.min(pw, ph) * 0.32; line(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1, cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); } }
+      else if (k === "grid4") { const s = Math.min(pw, ph) * 0.2; for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) g.strokeRect(cx - s * 1.1 + i * s * 1.2, cy - s * 1.1 + j * s * 1.2, s, s); }
+      else if (k === "bar1") { screenBox(px + 4, py + 4, pw - 8, ph - 8); g.fillStyle = GREEN; const n = Math.max(1, Math.floor((pw - 12) / 6)); for (let i = 0; i < n; i++) { const v = 0.3 + 0.6 * Math.abs(Math.sin(live * 2 + i * 1.3 + m.seed)); g.fillRect(px + 7 + i * 6, py + ph - 7 - (ph - 14) * v, 4, (ph - 14) * v); } }
+      else if (k === "wave1") { screenBox(px + 4, py + 4, pw - 8, ph - 8); g.strokeStyle = GREEN; g.beginPath(); for (let i = 0; i <= 12; i++) { const xx = px + 6 + (pw - 12) * i / 12, yy = cy + Math.sin(i * 1.1 + live * 3 + m.seed) * (ph / 2 - 8); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); } g.stroke(); }
+      else if (k === "knobs" || k === "mixer") {
+        const n = Math.max(2, Math.floor(pw / 30)), rows = Math.max(1, Math.floor(ph / 34));
+        for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) {
+          const kx = px + 16 + i * (pw - 32) / Math.max(1, n - 1), ky = py + 18 + j * (ph - 36) / Math.max(1, rows - 1);
+          if (k === "mixer" && j === rows - 1 && rows > 1) { line(kx, ky - 10, kx, ky + 10); g.fillRect(kx - 5, ky - 6 + rr() * 8, 10, 6); continue; }
+          circ(kx, ky, 9); const a = rr() * 6; line(kx, ky, kx + Math.sin(a) * 9, ky - Math.cos(a) * 9);
+        }
+      } else if (k === "patch") {
+        const n = Math.max(2, Math.floor(pw / 26)), rows = Math.max(2, Math.floor(ph / 26)), pts = [];
+        for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) { const kx = px + 14 + i * (pw - 28) / Math.max(1, n - 1), ky = py + 14 + j * (ph - 28) / Math.max(1, rows - 1); pts.push([kx, ky]); circ(kx, ky, 6); }
+        g.lineWidth = 3;
+        for (let q = 0; q < Math.max(1, pts.length / 5); q++) { const A = pts[Math.floor(rr() * pts.length)], B = pts[Math.floor(rr() * pts.length)]; g.beginPath(); g.moveTo(A[0], A[1]); g.quadraticCurveTo((A[0] + B[0]) / 2, Math.max(A[1], B[1]) + 18, B[0], B[1]); g.stroke(); circ(A[0], A[1], 4, true); circ(B[0], B[1], 4, true); }
+        g.lineWidth = 2;
+      } else if (k === "scope") {
+        screenBox(px + 6, py + 6, pw - 12, ph - 12);
+        g.strokeStyle = DIM; g.lineWidth = 1; for (let i = 1; i < 4; i++) { line(px + 6 + (pw - 12) * i / 4, py + 6, px + 6 + (pw - 12) * i / 4, py + ph - 6); line(px + 6, py + 6 + (ph - 12) * i / 4, px + pw - 6, py + 6 + (ph - 12) * i / 4); }
+        g.strokeStyle = GREEN; g.lineWidth = 2.5; g.beginPath(); const f = 0.5 + rr() * 1.5, kind = Math.floor(rr() * 3);
+        for (let i = 0; i <= 40; i++) { const u = i / 40, xx = px + 8 + (pw - 16) * u, ph2 = u * 12 * f + live * 2.5; const v = kind === 0 ? Math.sin(ph2) : kind === 1 ? (Math.sin(ph2) > 0 ? 0.7 : -0.7) : ((ph2 / Math.PI) % 2) - 1; const yy = cy + v * (ph / 2 - 12); i ? g.lineTo(xx, yy) : g.moveTo(xx, yy); }
+        g.stroke(); g.lineWidth = 2;
+      } else if (k === "bars") {
+        screenBox(px + 6, py + 6, pw - 12, ph - 12); g.fillStyle = GREEN;
+        const n = Math.max(3, Math.floor((pw - 16) / 9));
+        for (let i = 0; i < n; i++) { const v = 0.15 + 0.8 * Math.abs(Math.sin(live * (1.2 + (i % 3) * 0.4) + i * 0.7 + m.seed % 7)) * (0.5 + rr() * 0.5); const bh = (ph - 20) * v; g.fillRect(px + 10 + i * 9, py + ph - 10 - bh, 6, bh); }
+      } else if (k === "seg") {
+        screenBox(px + 6, py + 6, pw - 12, ph - 12);
+        const digits = Math.max(2, Math.min(8, Math.floor((pw - 16) / 18))), size = Math.min(ph - 18, 34);
+        const n = Math.floor((m.seed % 99991) + live * (1 + (m.seed % 5)) * 3) % Math.pow(10, digits);
+        g.fillStyle = GREEN; g.font = `bold ${size}px monospace`; g.textBaseline = "middle"; g.fillText(String(n).padStart(digits, "0"), px + 12, cy + 1); g.textBaseline = "alphabetic";
+      } else if (k === "sliders") {
+        const n = Math.max(2, Math.floor((pw - 12) / 16));
+        for (let i = 0; i < n; i++) { const xx = px + 12 + i * 16; line(xx, py + 10, xx, py + ph - 10); const v = rr() * 0.8 + Math.sin(live * 0.7 + i + m.seed) * 0.1; g.fillRect(xx - 5, py + 10 + v * (ph - 28), 10, 8); }
+      } else if (k === "leds" || k === "matrix") {
+        const s = k === "matrix" ? 9 : 14, n = Math.max(1, Math.floor((pw - 10) / s)), rows = Math.max(1, Math.floor((ph - 10) / s));
+        if (k === "matrix") screenBox(px + 3, py + 3, pw - 6, ph - 6);
+        for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) {
+          const on = Math.sin(live * (0.8 + rr() * 2.5) + rr() * 6.28) > (k === "matrix" ? 0.2 : 0.5);
+          g.fillStyle = on ? GREEN : k === "matrix" ? DIM : "#151515";
+          if (k === "matrix") g.fillRect(px + 6 + i * s, py + 6 + j * s, s - 3, s - 3); else circ(px + 12 + i * s, py + 12 + j * s, 4, true);
+        }
+      } else if (k === "gauge" || k === "radar") {
+        const rad = Math.min(pw, ph) * 0.4;
+        if (k === "radar") { screenBox(cx - rad - 4, cy - rad - 4, rad * 2 + 8, rad * 2 + 8); g.strokeStyle = DIM; circ(cx, cy, rad); circ(cx, cy, rad * 0.6); g.strokeStyle = GREEN; const a = live * 1.6 + m.seed; g.lineWidth = 3; line(cx, cy, cx + Math.cos(a) * rad, cy + Math.sin(a) * rad); g.lineWidth = 2; g.fillStyle = GREEN; circ(cx + Math.cos(m.seed) * rad * 0.5, cy + Math.sin(m.seed) * rad * 0.4, 3, true); }
+        else { circ(cx, cy, rad); for (let i = 0; i <= 10; i++) { const a = -2.3 + i * 0.46; line(cx + Math.sin(a) * rad * 0.82, cy - Math.cos(a) * rad * 0.82, cx + Math.sin(a) * rad, cy - Math.cos(a) * rad); } const a = -2 + rr() * 4 + Math.sin(live * (0.4 + rr()) + m.seed) * 0.9; g.lineWidth = 3; line(cx, cy, cx + Math.sin(a) * rad * 0.8, cy - Math.cos(a) * rad * 0.8); g.lineWidth = 2; circ(cx, cy, 4, true); }
+      } else if (k === "keys") {
+        const s = 18, n = Math.max(1, Math.floor((pw - 8) / s)), rows = Math.max(1, Math.floor((ph - 8) / s));
+        for (let j = 0; j < rows; j++) for (let i = 0; i < n; i++) { const kx = px + 6 + i * s, ky = py + 6 + j * s; if (rr() < 0.15) { g.fillStyle = rr() < 0.4 ? GREEN : "#151515"; g.fillRect(kx, ky, s - 5, s - 5); } else g.strokeRect(kx, ky, s - 5, s - 5); }
+      } else if (k === "vent") { for (let yy = py + 8; yy < py + ph - 6; yy += 6) line(px + 8, yy, px + pw - 8, yy); }
+      else if (k === "label") {
+        const bw = Math.min(pw - 12, 120), bh = Math.min(ph - 12, 32);
+        screenBox(cx - bw / 2, cy - bh / 2, bw, bh); g.fillStyle = GREEN; g.font = `bold ${Math.min(18, bh - 10)}px monospace`; g.textAlign = "center"; g.textBaseline = "middle";
+        g.fillText(LABELS[m.seed % LABELS.length].slice(0, Math.floor(bw / 11)), cx, cy + 1); g.textAlign = "left"; g.textBaseline = "alphabetic";
+        if (ph > 60) for (let i = 0; i < Math.floor(pw / 24); i++) circ(px + 14 + i * 24, py + ph - 14, 6);
       }
+      if (m.lit) { g.strokeStyle = GREEN; g.lineWidth = 3; g.strokeRect(px + 1, py + 1, pw - 2, ph - 2); g.lineWidth = 2; }
     }
-    return tex(c);
+    for (const m of mods) draw(m, 0);
+    const texture = tex(c);
+    const moving = mods.filter((m) => m.moves);
+    let lastTick = -1, nextSwap = 0;
+    return {
+      texture,
+      /// Redraws what moves; `t` in seconds. Every few seconds a different handful of modules lights up green.
+      tick(t) {
+        if (t >= nextSwap) {
+          nextSwap = t + 4 + Math.random() * 4;
+          for (let i = 0; i < 6; i++) { const m = mods[Math.floor(Math.random() * mods.length)]; if (m.w * m.h > 64 * 9) { m.lit = !m.lit; draw(m, t); } }
+        }
+        for (const m of moving) draw(m, t);
+        texture.needsUpdate = true;
+        lastTick = t;
+      },
+      /// Something happened (a trade or a launch): a burst of green across the wall.
+      pulse(t) {
+        const picked = [];
+        for (let i = 0; i < 10; i++) { const m = mods[Math.floor(Math.random() * mods.length)]; if (m.w * m.h > 64 * 6 && !m.lit) { m.lit = true; picked.push(m); draw(m, t); } }
+        texture.needsUpdate = true;
+        setTimeout(() => { for (const m of picked) { m.lit = false; draw(m, lastTick); } texture.needsUpdate = true; }, 2500);
+      },
+    };
   }
 
   function floorTexture() {
@@ -140,7 +225,7 @@
     const show = (i) => { map.offset.set((i % COLS) / COLS, 1 - (Math.floor(i / COLS) + 1) / ROWS); };
     return {
       root,
-      /// Arms up for a couple of seconds (the crowd does this when a trade or launch lands on the big screen).
+      /// Arms up for a couple of seconds (when a trade or launch lands on the big screen).
       cheer() { act = "cheer"; actT = 2.2; },
       update(dt, speed) {
         phase += dt * (speed > 0.05 ? 5 + 5 * speed : 1);
@@ -172,12 +257,96 @@
     };
   }
 
+  // ------------------------------------------------------------------ the crew and the dog (IMD's art, from imd.fun)
+  // A one-row sprite sheet on a card; `show(i)` picks the frame.
+  function spriteCard(url, frames, wUnits, hUnits) {
+    const map = new T.TextureLoader().load(url); map.colorSpace = T.SRGBColorSpace; map.repeat.set(1 / frames, 1);
+    const mesh = new T.Mesh(new T.PlaneGeometry(wUnits, hUnits), new T.MeshBasicMaterial({ map, transparent: true, alphaTest: 0.35, side: T.DoubleSide }));
+    return { mesh, show(i) { map.offset.x = i / frames; } };
+  }
+  // the scale of imd.fun's scene: its Pepe is 86 px tall, ours 2.05 units
+  const PX = 2.05 / 86;
+
+  /// The man at the desk, in his chair, watching the big screen (seen from behind, as on imd.fun). Mostly still;
+  /// now and then he looks around, stretches or scratches his head; he cheers when something lands on the big screen.
+  function makeCrew() {
+    const root = new T.Group();
+    const man = spriteCard("/img/imd-crew.webp", 14, 85 * PX, 111.6 * PX);
+    man.mesh.position.y = (746 - 707.6) * PX + (111.6 * PX) / 2; root.add(man.mesh);
+    const chair = spriteCard("/img/imd-chair.webp", 1, 85 * PX, 64 * PX);
+    chair.mesh.position.set(0, (64 * PX) / 2, 0.02); root.add(chair.mesh);
+    const LOOK = [1, 2, 3, 4, 6, 7, 13];
+    let f = 0, until = 4, act = null;
+    man.show(0);
+    return {
+      root,
+      cheer() { act = "cheer"; until = 0; },
+      update(dt, t) {
+        if (act === "cheer") { man.show(Math.floor(t * 3) % 2 ? 12 : 11); until -= dt; if (until < -2.2) { act = null; until = 2; man.show(0); } return; }
+        until -= dt;
+        if (until > 0) return;
+        const r = Math.random();
+        if (f !== 0) { f = 0; until = 4 + Math.random() * 8; }
+        else if (r < 0.55) { f = LOOK[Math.floor(Math.random() * LOOK.length)]; until = 1 + Math.random() * 2; }
+        else if (r < 0.7) { f = 5; until = 1.8; }
+        else if (r < 0.85) { f = Math.random() < 0.5 ? 8 : 9; until = 1.6; }
+        else { f = 10; until = 3 + Math.random() * 3; }
+        man.show(f);
+      },
+    };
+  }
+
+  /// The dog: lies by the chair breathing; now and then sits up, gets up and trots around, and comes back.
+  function makeDog(home) {
+    const root = new T.Group();
+    const dog = spriteCard("/img/imd-dog.webp", 23, 63 * PX, 45 * PX);
+    dog.mesh.position.y = (45 * PX) / 2; root.add(dog.mesh);
+    root.position.copy(home);
+    const WALK = [6, 7, 8, 9, 10, 11, 12, 13];
+    let state = "lie", until = 10 + Math.random() * 10, target = null, step = 0;
+    const right = new T.Vector3(), vel = new T.Vector3();
+    return {
+      root,
+      update(dt, t, camera) {
+        until -= dt;
+        dog.mesh.scale.set(1, 1, 1);
+        if (state === "lie") {
+          dog.show(0);
+          const b = (Math.sin(t * (2 * Math.PI / 3.8)) + 1) / 2; dog.mesh.scale.set(1 + b * 0.012, 1 + b * 0.045, 1); // breathing
+          if (until < 0) { state = "sit"; until = 2 + Math.random() * 4; }
+        } else if (state === "sit") {
+          dog.show(until > 1.5 ? 3 : until > 1.2 ? 2 : 1);
+          if (until < 0) {
+            if (Math.random() < 0.6) { state = "walk"; target = new T.Vector3(home.x + (Math.random() - 0.5) * 12, 0, 2.2 + Math.random() * 5); }
+            else { state = "lie"; until = 12 + Math.random() * 14; }
+          }
+        } else if (state === "walk" || state === "home") {
+          const to = state === "home" ? home : target;
+          vel.subVectors(to, root.position); vel.y = 0;
+          const d = vel.length();
+          if (d < 0.08) {
+            if (state === "home") { state = "lie"; until = 12 + Math.random() * 14; }
+            else { state = "look"; until = 1.5 + Math.random() * 2.5; }
+          } else {
+            vel.multiplyScalar(Math.min(d, 1.6 * dt) / d); root.position.add(vel);
+            step += dt * 10; dog.show(WALK[Math.floor(step) % WALK.length]);
+            right.setFromMatrixColumn(camera.matrixWorld, 0);
+            dog.mesh.scale.x = vel.dot(right) < 0 ? -1 : 1; // the sheet walks to the right
+          }
+        } else if (state === "look") {
+          dog.show(until > 1 ? 22 : 19);
+          if (until < 0) { state = "home"; }
+        }
+      },
+    };
+  }
+
   // ------------------------------------------------------------------ the hall
   let state = null;
 
   function mount(container, api) {
     unmount();
-    const W = 60, D = 18, WALL_H = 13; // room width, depth, wall height
+    const W = 60, D = 18, WALL_H = 15.5; // room width, depth, wall height (about seven Pepes, as on imd.fun)
     const el = document.createElement("div");
     el.className = "hall";
     el.innerHTML = `
@@ -204,11 +373,23 @@
     // floor, wall, the black skirting band with its little labels (as in the IMD picture)
     const floor = new T.Mesh(new T.PlaneGeometry(W, D), new T.MeshBasicMaterial({ map: floorTexture() }));
     floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, D / 2); scene.add(floor);
-    const wt = wallTexture(); wt.wrapS = T.RepeatWrapping; wt.repeat.set(2, 1);
-    const wall = new T.Mesh(new T.PlaneGeometry(W, WALL_H - 1.4), new T.MeshBasicMaterial({ map: wt }));
+    const wallFx = makeWall(4096, 976);
+    const wall = new T.Mesh(new T.PlaneGeometry(W, WALL_H - 1.4), new T.MeshBasicMaterial({ map: wallFx.texture }));
     wall.position.set(0, 1.4 + (WALL_H - 1.4) / 2, 0); scene.add(wall);
-    const band = new T.Mesh(new T.PlaneGeometry(W, 1.4), new T.MeshBasicMaterial({ color: 0x050505 })); band.position.set(0, 0.7, 0.01); scene.add(band);
-    for (let x = -27; x <= 27; x += 6) { const tick = new T.Mesh(new T.PlaneGeometry(0.08, 0.22), new T.MeshBasicMaterial({ color: 0xdddddd })); tick.position.set(x, 0.8, 0.02); scene.add(tick); }
+    // the black band of desks under the wall, and the floor's edge, from IMD's own desk picture
+    const bandMat = new T.MeshBasicMaterial({ color: 0x050505 }), edgeMat = new T.MeshBasicMaterial({ color: 0xf4f4f1, transparent: true });
+    const band = new T.Mesh(new T.PlaneGeometry(W, 1.4), bandMat); band.position.set(0, 0.7, 0.01); scene.add(band);
+    const edge = new T.Mesh(new T.PlaneGeometry(W, 1.12), edgeMat); edge.rotation.x = -Math.PI / 2; edge.position.set(0, 0.006, 0.56); scene.add(edge);
+    const desk = new Image();
+    desk.onload = () => {
+      if (!state) return;
+      // rows 12-173 are the desks, 174-303 the floor in front of them; both repeat at the desks' scale (1.4 tall)
+      const tile = 1.4 * desk.naturalWidth / (174 - 12);
+      const crop = (y0, y1) => { const c = canvas(desk.naturalWidth, y1 - y0); c.getContext("2d").drawImage(desk, 0, -y0); const t = tex(c); t.wrapS = T.RepeatWrapping; t.repeat.set(W / tile, 1); return t; };
+      bandMat.map = crop(12, 174); bandMat.color.set(0xffffff); bandMat.needsUpdate = true;
+      edgeMat.map = crop(174, 304); edgeMat.needsUpdate = true;
+    };
+    desk.src = "/img/imd-desk.webp";
     for (const s of [-1, 1]) { const side = new T.Mesh(new T.PlaneGeometry(D, WALL_H), new T.MeshBasicMaterial({ color: 0x0b0b0b })); side.rotation.y = -s * Math.PI / 2; side.position.set(s * W / 2, WALL_H / 2, D / 2); scene.add(side); }
 
     // screens: a canvas texture on a plane in front of the wall, with a dark frame
@@ -222,7 +403,7 @@
       return s;
     }
     // the big screen: live launches and trades, IMD-terminal style
-    const big = screen(20, 7, 0, 6.6, 1600, 560);
+    const big = screen(15, 6.2, 0, 4.95, 1600, 660); // low in the middle of the wall, just above the desks
     // kiosks: standing terminals on the floor
     const kiosks = [];
     function kiosk(x, label, sub, hash) {
@@ -262,23 +443,17 @@
       s.t.needsUpdate = true;
     }
 
-    // the locals: Pepes watching the big screen
-    const crowd = [];
-    const cr = rnd(91);
-    for (let i = 0; i < 7; i++) {
-      const p = makePepe();
-      p.root.position.set(-7 + i * 2.3 + (cr() - 0.5), 0, 5.5 + cr() * 3);
-      p.root.rotation.y = Math.PI + (cr() - 0.5) * 0.5; // facing the wall
-      scene.add(p.root);
-      crowd.push({ p, turn: 3 + cr() * 8, base: p.root.rotation.y });
-    }
+    // the man at the desk and his dog, in front of the big screen (where imd.fun has them)
+    const crew = makeCrew(); crew.root.position.set(1.1, 0, 2.4); scene.add(crew.root);
+    const dog = makeDog(new T.Vector3(2.35, 0, 2.6)); scene.add(dog.root);
+    const facing = (o) => { o.rotation.y = Math.atan2(camera.position.x - o.position.x, camera.position.z - o.position.z); }; // turn a card to the camera
 
     // you
     const player = makePepe({ you: true });
     scene.add(player.root);
-    let pos = new T.Vector3(0, 0, 11), heading = Math.PI; // facing the wall (-z)
+    let pos = new T.Vector3(-1.2, 0, 3.4), heading = Math.PI; // beside the man, facing the wall (-z), as on imd.fun
     try { const s = JSON.parse(sessionStorage.getItem("hall:pos") || "null"); if (s) { pos.set(s.x, 0, s.z); heading = s.h; } } catch {}
-    let camYaw = heading, camPitch = 0.12;
+    let camYaw = heading, camPitch = 0.06;
     // ---------------- input
     const keys = new Set();
     let paused = false, drawn = 0;
@@ -362,7 +537,7 @@
       g.fillStyle = GREEN; g.fillText("#", 24, 38);
       g.fillStyle = "#cfd8cf"; g.fillText(stats || "reading the chain…", 54, 38);
       g.fillStyle = "#6f7d6f"; g.textAlign = "right"; g.fillText("★ launch  ★ buy  ★ sell", w - 24, 38); g.textAlign = "left";
-      const rows = feedLines.slice(-11);
+      const rows = feedLines.slice(-13);
       rows.forEach((l, i) => {
         const y = 96 + i * 38;
         g.fillStyle = "#3a4a3a"; g.fillText("└", 24, y);
@@ -380,9 +555,8 @@
       try {
         const d = await api.data();
         if (!state) return;
-        // something new on the big screen: the crowd cheers
         const lastKey = d.events.length ? JSON.stringify(d.events[d.events.length - 1]) : "";
-        if (seenKey && lastKey !== seenKey) crowd.forEach((c, i) => setTimeout(() => c.p.cheer(), i * 120));
+        if (seenKey && lastKey !== seenKey) { player.cheer(); crew.cheer(); wallFx.pulse(t0); } // something new: everyone cheers
         seenKey = lastKey;
         feedLines = d.events; stats = d.stats;
         $("hlive").textContent = d.stats;
@@ -407,7 +581,8 @@
     const dataTimer = setInterval(refresh, 20000);
 
     // ---------------- loop
-    let near = null, last = performance.now(), raf = 0, t0 = 0;
+    let near = null, last = performance.now(), raf = 0, t0 = 0, wallAt = 0;
+    const coarse = matchMedia("(pointer: coarse)").matches, still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const tmp = new T.Vector3();
     function resize() {
       const w = el.clientWidth, h = el.clientHeight;
@@ -437,6 +612,11 @@
         pos.z = Math.max(1, Math.min(D - 1, pos.z + dz * 4.2 * speed * dt));
         // kiosks are solid
         for (const k of kiosks) { if (k.off) continue; const ox = pos.x - k.x, oz = pos.z - k.z; if (Math.abs(ox) < 1.1 && Math.abs(oz) < 0.75) pos.z = k.z + 0.75 * Math.sign(oz || 1); }
+        // so are the man in his chair and the dog
+        for (const [o, rad] of [[crew.root.position, 1.0], [dog.root.position, 0.55]]) {
+          const ox = pos.x - o.x, oz = pos.z - o.z, d = Math.hypot(ox, oz);
+          if (d < rad && d > 1e-4) { pos.x = o.x + (ox / d) * rad; pos.z = o.z + (oz / d) * rad; }
+        }
         const want = Math.atan2(dx, dz);
         let d = want - heading; d = Math.atan2(Math.sin(d), Math.cos(d)); heading += d * Math.min(1, dt * 10);
         // the camera swings in behind you as you walk away from it
@@ -445,16 +625,16 @@
       }
       player.root.position.copy(pos); player.root.rotation.y = heading;
       player.update(dt, Math.min(1, speed));
-      for (const c of crowd) {
-        c.turn -= dt;
-        if (c.turn < 0) { c.p.root.rotation.y = c.base + (Math.random() - 0.5) * 1.2; c.turn = 3 + Math.random() * 8; }
-        c.p.update(dt, 0);
-      }
+      crew.update(dt, t0); dog.update(dt, t0, camera);
+      // the wall's moving parts, a few times a second (once a second on phones; never with reduced motion)
+      if (!still && t0 - wallAt > (coarse ? 1 : 0.33)) { wallAt = t0; wallFx.tick(t0); }
       // camera: behind and above
-      const dist = 7, flat = dist * Math.cos(camPitch);
-      camera.position.set(pos.x - Math.sin(camYaw) * flat, 2.1 + dist * Math.sin(camPitch), Math.min(D + 4, pos.z - Math.cos(camYaw) * flat));
-      // look past your Pepe and a little up, so the wall's screens stay in view
-      camera.lookAt(tmp.set(pos.x + Math.sin(camYaw) * 4, 2.6, pos.z + Math.cos(camYaw) * 4));
+      // far enough back to see the whole wall, as on imd.fun (your Pepe small at the bottom of the picture)
+      const dist = 12, flat = dist * Math.cos(camPitch);
+      camera.position.set(pos.x - Math.sin(camYaw) * flat, 2.4 + dist * Math.sin(camPitch), Math.min(D + 6, pos.z - Math.cos(camYaw) * flat));
+      // look past your Pepe and up at the big screen
+      camera.lookAt(tmp.set(pos.x + Math.sin(camYaw) * 4, 4.6, pos.z + Math.cos(camYaw) * 4));
+      facing(crew.root); facing(dog.root);
       // what is within reach
       const targets = [...kiosks.filter((k) => !k.off), ...booths.map((b) => b.target).filter(Boolean), { x: 0, z: 1.2, r: 4, label: "The big screen: every launch and trade", go: () => api.go("#/tokens") }];
       let best = null, bd = Infinity;
