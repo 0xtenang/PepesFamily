@@ -217,6 +217,27 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
 .status > span:last-child { border-right: 0; border-left: 1px solid var(--line); margin-left: auto; }
 .status b { color: var(--text); font-weight: 500; }
 .status .dot { width: 7px; height: 7px; background: var(--accent); display: inline-block; }
+/* the Hall: a 3D room filling the page between header and status bar */
+body.hall-on main#app { max-width: none; padding: 0; margin: 0; }
+.hall { position: relative; width: 100%; overflow: hidden; background: #0b0b0b; touch-action: none; }
+.hall [hidden] { display: none !important; }
+.hall-c { display: block; width: 100%; height: 100%; cursor: grab; }
+.hall-top { position: absolute; left: 12px; top: 10px; display: flex; gap: 12px; align-items: center; color: #e6ede6; font-size: 12px; pointer-events: none; }
+.hall-top b { background: #fff; color: #000; padding: 3px 8px; letter-spacing: .08em; }
+.hall-live { color: #3ddc84; background: rgba(0,0,0,.6); padding: 3px 8px; }
+.hall-prompt { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); background: #050605; color: #3ddc84; border: 1.5px solid #3ddc84; padding: 10px 16px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.hall-help { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); color: #9aa79a; background: rgba(0,0,0,.6); padding: 4px 10px; font-size: 12px; text-align: center; max-width: calc(100% - 24px); }
+.hall-btns { position: absolute; right: 12px; top: 10px; display: flex; gap: 8px; }
+.hall-btns button { background: #050605; color: #e6ede6; border: 1px solid #3a4a3a; }
+.hall-joy { position: absolute; left: 22px; bottom: 54px; width: 110px; height: 110px; border-radius: 50% !important; border: 2px solid rgba(255,255,255,.35); background: rgba(0,0,0,.25); touch-action: none; }
+.hall-knob { position: absolute; left: 33px; top: 33px; width: 44px; height: 44px; border-radius: 50% !important; background: rgba(61,220,132,.75); }
+.hall-modal { position: absolute; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2; }
+.hall-card { background: var(--bg); border: 1.5px solid var(--strong); padding: 14px; max-width: 760px; width: 100%; }
+.hall-card img { width: 100%; display: block; border: 1px solid var(--line); }
+.hall-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
+.hall-back { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 6; background: #050605; color: #3ddc84; border: 1.5px solid #3ddc84; padding: 8px 14px; font-size: 13px; }
+@media (max-width: 600px) { .hall-top .hall-live { display: none; } .hall-prompt { bottom: 180px; } .hall-help { top: 48px; bottom: auto; } }
+
 /* home scene: control wall + live screen + frog */
 .scene { position: relative; height: clamp(380px, 50vw, 560px); margin: 6px 0 28px; border: 1.5px solid var(--strong); overflow: hidden; background: var(--panel-2); }
 .scene canvas.wall { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -261,6 +282,7 @@ th { color: var(--muted); font-weight: 400; text-transform: uppercase; letter-sp
       <a href="#/" data-nav="/">Tokens</a>
       <a href="#/create" data-nav="/create">Launch</a>
       <a href="#/rewards" data-nav="/rewards">Rewards</a>
+      <a href="#/hall" data-nav="/hall">Hall</a>
       <a href="#/nft" data-nav="/nft"><span class="nl">Pepes Earn IMD </span>NFT</a>
       <a href="/world/">World</a>
       <a href="#/admin" data-nav="/admin" id="adminlink" style="display:none">Admin</a>
@@ -927,12 +949,19 @@ let routeGen = 0; // bumped on every navigation, so slow loads can tell they are
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
+  // leaving the Hall: stop it; visiting a page from one of its screens: offer the way back
+  if (h !== "/hall") { window.Hall?.unmount(); document.body.classList.remove("hall-on"); }
+  let back = false;
+  try { back = h !== "/hall" && sessionStorage.getItem("hall:back") === "1"; if (h === "/hall") sessionStorage.removeItem("hall:back"); } catch {}
+  $("#hallback")?.remove();
+  if (back) document.body.insertAdjacentHTML("beforeend", `<a class="hall-back" id="hallback" href="#/hall">← Back to the Hall</a>`);
   const navKey = h.startsWith("/t/") ? "/" : h.startsWith("/rewards") ? "/rewards" : h;
   document.querySelectorAll("nav.top a").forEach((a) => a.classList.toggle("on", a.dataset.nav === navKey));
   Scene.unmount(); Feed.stop(); // the home page restarts them
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
   if (h === "/create") return renderCreate();
+  if (h === "/hall") return renderHall();
   if (h === "/admin") return renderAdmin();
   if (h === "/rewards" || h.startsWith("/rewards/")) return renderRewards(h.slice(9) || null);
   if (h === "/nft") return renderNft();
@@ -955,6 +984,74 @@ function renderSetup() {
   $("#app").innerHTML = `<div class="card empty"><h2>Not deployed yet</h2>
     <p>No launchpad contract found on-chain. Check <span class="mono">CONFIG.pads</span> and <span class="mono">CONFIG.rpc</span> at the top of this file.</p></div>`;
 }
+
+// ---------------------------------------------------------------- Hall
+/// Loads a same-origin script once (the Hall's three.js and its code are only fetched when someone opens it).
+const scriptOnce = (() => {
+  const loaded = new Map();
+  return (src, integrity) => {
+    if (!loaded.has(src)) {
+      loaded.set(src, new Promise((res, rej) => {
+        const el = document.createElement("script");
+        el.src = src; if (integrity) { el.integrity = integrity; el.crossOrigin = "anonymous"; }
+        el.onload = res; el.onerror = () => { loaded.delete(src); rej(new Error("Couldn't load " + src)); };
+        document.head.appendChild(el);
+      }));
+    }
+    return loaded.get(src);
+  };
+})();
+/// A token's logo URL (the site's own image, else its IPFS image through the first gateway, else its https link).
+function imageOf(info) {
+  const own = CONFIG.images[String(info.token || "").toLowerCase()];
+  if (own) return own;
+  const raw = meta(info.metadata).image || "";
+  const ipfs = ipfsPath(raw.trim());
+  return ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw) || "";
+}
+async function renderHall() {
+  const app = $("#app");
+  document.body.classList.add("hall-on");
+  app.innerHTML = `<div class="muted" style="padding:16px">Opening the Hall…</div>`;
+  try {
+    await scriptOnce("/js/three-0.160.0.min.js", "sha512-vnmn/Qqn6aG0POAc9mIGzjq0IybrvxJXYDafNvp9JSnDGxeF3pbkSqLvf+YGd5ku63pT7sa/jxHn7/d0mU8+tA==");
+    await scriptOnce("/js/hall.js");
+  } catch (e) { return (app.innerHTML = `<div class="card empty">${esc(errMsg(e))}</div>`); }
+  if ((location.hash.slice(1) || "/") !== "/hall") return;
+  app.innerHTML = "";
+  const fit = () => {
+    const hd = document.querySelector("header")?.offsetHeight || 0, ft = document.querySelector("footer.status")?.offsetHeight || 0;
+    const el = app.querySelector(".hall"); if (el) el.style.height = Math.max(320, innerHeight - hd - ft) + "px";
+  };
+  Hall.mount(app, {
+    go(hash) { try { sessionStorage.setItem("hall:back", "1"); } catch {} location.hash = hash; },
+    async data() {
+      const all = (await allTokenInfos()).filter(({ t }) => isListed(t));
+      const top = [...all].sort((a, b) => toUsdNum(b.t.marketCap, b.t.quote) - toUsdNum(a.t.marketCap, a.t.quote))
+        .slice(0, 6).map(({ t }) => ({ token: t.token, symbol: t.symbol, mc: usd(t.marketCap, t.quote), image: imageOf(t) }));
+      const bySym = new Map(all.map(({ t }) => [t.token.toLowerCase(), t]));
+      const hhmm = (sec) => new Date(sec * 1000).toTimeString().slice(0, 5);
+      const trades = await Feed.recentTrades().catch(() => []);
+      const events = [
+        ...all.map(({ t }) => ({ ts: Number(t.createdAt), kind: "launch", t, detail: `${qsym(t.quote)} pair · MC ${usd(t.marketCap, t.quote)}` })),
+        ...trades.map((e) => ({ ts: e.ts, kind: e.kind, t: bySym.get(e.token.toLowerCase()), detail: `${fmt(e.a.tokenAmount)} · ${usd(e.a.quoteAmount, bySym.get(e.token.toLowerCase())?.quote ?? ZERO)}` })),
+      ].filter((e) => e.t).sort((a, b) => a.ts - b.ts).slice(-12)
+        .map((e) => ({ time: hhmm(e.ts), kind: e.kind, sym: "$" + e.t.symbol, detail: e.detail }));
+      const vol = $("#sb-vol")?.textContent;
+      return { top, events, stats: `${all.length} tokens${vol && vol !== "…" ? ` · ${vol} volume` : ""} · Robinhood + Ethereum` };
+    },
+    // Your Pepe: the look of your first Pepes Earn IMD NFT when a wallet is connected, else the classic Pepe.
+    async myLook() {
+      if (!account) return null;
+      const ids = await new ethers.Contract(EARN.token, EARN_ABI, reader).ownedIds(account, 0, 1);
+      return ids.length ? Hall.earnLook(Number(ids[0])) : null;
+    },
+    useAsLaunchImage(dataUrl) { HALL_SHOT = dataUrl; try { sessionStorage.setItem("hall:back", "1"); } catch {} location.hash = "#/create"; },
+  });
+  fit();
+  addEventListener("resize", fit);
+}
+let HALL_SHOT = null; // a picture taken in the Hall, waiting to become the next launch's image
 
 // ---------------------------------------------------------------- Home
 // ---------------------------------------------------------------- Home scene
@@ -1234,7 +1331,7 @@ const Feed = (() => {
 
   function start() { stop(); seen = new Set(); tick(true); timer = setInterval(() => tick(false), 20000); }
   function stop() { clearInterval(timer); timer = 0; }
-  return { start, stop };
+  return { start, stop, recentTrades };
 })();
 
 async function renderHome() {
@@ -2568,9 +2665,21 @@ function setupImageField() {
     st = { ...st, busy: job };
     return job;
   }
+  // A picture taken in the Hall: upload it as this launch's image (or explain why it can't be).
+  const shot = HALL_SHOT; HALL_SHOT = null;
+  const useShot = () => {
+    if (!shot) return;
+    const [head, b64] = shot.split(","), bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    upload(new File([bytes], "pepesfamily-hall.png", { type: head.slice(5, head.indexOf(";")) }));
+  };
   fetch("/api/upload", { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).then((j) => {
-    if (!j?.enabled || !$("#imgupbox")) return;
+    if (!j?.enabled || !$("#imgupbox")) {
+      if (shot) say("Uploading isn't available on this copy of the site: download your Hall picture, post it anywhere, and paste its image link here.", "warn");
+      return;
+    }
     canUpload = true;
+    useShot();
     $("#imgupbox").hidden = false;
     $("#imgup").onclick = () => $("#imgfile").click();
     $("#imgfile").onchange = () => { const f = $("#imgfile").files[0]; if (f) upload(f); $("#imgfile").value = ""; };
@@ -2578,7 +2687,9 @@ function setupImageField() {
     row.ondragover = (e) => { e.preventDefault(); row.classList.add("drag"); };
     row.ondragleave = () => row.classList.remove("drag");
     row.ondrop = (e) => { e.preventDefault(); row.classList.remove("drag"); const f = e.dataTransfer?.files?.[0]; if (f) upload(f); };
-  }).catch(() => {});
+  }).catch(() => {
+    if (shot) say("Uploading isn't available on this copy of the site: download your Hall picture, post it anywhere, and paste its image link here.", "warn");
+  });
   // Pasting a copied image (not a link) anywhere in the form uploads it.
   $("#cf").addEventListener("paste", (e) => {
     const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/"));
