@@ -1,5 +1,6 @@
 // PepesFamily Hall: a 3D room in the style of the IMD swarm wall, where your Pepe walks up to screens to launch,
-// trade and claim. Laid out like imd.fun: the instrument wall, the big screen, the man at his desk and his dog.
+// trade and claim. Laid out like imd.fun (the instrument wall, the big screen, the man at his desk and his dog),
+// with a crowd of Pepes watching.
 // Classic script (no modules): uses the THREE global from /js/three-0.160.0.min.js and exposes window.Hall.
 (() => {
   "use strict";
@@ -443,6 +444,17 @@
       s.t.needsUpdate = true;
     }
 
+    // the locals: Pepes all over the floor watching the wall, clear of the man, his dog and the kiosks
+    const crowd = [];
+    const cr = rnd(91);
+    const SPOTS = [[-11, 4.2], [-6.8, 4.6], [-8.6, 7.2], [-4.8, 6.4], [4.8, 4.4], [7.4, 6.6], [10.8, 4.2], [-13.8, 6.4], [13.4, 6.2], [-17.5, 4.8], [17.5, 5], [5.4, 8.6]];
+    for (const [x, z] of SPOTS) {
+      const p = makePepe();
+      p.root.position.set(x + (cr() - 0.5) * 0.8, 0, z + (cr() - 0.5) * 0.8);
+      p.root.rotation.y = Math.PI + (cr() - 0.5) * 0.6; // facing the wall
+      scene.add(p.root);
+      crowd.push({ p, turn: 3 + cr() * 8, base: p.root.rotation.y });
+    }
     // the man at the desk and his dog, in front of the big screen (where imd.fun has them)
     const crew = makeCrew(); crew.root.position.set(1.1, 0, 2.4); scene.add(crew.root);
     const dog = makeDog(new T.Vector3(2.35, 0, 2.6)); scene.add(dog.root);
@@ -556,7 +568,7 @@
         const d = await api.data();
         if (!state) return;
         const lastKey = d.events.length ? JSON.stringify(d.events[d.events.length - 1]) : "";
-        if (seenKey && lastKey !== seenKey) { player.cheer(); crew.cheer(); wallFx.pulse(t0); } // something new: everyone cheers
+        if (seenKey && lastKey !== seenKey) { player.cheer(); crowd.forEach((c, i) => setTimeout(() => c.p.cheer(), i * 120)); crew.cheer(); wallFx.pulse(t0); } // something new: everyone cheers
         seenKey = lastKey;
         feedLines = d.events; stats = d.stats;
         $("hlive").textContent = d.stats;
@@ -625,6 +637,11 @@
       }
       player.root.position.copy(pos); player.root.rotation.y = heading;
       player.update(dt, Math.min(1, speed));
+      for (const c of crowd) {
+        c.turn -= dt;
+        if (c.turn < 0) { c.p.root.rotation.y = c.base + (Math.random() - 0.5) * 1.2; c.turn = 3 + Math.random() * 8; }
+        c.p.update(dt, 0);
+      }
       crew.update(dt, t0); dog.update(dt, t0, camera);
       // the wall's moving parts, a few times a second (once a second on phones; never with reduced motion)
       if (!still && t0 - wallAt > (coarse ? 1 : 0.33)) { wallAt = t0; wallFx.tick(t0); }
