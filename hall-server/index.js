@@ -128,6 +128,8 @@ export class Hall {
     const now = Date.now();
     if (now - p.win > 1000) { p.win = now; p.n = 0; }
     if (++p.n > 30 || typeof data !== "string" || data.length > 1024) { ws.close(4008, "too much"); return; }
+    // keep the count: the attachment is a copy, and the paths below that return early never save it
+    ws.serializeAttachment(p);
     let m;
     try { m = JSON.parse(data); } catch { return; }
     if (!m || typeof m !== "object") return;
