@@ -116,6 +116,22 @@ Ethereum v5 deployment (block 26153625, commit `490e84e`, recorded in `contracts
 
 Owner and fee recipient are `0x3c8A…691C` on both chains. Expired holder rewards on Ethereum go to the same fee address for the manual $PEPES buyback and burn. `CHAIN_ID=1 forge script script/PadDeployData.s.sol` prints Ethereum's deployment data; `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc EthereumForkTest` runs launch, split, quoter, ETH-router and expiry tests on Ethereum state; `CHAIN_ID=1 ./script/verify-tokens.sh` verifies Ethereum launches. Base will follow once IMD is available there.
 
+### Elysium testnet (2026-10-27)
+
+[Elysium](https://elysium.kinetiq.xyz) is Kinetiq's Arbitrum Orbit chain for the Hyperliquid ecosystem (100 ms blocks,
+gas in HYPE; builders keep 25% of the sequencer fees their users pay). Its testnet (chain 99801) has no Uniswap v4
+yet, so it runs on our own PoolManager (owned by `0x3c8A…691C`) and `PepesFamilyQuoter` (the V4Quoter interface,
+for the website), both at fixed CREATE2 addresses (`script/ElysiumAddrs.s.sol`): v4-core's Business Source License
+allows this non-production use. Launches pair with HYPE (WHYPE `0xCD57…F234`, the native router), starting at about
+47 HYPE. Settings: `Chains.pad("elysium-testnet-whype")`. Mainnet waits for Uniswap's own v4 deployment there
+(announced), then deploys like the others.
+
+| Contract | Address |
+| --- | --- |
+| PoolManager (ours, testnet) | `0x13DA18e28F1928F85465EaFe49CB6BBac1d52203` |
+| PepesFamilyQuoter | `0x365EfD5fFb4e42657CFB36fE61255082E5327dEd` |
+| PepesFamily v5 (WHYPE) | `0x417fbe5588666647dCB8575c583dAd0CA11B68cc` |
+
 ### More pairs: $PEPE and ETH on Ethereum, ETH and $CASHCAT on Robinhood Chain (2026-10-18)
 
 Each pair asset is its own deployment of the same v5 contracts (a launchpad takes one pair asset), so launches can

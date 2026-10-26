@@ -280,6 +280,7 @@ const CONFIG = {
   pads: [
     // 2026-10-18: one launchpad per pair asset (contracts/script/Chains.sol `pad`). Addresses are fixed in advance
     // (CREATE2); each lights up here once its contract exists on its chain.
+    { version: 5, chain: "elysium", quote: "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", pad: "0x417fbe5588666647dCB8575c583dAd0CA11B68cc", router: "0xfE2D51a10eA1E3Cf739e19A54b99946913feA4CA", ethRouter: "0x7F702bB6CFe8A4394071BD8a832Dc73A80ED1043", lens: "0xB43a190ae80781FBBC7A40aAE1c25557D6AE8c11", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", pad: "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", router: "0x8d617D6c1776cA90e99c5FAb7c632D3c3159E6c1", ethRouter: "0x7399E141677519f0d4eB493b4546e87bd5B5e67c", lens: "0xd458bCa018677D3869eB23f02433b9DFFE1f9615", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", pad: "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC", router: "0x7C0e35703aC820A613A8b820B08B5F5C3f52B0e6", ethRouter: "0x3f08F91457Be1bcA3f24147D694964f5dEdb98f2", lens: "0xD858C0aE063A8A4e9C3ddcb02dEC6d96B2586873", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", quote: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", pad: "0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC", router: "0xAdBF95c54Cb0b292F1D1544C716E4f86c2987Ab1", ethRouter: "0x20c8e761D9466b4A17014F33A9E1B1052732428d", lens: "0x78e8f790ae6506B90B3DbF6020539a496FD87604", permit: true, expiry: true, split: true },
@@ -365,6 +366,14 @@ const CHAINS = {
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
     gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" }, blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
     stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+  },
+  // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
+  // own PoolManager and quoter (contracts/script/ElysiumAddrs.s.sol). Test tokens: no USD values shown.
+  elysium: {
+    key: "elysium", name: "Elysium testnet", short: "Elysium testnet", chainId: 99801, rpc: "https://testnet-rpc.elysium.kinetiq.xyz",
+    walletRpc: "https://testnet-rpc.elysium.kinetiq.xyz", explorer: "https://testnet.elysium.kinetiq.xyz", blockscoutApi: "",
+    quoter: "0x365EfD5fFb4e42657CFB36fE61255082E5327dEd", gmgn: "", dex: "", native: { name: "HYPE", symbol: "HYPE" }, testnet: true,
+    blurb: "Elysium testnet (Kinetiq, on Hyperliquid): free test HYPE from the Elysium faucet, tokens with no real value. Mainnet once Uniswap v4 is there.",
   },
 };
 
@@ -524,8 +533,9 @@ addQuote("robinhood", "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", "WETH", { wr
 addQuote("robinhood", "0x020bfC650A365f8BB26819deAAbF3E21291018b4", "CASHCAT", {
   ethKey: [ZERO, "0x020bfC650A365f8BB26819deAAbF3E21291018b4", 20000, 400, ZERO], usd: () => prices.cashcatEth * prices.ethUsd,
   quick: ["100", "500", "1000", "5000"] });
+addQuote("elysium", "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", "WHYPE", { wrapped: true, usd: () => 0, quick: ["0.5", "1", "5", "10"] }); // testnet: no value
 addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
-const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"] };
+const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "5", "10"] };
 const SUPPLY = 10n ** 27n;
 const ONE = 10n ** 18n;
 
@@ -2250,7 +2260,9 @@ async function renderCreate() {
   const updStart = async () => {
     try {
       const v = startMcap(await padR.startTick(quote));
-      $("#startmc").innerHTML = `Starting market cap: <b style="color:var(--text)">≈ ${usd(v, quote)}</b> <span class="muted">(${fmt(v)} ${qsym(quote)})</span>`;
+      $("#startmc").innerHTML = quoteUsd(quote)
+        ? `Starting market cap: <b style="color:var(--text)">≈ ${usd(v, quote)}</b> <span class="muted">(${fmt(v)} ${qsym(quote)})</span>`
+        : `Starting market cap: <b style="color:var(--text)">≈ ${fmt(v)} ${qsym(quote)}</b>`;
     } catch {}
   };
   // Initial buy: in IMD it happens inside the launch transaction (nobody can buy first). In ETH it is a second
@@ -2403,7 +2415,7 @@ async function renderToken(addr) {
   const links = [["website", "Website"], ["x", "X"], ["telegram", "Telegram"]]
     .map(([k, l]) => safeUrl(m[k]) ? `<a href="${esc(safeUrl(m[k]))}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "").filter(Boolean).join(" · ");
 
-  app.innerHTML = `
+  app.innerHTML = `${P.ch.testnet ? `<div class="card" style="margin-bottom:12px;border-color:var(--accent)"><b>${esc(P.ch.name)}</b>: a test network. This token and the HYPE you trade it with have no real value. <a href="https://testnet.elysium.kinetiq.xyz/faucet" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Free test HYPE ↗</a></div>` : ""}
     <div class="two mfirst">
       <div class="mflat">
         <div class="card mlead">
@@ -2416,7 +2428,7 @@ async function renderToken(addr) {
               ${links ? `<div class="links">${links}</div>` : ""}
               <div class="row ext" style="margin-top:8px">
                 ${P.ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${P.ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
-                <a class="btn" href="https://dexscreener.com/${P.ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
+                ${P.ch.dex ? `<a class="btn" href="https://dexscreener.com/${P.ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>` : ""}
                 ${((a) => `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>`)(CONFIG.audits.tokens[addr.toLowerCase()] || (P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
               </div>
             </div>
@@ -2424,7 +2436,7 @@ async function renderToken(addr) {
           ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
         </div>
         <div class="stats q">
-          <div class="card"><div class="k">Market cap</div><div class="v">${usd(info.marketCap, q)}</div><div class="stat">${fmt(info.marketCap)} ${Q}</div></div>
+          <div class="card"><div class="k">Market cap</div><div class="v">${usd(info.marketCap, q)}</div>${quoteUsd(q) ? `<div class="stat">${fmt(info.marketCap)} ${Q}</div>` : ""}</div>
           <div class="card"><div class="k">Price</div><div class="v">${quoteUsd(q) ? fmtUsd(priceOf(info.sqrtPriceX96, info.quoteIsCurrency0) * quoteUsd(q)) : priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4) + " " + Q}</div></div>
           <div class="card"><div class="k">Liquidity</div><div class="v">Locked forever</div></div>
           <div class="card"><div class="k">Earned by holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">paid in ${Q}</div></div>

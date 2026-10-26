@@ -87,6 +87,13 @@ library Chains {
             return Pad(key, 4663, c.poolManager, 0x020bfC650A365f8BB26819deAAbF3E21291018b4, c.quoter,
                 PepesFamily.ImdEthPool({fee: 20_000, tickSpacing: 400, hooks: address(0)}), 35_000e18);
         }
+        if (k == keccak256("elysium-testnet-whype")) {
+            // Elysium testnet (Kinetiq's Arbitrum Orbit chain on Hyperliquid, gas in HYPE), WHYPE. No Uniswap v4 there
+            // yet: our own PoolManager and PepesFamilyQuoter (script/ElysiumAddrs.s.sol; testnet only, as v4-core's
+            // license allows). Mainnet waits for Uniswap's own deployment.
+            return Pad(key, 99801, IPoolManager(0x13DA18e28F1928F85465EaFe49CB6BBac1d52203), 0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234,
+                0x365EfD5fFb4e42657CFB36fE61255082E5327dEd, wrappedNative, 47e18);
+        }
         revert("Chains: unknown launchpad");
     }
 }
