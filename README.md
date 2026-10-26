@@ -116,6 +116,32 @@ Ethereum v5 deployment (block 26153625, commit `490e84e`, recorded in `contracts
 
 Owner and fee recipient are `0x3c8A…691C` on both chains. Expired holder rewards on Ethereum go to the same fee address for the manual $PEPES buyback and burn. `CHAIN_ID=1 forge script script/PadDeployData.s.sol` prints Ethereum's deployment data; `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc EthereumForkTest` runs launch, split, quoter, ETH-router and expiry tests on Ethereum state; `CHAIN_ID=1 ./script/verify-tokens.sh` verifies Ethereum launches. Base will follow once IMD is available there.
 
+### Pay from any chain (2026-10-27, not deployed yet)
+
+Launch or buy on any chain PepesFamily runs on, paying with ETH, HYPE or a dollar coin (USDC, or USDG on Robinhood
+Chain) on another, in one confirmation and without bridging. [Relay](https://relay.link) fills it: its solver
+delivers the coin on the destination chain to that chain's `PepesFamilyRemote` and calls `launchFor` / `buyFor`
+with the user's address in the same transaction, paid back from the deposit the user signed on their own chain
+(Relay refunds it if the call fails). `PepesFamilyRemote` buys through the launchpad's ETH router, sends the tokens to
+the user, records the real creator of tokens it launches (`creatorOf`) and forwards their creator fees
+(`collectCreatorFees`, anyone may call), lets the creator take the fees over on the launchpad (`handOver`) or pass the
+role on (`transferCreator`), and can leave a little native gas for the user (`gasDrop`). It only works with
+launchpads on its allowlist (set at deploy; the owner `0x3c8A…691C` can add more) and keeps nothing between
+transactions. Not audited. Tests: `forge test --mc RemoteTest`, and on forks `FORK_RPC=… FORK_RPC_BASE=…
+FORK_RPC_HYPER=… forge test --mc RemoteForkTest` (Robinhood's live IMD launchpad, Base ETH, HyperEVM HYPE).
+Deployment data: `PADS=… forge script script/RemoteDeployData.s.sol`. The website's quotes go through `web/api/relay.js`
+(adds the Relay API key from the Vercel variable `RELAY_API_KEY` when set) or straight to Relay.
+
+| Chain | PepesFamilyRemote | Launchpads it works with |
+| --- | --- | --- |
+| ethereum | `0xD287bE6528775DD00749977dE2BDeBdEaF66cb2e` | `0xa89083083119B70c06b372dC85Dc6155a8F568CC`, `0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC`, `0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC` |
+| robinhood | `0x54AAf9060067E43c92164894232dFd59C90F0178` | `0xC26003787503b978033427F77047fAF5551Ca8CC`, `0xf41b697c584F0dD38b9E65D72D49F768388d28CC`, `0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC` |
+| base | `0x4889969aE82f44375320c61ad647AAc820155A10` | `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc` |
+| hyperevm | `0xf268298cCeF5c2906667E1861B0316e06f9137e4` | `0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC` |
+
+New launchpads for it: Base, paired with ETH (WETH, `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc`), and HyperEVM, paired with HYPE (WHYPE,
+`0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC`; deploying it needs the deploying address on HyperEVM big blocks).
+
 ### Elysium testnet (2026-10-27)
 
 [Elysium](https://elysium.kinetiq.xyz) is Kinetiq's Arbitrum Orbit chain for the Hyperliquid ecosystem (100 ms blocks,

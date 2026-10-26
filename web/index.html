@@ -91,6 +91,7 @@ h3 { font-weight: 500; font-size: 14px; }
 .sec .rule { flex: 1; height: 1px; background: var(--line); }
 .seg { display: inline-flex; border: 1px solid var(--line); }
 .seg.wrap { flex-wrap: wrap; }
+#from, #ibfrom { background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 6px 8px; font: inherit; font-size: 12px; max-width: 100%; }
 .seg button { border: 0; background: transparent; padding: 5px 12px; color: var(--muted); }
 .seg button.on { background: var(--strong); color: var(--inv); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
@@ -280,6 +281,8 @@ const CONFIG = {
   pads: [
     // 2026-10-18: one launchpad per pair asset (contracts/script/Chains.sol `pad`). Addresses are fixed in advance
     // (CREATE2); each lights up here once its contract exists on its chain.
+    { version: 5, chain: "base", quote: "0x4200000000000000000000000000000000000006", pad: "0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc", router: "0xB34C8016EA506E257b47640e52fC9329daF9C847", ethRouter: "0x5d3105EcE7b5459cf6313f5925F78325a0C4A1aE", lens: "0x1b44F02c09eaef9Eed8289e7a218f5402a966d77", permit: true, expiry: true, split: true },
+    { version: 5, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC", router: "0x5df991A1c82fBd56eA0b8Cdc3b9749f2286615D4", ethRouter: "0x4927CfFA45cf2Aaa568f73aE9c8d988acaECF7Bb", lens: "0x9F2333517B84e83e59d9a0166752978AF2b7a694", permit: true, expiry: true, split: true },
     { version: 5, chain: "elysium", quote: "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", pad: "0x417fbe5588666647dCB8575c583dAd0CA11B68cc", router: "0xfE2D51a10eA1E3Cf739e19A54b99946913feA4CA", ethRouter: "0x7F702bB6CFe8A4394071BD8a832Dc73A80ED1043", lens: "0xB43a190ae80781FBBC7A40aAE1c25557D6AE8c11", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", pad: "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", router: "0x8d617D6c1776cA90e99c5FAb7c632D3c3159E6c1", ethRouter: "0x7399E141677519f0d4eB493b4546e87bd5B5e67c", lens: "0xd458bCa018677D3869eB23f02433b9DFFE1f9615", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", pad: "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC", router: "0x7C0e35703aC820A613A8b820B08B5F5C3f52B0e6", ethRouter: "0x3f08F91457Be1bcA3f24147D694964f5dEdb98f2", lens: "0xD858C0aE063A8A4e9C3ddcb02dEC6d96B2586873", permit: true, expiry: true, split: true },
@@ -353,19 +356,34 @@ const CONFIG = {
 
 // Networks the launchpad runs on. Robinhood Chain hosts everything; Ethereum has launchpad v5 (IMD's home chain).
 // Each has its own RPC, explorer, trade-history API, quoter, IMD and the ETH/IMD pool the ETH router uses.
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const CHAINS = {
   robinhood: {
     key: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
     explorer: CONFIG.explorer, blockscoutApi: CONFIG.blockscoutApi, quoter: CONFIG.quoter, imd: CONFIG.imd, imdEthKey: CONFIG.imdEthKey,
-    gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, stateView: CONFIG.stateView, blurb: "Robinhood Chain: low gas, home of $PEPES.",
+    gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, stateView: CONFIG.stateView,
+    remote: "0x54AAf9060067E43c92164894232dFd59C90F0178", remotePads: ["0xC26003787503b978033427F77047fAF5551Ca8CC", "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDG", "0x5fc5360D0400a0fD4F2AF552ADd042d716F1D168", 6]], blurb: "Robinhood Chain: low gas, home of $PEPES.",
   },
   ethereum: {
     key: "ethereum", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
     explorer: "https://etherscan.io", blockscoutApi: "https://eth.blockscout.com/api/v2", quoter: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
     imd: "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
-    gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" }, blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
+    gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" },
+    remote: "0xD287bE6528775DD00749977dE2BDeBdEaF66cb2e", remotePads: ["0xa89083083119B70c06b372dC85Dc6155a8F568CC", "0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC", "0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6]], blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
     stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+  },
+  base: {
+    key: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
+    explorer: "https://basescan.org", blockscoutApi: "https://base.blockscout.com/api/v2", quoter: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D",
+    gmgn: "base", dex: "base", native: { name: "Ether", symbol: "ETH" }, blurb: "Base: low gas, paired with ETH.",
+    remote: "0x4889969aE82f44375320c61ad647AAc820155A10", remotePads: ["0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]],
+  },
+  hyperevm: {
+    key: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
+    explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
+    gmgn: "", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
+    remote: "0xf268298cCeF5c2906667E1861B0316e06f9137e4", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
   // own PoolManager and quoter (contracts/script/ElysiumAddrs.s.sol). Test tokens: no USD values shown.
@@ -533,6 +551,8 @@ addQuote("robinhood", "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", "WETH", { wr
 addQuote("robinhood", "0x020bfC650A365f8BB26819deAAbF3E21291018b4", "CASHCAT", {
   ethKey: [ZERO, "0x020bfC650A365f8BB26819deAAbF3E21291018b4", 20000, 400, ZERO], usd: () => prices.cashcatEth * prices.ethUsd,
   quick: ["100", "500", "1000", "5000"] });
+addQuote("base", "0x4200000000000000000000000000000000000006", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
+addQuote("hyperevm", "0x5555555555555555555555555555555555555555", "WHYPE", { wrapped: true, usd: () => prices.hypeUsd, quick: ["0.5", "1", "5", "10"] });
 addQuote("elysium", "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", "WHYPE", { wrapped: true, usd: () => 0, quick: ["0.5", "1", "5", "10"] }); // testnet: no value
 addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "5", "10"] };
@@ -579,6 +599,10 @@ async function loadPads() {
       const [a, b] = await Promise.all([P.ch.reader.getCode(P.pad), P.ch.reader.getCode(P.ethRouter)]);
       P.live = a.length > 2; P.ethLive = b.length > 2; P.readErr = false;
     } catch { P.readErr = true; } // the chain couldn't be read: unknown, not "not deployed"
+  }));
+  // the cross-chain entry point on each chain (PepesFamilyRemote): "pay from any chain" once it exists there
+  await Promise.all(Object.values(CHAINS).filter((c) => c.remote).map(async (c) => {
+    try { c.remoteLive = (await c.reader.getCode(c.remote)).length > 2; } catch { c.remoteLive = false; }
   }));
   for (const P of PADS) {
     if (!P.live || P.nft || P.version < 4) continue; // v1-v3 took several pair assets: never used for new launches
@@ -643,9 +667,97 @@ async function authorizeSell(P, token, spender, amount, dl) {
   return null;
 }
 
+// ---------------------------------------------------------------- Pay from any chain (Relay)
+// A launch or buy on one chain, paid with ETH, HYPE or a dollar coin on another: Relay's solver delivers the coin to
+// that chain's PepesFamilyRemote and calls it with the user's address in the same transaction (launchFor / buyFor),
+// paid back from the deposit the user signs on their own chain. The user gets the tokens, the creator role and a
+// little gas on the destination chain, without bridging or switching networks.
+const REMOTE_IFACE = new ethers.Interface([
+  "function launchFor(address pad, address creator, string name, string symbol, string metadata, (uint16 creatorBps, uint16 holderBps, uint16 burnBps) split, uint256 buyValue, uint256 minTokens, uint256 gasDrop) payable returns (address token, uint256 tokens)",
+  "function buyFor(address pad, address token, address buyer, uint256 minTokens, uint256 gasDrop) payable returns (uint256 tokens)",
+  "event LaunchedFor(address indexed pad, address indexed token, address indexed creator, uint256 spent, uint256 tokens)",
+  "event BoughtFor(address indexed pad, address indexed token, address indexed buyer, uint256 spent, uint256 tokens)",
+  "function creatorOf(address token) view returns (address)",
+]);
+/// Gas left on the destination chain when the user has (almost) none there: enough to claim and sell a few times.
+const GAS_DROP = { ethereum: "0.0004", robinhood: "0.00005", base: "0.00005", hyperevm: "0.02" };
+/// Can launchpad P be used from another chain? (Its chain's PepesFamilyRemote exists and works with it.)
+const xcReady = (P) => !!(P?.ch.remoteLive && P.ch.remotePads?.some((a) => a.toLowerCase() === P.pad.toLowerCase()));
+/// Where a user can pay from for chain `dest`: every currency on every chain Relay serves for us, except paying
+/// `dest`'s own coin on `dest` (that is the direct way). Each: { id, ch, sym, addr, dec }.
+function payOptions(dest) {
+  const out = [];
+  for (const c of Object.values(CHAINS)) for (const [sym, addr, dec] of c.pay || []) {
+    if (c.key === dest.key && addr === ZERO_ADDR) continue;
+    out.push({ id: `${c.key}:${addr}`, ch: c, sym, addr, dec });
+  }
+  return out;
+}
+const payFromSelect = (id, dest) => `<select id="${id}" aria-label="Pay from"><option value="">${esc(dest.native?.symbol || "ETH")} on ${esc(dest.short)} (your wallet there)</option>${payOptions(dest).map((o) => `<option value="${o.id}">${esc(o.sym)} on ${esc(o.ch.short)}</option>`).join("")}</select>`;
+const payOptionById = (dest, id) => payOptions(dest).find((o) => o.id === id) || null;
+
+/// Relay's API: through this site's proxy when it has one (it adds the API key), else Relay directly.
+async function relayApi(path, body) {
+  const opt = body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {};
+  let r = null;
+  try { r = await fetch("/api/relay?p=" + encodeURIComponent(path), { ...opt, signal: AbortSignal.timeout(20000) }); } catch {}
+  if (!r || r.status === 404 || r.status === 405) r = await fetch("https://api.relay.link/" + path, { ...opt, signal: AbortSignal.timeout(20000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.message || `Relay answered ${r.status}`);
+  return j;
+}
+/// A quote for running `data` with `value` of the destination coin on `dest`'s PepesFamilyRemote, paid with `o`.
+async function xcQuote(o, dest, value, data) {
+  return relayApi("quote/v2", {
+    user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
+    originChainId: o.ch.chainId, destinationChainId: dest.chainId, originCurrency: o.addr, destinationCurrency: ZERO_ADDR,
+    amount: value.toString(), tradeType: "EXACT_OUTPUT", txs: [{ to: dest.remote, value: value.toString(), data }],
+  });
+}
+/// "You pay ≈ 0.0123 ETH on Robinhood · fees ≈ $0.03 · ~2 s" for a quote.
+function xcSummary(q) {
+  const i = q.details?.currencyIn, f = q.fees || {};
+  const fee = ["gas", "relayer", "app"].reduce((t, k) => t + Number(f[k]?.amountUsd || 0), 0);
+  return `You pay ≈ ${Number(i?.amountFormatted || 0).toPrecision(4)} ${i?.currency?.symbol || ""} on ${esc(Object.values(CHAINS).find((c) => c.chainId === i?.currency?.chainId)?.short || "")}` +
+    ` · fees ≈ ${fmtUsd(fee)}${q.details?.timeEstimate ? ` · ~${q.details.timeEstimate} s` : ""}`;
+}
+/// Signs the quote's steps on the paying chain, then waits for Relay to run the call; returns the destination
+/// transaction hashes.
+async function xcExecute(q, o, onStatus) {
+  let check = null;
+  for (const step of q.steps || []) {
+    if (step.kind !== "transaction") throw new Error("This payment needs a signature type the site doesn't support yet: pay with the chain's coin instead.");
+    for (const item of step.items || []) {
+      if (item.status === "complete") continue;
+      await requireWallet(o.ch);
+      const d = item.data;
+      onStatus?.(step.action || "Confirm in your wallet…");
+      const tx = await signer.sendTransaction({ to: d.to, data: d.data, value: BigInt(d.value || 0), ...(d.gas ? { gasLimit: (BigInt(d.gas) * 13n) / 10n } : {}) });
+      await tx.wait();
+      if (item.check) check = item.check.endpoint;
+    }
+  }
+  if (!check) throw new Error("Relay gave no way to follow this payment");
+  onStatus?.("Paid. Delivering on the other chain…");
+  for (let i = 0; i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 2500));
+    const st = await relayApi(check.replace(/^\//, "")).catch(() => null);
+    if (!st) continue;
+    if (st.status === "success") return st.txHashes || [];
+    if (st.status === "failure" || st.status === "refund" || st.status === "refunded") throw new Error(`The delivery didn't go through (${st.status}); Relay refunds the payment.`);
+  }
+  throw new Error("Still delivering after 5 minutes: check your wallet on the other chain shortly.");
+}
+/// Gas to leave the user on `dest`: GAS_DROP when they have less than that there, else none.
+async function gasDropFor(dest) {
+  const want = ethers.parseEther(GAS_DROP[dest.key] || "0");
+  if (!want || !account) return want;
+  try { return (await dest.reader.getBalance(account)) < want ? want : 0n; } catch { return want; }
+}
+
 // ---------------------------------------------------------------- USD prices
 const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
-const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, cashcatEth: 0 };
+const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, cashcatEth: 0, hypeUsd: 0 };
 /// ETH per token, from a Uniswap v4 ETH/token pool's price (both 18 decimals), read on its chain.
 async function ethPerToken(ch, poolId) {
   const [sq] = await new ethers.Contract(ch.stateView, STATEVIEW_ABI, ch.reader).getSlot0(poolId);
@@ -666,6 +778,8 @@ async function loadPrices() {
   await Promise.all([
     ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {}),
     ethPerToken(CHAINS.robinhood, "0xf7dc0af99fce7169eb76854c0b39beb9915526894d42229946e5cb469cab50b1").then((v) => (prices.cashcatEth = v)).catch(() => {}),
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid&vs_currencies=usd", { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json()).then((j) => { prices.hypeUsd = j?.hyperliquid?.usd || 0; }).catch(() => {}),
   ]);
 }
 const quoteUsd = (q) => {
@@ -1748,7 +1862,7 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE or CASHCAT.\n\n${tags}\nhttps://pepesfamily.fun`;
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT or HYPE.\n\n${tags}\nhttps://pepesfamily.fun`;
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);
@@ -2243,9 +2357,11 @@ async function renderCreate() {
         </div>
         <div class="stat" id="splitnote" style="margin-top:8px"></div>` : ""}
         ${sec(LAUNCH?.split ? 4 : 3, "Initial buy")}
-        <div class="row" style="margin-bottom:4px"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">${esc(NAT)}</button><button type="button" data-p="imd">${esc(QS)}</button></div></div>
+        ${xcReady(LAUNCH) ? `<div class="row" style="margin-bottom:8px"><span class="stat">Pay from</span>${payFromSelect("ibfrom", ch)}</div>` : ""}
+        <div class="row" style="margin-bottom:4px" id="ibpayrow"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">${esc(NAT)}</button><button type="button" data-p="imd">${esc(QS)}</button></div></div>
         <label for="ib" id="ibl">Amount (optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
+        <div class="stat" id="ibcost"></div>
         <div class="stat" id="ibnote"></div>
         ${sec(LAUNCH?.split ? 5 : 4, "Launch")}
         <button class="primary full" id="go" type="submit">Launch token</button>
@@ -2310,8 +2426,27 @@ async function renderCreate() {
     $("#sh").value = "300";
     pick("diamond");
   }
+  // Paying from another chain (Relay): the launch, the buy and a little gas there in one confirmation on that chain.
+  let from = null;
+  const xcValue = async () => { const amt = ibAmount(), drop = await gasDropFor(ch); return { amt, drop, value: amt + drop || ethers.parseEther(GAS_DROP[ch.key] || "0.0001") }; };
+  let costSeq = 0, costTimer = 0;
+  const updCost = () => {
+    clearTimeout(costTimer);
+    if (!from) return ($("#ibcost").textContent = "");
+    $("#ibcost").textContent = "Getting a price…";
+    costTimer = setTimeout(async () => {
+      const seq = ++costSeq;
+      try {
+        const { amt, drop, value } = await xcValue();
+        const data = REMOTE_IFACE.encodeFunctionData("launchFor", [LAUNCH.pad, account || "0x000000000000000000000000000000000000dEaD", "Quote", "QUOTE", "{}", [0, 300, 0], amt, 0, value - amt]);
+        const q = await xcQuote(from, ch, value, data);
+        if (seq === costSeq) $("#ibcost").innerHTML = xcSummary(q) + (value - amt > 0n ? ` · includes ${fmt(value - amt, 6)} ${esc(NAT)} for gas on ${esc(ch.short)}` : "");
+      } catch (e) { if (seq === costSeq) $("#ibcost").textContent = "Can't get a price from this chain right now: " + errMsg(e); }
+    }, 600);
+  };
   let pvSeq = 0;
   const updPreview = async () => {
+    updCost();
     const seq = ++pvSeq, amt = ibAmount();
     if (!amt) return ($("#ibp").textContent = "");
     try {
@@ -2332,6 +2467,16 @@ async function renderCreate() {
   };
   document.querySelectorAll("#ibpay button").forEach((b) => b.onclick = () => setPay(b.dataset.p));
   setPay(pay);
+  if ($("#ibfrom")) $("#ibfrom").onchange = () => {
+    from = payOptionById(ch, $("#ibfrom").value);
+    $("#ibpayrow").hidden = !!from;
+    if (from) {
+      pay = "eth"; // the buy is in the destination chain's coin, delivered by Relay
+      $("#ibl").textContent = `Amount in ${NAT} to buy with (optional)`;
+      $("#ibnote").textContent = `One confirmation on ${from.ch.short}: it pays for the launch on ${ch.short}, your buy in the same transaction (nobody can buy before you) and a little ${NAT} for gas there if you have none. Delivered by Relay in a few seconds; your token, tokens and creator role are yours on ${ch.short}.`;
+      updPreview();
+    } else setPay(LAUNCH.ethLive ? "eth" : "imd");
+  };
   $("#ib").oninput = updPreview;
   updStart();
   const image = setupImageField();
@@ -2351,6 +2496,37 @@ async function renderCreate() {
       if ($("#ib").value.trim() && !amt) throw new Error("Enter a valid amount for the initial buy, or leave it empty");
       const form = { name: $("#n").value.trim(), symbol: $("#s").value.trim() };
       if (!form.name || !form.symbol) throw new Error("Enter a name and a ticker");
+      if (from) {
+        // paid from another chain: launchFor on this chain's PepesFamilyRemote, delivered by Relay
+        if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
+        const o = from;
+        await requireWallet(o.ch); // connects too
+        const { amt: buy, value } = await xcValue();
+        const drop = value - buy;
+        let minOut = 0n;
+        if (buy > 0n) {
+          const imdIn = LAUNCH.wrapped ? buy : await quoteExact(LAUNCH.ethKey, true, buy, ch);
+          minOut = withSlippage(tokensFor(imdIn, await padR.startTick(quote)), 1000);
+        }
+        const data = REMOTE_IFACE.encodeFunctionData("launchFor", [LAUNCH.pad, account, form.name, form.symbol, JSON.stringify(m), [split.c, split.h, split.b], buy, minOut, drop]);
+        toast("Getting the price…", 6000);
+        const q = await xcQuote(o, ch, value, data);
+        $("#ibcost").innerHTML = xcSummary(q);
+        const hashes = await xcExecute(q, o, (m2) => toast(m2, 30000));
+        let token = null;
+        for (const h of hashes) {
+          for (let i = 0; i < 6 && !token; i++) {
+            const rc = await ch.reader.getTransactionReceipt(h).catch(() => null);
+            if (!rc) { await new Promise((r) => setTimeout(r, 1500)); continue; }
+            for (const l of rc.logs) { try { const e = REMOTE_IFACE.parseLog(l); if (e?.name === "LaunchedFor") token = e.args.token; } catch {} }
+            break;
+          }
+        }
+        toast(`Token launched on ${ch.short} 🐸`, 8000);
+        location.hash = token ? "#/t/" + token : "#/tokens";
+        btn.disabled = false;
+        return;
+      }
       await requireWallet(ch);
       if (!$("#cf")) throw new Error("The page changed. Try again.");
       const ethBuy = pay === "eth" ? amt : 0n, imdBuy = pay === "imd" ? amt : 0n;
@@ -2457,12 +2633,14 @@ async function renderToken(addr) {
       <div class="mside">
         <div class="card">
           <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
-          ${q !== ZERO ? `<div class="row" style="margin-bottom:10px"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">${esc(P.ch.native?.symbol || "ETH")}</button><button type="button" data-v="imd">${esc(Q)}</button></div></div>` : ""}
+          ${xcReady(P) && q !== ZERO ? `<div class="row" style="margin-bottom:10px" id="fromrow"><span class="stat">Pay from</span><span class="spacer"></span>${payFromSelect("from", P.ch)}</div>` : ""}
+          ${q !== ZERO ? `<div class="row" style="margin-bottom:10px" id="viarow"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">${esc(P.ch.native?.symbol || "ETH")}</button><button type="button" data-v="imd">${esc(Q)}</button></div></div>` : ""}
           <label for="amt" style="margin-top:0" id="amtl"></label>
           <input id="amt" inputmode="decimal" placeholder="0.0" />
           <div class="quick" id="quick"></div>
           <div class="stat" id="bal" style="margin-top:8px"></div>
           <div class="preview" id="pv">&nbsp;</div>
+          <div class="stat" id="pvcost"></div>
           <label for="slip">Max slippage (%)</label><input id="slip" value="5" inputmode="decimal" />
           <button class="primary full" id="trade" style="margin-top:14px"></button>
           <div class="fees">4% fee: ${sp ? esc(feeText(sp)) : `1% protocol, 3% to holders of $${esc(info.symbol)}`}.${P.expiry && (!sp || sp.h) ? " Claim at least weekly: rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}${sp?.b ? " Buyers receive, and sellers pay, the burn share in tokens." : ""}</div>
@@ -2515,7 +2693,8 @@ async function renderToken(addr) {
   let viaEth = q !== ZERO && P.ethLive;
   if (q !== ZERO && !viaEth) $("#via")?.parentElement.remove();
   const NAT = P.ch.native?.symbol || "ETH";
-  const payNative = () => q === ZERO || viaEth; // paying / receiving the chain's own coin
+  let from = null; // buying with a payment on another chain (Relay), or null
+  const payNative = () => q === ZERO || viaEth || (!!from && tradeSide === "buy"); // paying / receiving the chain's own coin
   const payUnit = () => (payNative() ? NAT : Q);
   const ethRouterW = () => new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer);
 
@@ -2543,6 +2722,8 @@ async function renderToken(addr) {
     const buying = s === "buy";
     app.querySelectorAll("#via button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "eth") === viaEth));
     if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
+    if ($("#fromrow")) $("#fromrow").hidden = !buying;
+    if ($("#viarow")) $("#viarow").hidden = buying && !!from;
     $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
     $("#trade").textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`;
     const payBal = payNative() ? ethBal : quoteBal;
@@ -2561,13 +2742,31 @@ async function renderToken(addr) {
   app.querySelectorAll("#via button").forEach((b) => b.onclick = () => { viaEth = b.dataset.v === "eth"; $("#amt").value = ""; setSide(tradeSide); });
 
   let pvSeq = 0;
+  // the price of a buy paid on another chain (debounced: Relay quotes are rate-limited)
+  let costSeq = 0, costTimer = 0;
+  function updCost(amt) {
+    clearTimeout(costTimer);
+    if (!from || tradeSide !== "buy" || !amt) return ($("#pvcost").textContent = "");
+    $("#pvcost").textContent = "Getting a price…";
+    costTimer = setTimeout(async () => {
+      const seq = ++costSeq;
+      try {
+        const drop = await gasDropFor(P.ch);
+        const data = REMOTE_IFACE.encodeFunctionData("buyFor", [P.pad, addr, account || "0x000000000000000000000000000000000000dEaD", 0, drop]);
+        const qt = await xcQuote(from, P.ch, amt + drop, data);
+        if (seq === costSeq && !stale()) $("#pvcost").innerHTML = xcSummary(qt) + (drop ? ` · includes ${fmt(drop, 6)} ${esc(NAT)} for gas on ${esc(P.ch.short)}` : "");
+      } catch (e) { if (seq === costSeq && !stale()) $("#pvcost").textContent = "Can't get a price from this chain right now: " + errMsg(e); }
+    }, 600);
+  }
+  if ($("#from")) $("#from").onchange = () => { from = payOptionById(P.ch, $("#from").value); $("#amt").value = ""; setSide(tradeSide); };
   async function preview() {
     const seq = ++pvSeq;
     let amt = 0n; try { amt = ethers.parseUnits($("#amt").value.trim() || "0", 18); } catch {}
+    updCost(amt);
     if (!amt) return ($("#pv").innerHTML = "&nbsp;");
     try {
       const buying = tradeSide === "buy";
-      const out = q !== ZERO && viaEth
+      const out = q !== ZERO && (viaEth || (from && buying))
         ? await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt)
         : await quoteSwap(P, addr, info.quoteIsCurrency0, buying, amt);
       if (seq === pvSeq && !stale()) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${buying ? "$" + info.symbol : payUnit()}`;
@@ -2578,6 +2777,26 @@ async function renderToken(addr) {
   $("#trade").onclick = async () => {
     const btn = $("#trade"); btn.disabled = true;
     try {
+      if (from && tradeSide === "buy") {
+        // paid on another chain: buyFor on this chain's PepesFamilyRemote, delivered by Relay
+        const o = from;
+        const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
+        if (!amt) throw new Error("Enter an amount");
+        const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
+        await requireWallet(o.ch); // connects too
+        const expected = await quoteSwapEth(P, addr, info.quoteIsCurrency0, true, amt);
+        const drop = await gasDropFor(P.ch);
+        const data = REMOTE_IFACE.encodeFunctionData("buyFor", [P.pad, addr, account, withSlippage(expected, slipBps), drop]);
+        toast("Getting the price…", 6000);
+        const qt = await xcQuote(o, P.ch, amt + drop, data);
+        $("#pvcost").innerHTML = xcSummary(qt);
+        await xcExecute(qt, o, (m2) => toast(m2, 30000));
+        toast(`Bought $${info.symbol} on ${P.ch.short} 🐸`, 8000);
+        $("#amt").value = "";
+        await loadPosition().catch(() => {});
+        btn.disabled = false;
+        return;
+      }
       await requireWallet(P.ch);
       const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
       if (!amt) throw new Error("Enter an amount");

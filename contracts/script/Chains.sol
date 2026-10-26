@@ -94,6 +94,16 @@ library Chains {
             return Pad(key, 99801, IPoolManager(0x13DA18e28F1928F85465EaFe49CB6BBac1d52203), 0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234,
                 0x365EfD5fFb4e42657CFB36fE61255082E5327dEd, wrappedNative, 47e18);
         }
+        if (k == keccak256("base-weth")) {
+            // Base, WETH (the OP Stack predeploy): launches pair with ETH itself
+            return Pad(key, 8453, IPoolManager(0x498581fF718922c3f8e6A244956aF099B2652b2b), 0x4200000000000000000000000000000000000006,
+                0x0d5e0F971ED27FBfF6c2837bf31316121532048D, wrappedNative, 1.5e18);
+        }
+        if (k == keccak256("hyperevm-whype")) {
+            // HyperEVM, WHYPE (deploying needs the address on big blocks: a HyperCore setting)
+            return Pad(key, 999, IPoolManager(0x12D4Fd9C5DeDd00ab8a0bCe2CF0167bbf94b6B1F), 0x5555555555555555555555555555555555555555,
+                0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e, wrappedNative, 47e18);
+        }
         revert("Chains: unknown launchpad");
     }
 }
