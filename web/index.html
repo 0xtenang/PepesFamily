@@ -478,7 +478,7 @@ const CHAINS = {
   hyperevm: {
     key: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
     explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
-    gmgn: "hyperevm", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
+    gmgn: "hyperevm", dex: "" /* DexScreener does not index Uniswap v4 on HyperEVM yet */, native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
     remote: "0xf268298cCeF5c2906667E1861B0316e06f9137e4", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
