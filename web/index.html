@@ -2039,6 +2039,19 @@ async function relayFeeBalances() {
   const r = await fetch(`https://api.relay.link/app-fees/${FEES.recipient}/balances`, { signal: AbortSignal.timeout(10000) });
   return (await r.json()).balances || [];
 }
+/// A plain message (EIP-191) signed by FEES.recipient: by the connected wallet when it is that address, otherwise by a
+/// browser wallet holding it (MetaMask beside the PepesFamily wallet), without switching what's connected.
+async function signAsFeeAddress(message) {
+  const msgHex = ethers.isHexString(message) ? message : ethers.hexlify(ethers.toUtf8Bytes(message));
+  const fee = FEES.recipient.toLowerCase();
+  if (account?.toLowerCase() === fee && WALLET) return WALLET.request({ method: "personal_sign", params: [msgHex, account] });
+  for (const w of await walletOptions()) {
+    const accs = await w.provider.request({ method: "eth_requestAccounts" }).catch(() => []);
+    const hit = accs.find((a) => a.toLowerCase() === fee);
+    if (hit) { toast(`Sign in ${w.info.name} to claim Relay's swap fees…`, 15000); return w.provider.request({ method: "personal_sign", params: [msgHex, hit] }); }
+  }
+  throw new Error(`no wallet here holds the fee address ${short(FEES.recipient)}: select it in MetaMask and try again`);
+}
 /// Claims them to FEES.recipient: Relay asks for one signature per claim from that address, then pays it out.
 async function claimRelayFees(balances, onStatus) {
   for (const b of balances) {
@@ -2052,13 +2065,14 @@ async function claimRelayFees(balances, onStatus) {
       if (item.status === "complete") continue;
       const sign = item.data?.sign, post = item.data?.post;
       if (!sign || !post) throw new Error("Relay's claim needs a step this site doesn't support yet: claim at relay.link");
-      const sigCh = Object.values(CHAINS).find((c) => c.chainId === Number(sign.domain?.chainId)) || CHAINS[Object.keys(CHAINS).find((k) => CHAINS[k].chainId === b.currency.chainId)] || HOME();
-      await requireWallet(sigCh);
       let sig;
       if (sign.signatureKind === "eip712") {
+        if (account?.toLowerCase() !== FEES.recipient.toLowerCase()) throw new Error(`connect the fee address ${short(FEES.recipient)} to claim them`);
+        const sigCh = Object.values(CHAINS).find((c) => c.chainId === Number(sign.domain?.chainId)) || HOME();
+        await requireWallet(sigCh);
         const types = { ...sign.types }; delete types.EIP712Domain;
         sig = await signer.signTypedData(sign.domain, types, sign.value);
-      } else sig = await signer.signMessage(ethers.isHexString(sign.message) ? ethers.getBytes(sign.message) : sign.message);
+      } else sig = await signAsFeeAddress(sign.message);
       const pr = await fetch(`https://api.relay.link${post.endpoint}?signature=${sig}`, { method: post.method || "POST", headers: { "content-type": "application/json" },
         body: post.body ? JSON.stringify(post.body) : undefined });
       if (!pr.ok) throw new Error((await pr.json().catch(() => ({}))).message || `Relay answered ${pr.status}`);
@@ -2504,60 +2518,30 @@ async function renderAdmin() {
     }));
   } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
   const toUsd = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
+  const worthPaying = (x) => x.waiting > 0n && toUsd(x.waiting, x.t.quote) >= 0.01; // under a cent isn't worth the gas
   const totalUsd = rows.reduce((s, r) => s + r.assets.reduce((t, q, i) => t + toUsd(r.pending[i], q), 0), 0);
   const unclaimedUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.unclaimed, x.t.quote), 0), 0);
   const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
-    <div class="hero"><div><h1>Admin</h1><p>Your 1% protocol fees and the holders' rewards, per launchpad version.</p></div></div>
+    <div class="hero"><div><h1>Admin</h1><p>Everything to collect or pay out, on every launchpad and chain, one button each.</p></div></div>
     <div class="card" style="margin-bottom:14px">
-      <span class="h">Claim everything</span>
-      <div class="stat" id="claimall-sum" style="margin:4px 0 12px">Protocol fees on every launchpad: ${fmtUsd(totalUsd)}. Swap fees at Relay: checking…</div>
+      <span class="h">Claim all</span>
+      <div class="stat" id="claimall-sum" style="margin:4px 0 12px">Protocol fees: ${fmtUsd(totalUsd)}. Swap fees at Relay: checking…</div>
       <button class="primary" id="claimall" type="button">Claim all</button>
-      <div class="stat" style="margin-top:8px">Protocol fees go to the fee address on each chain (any wallet can collect them; it only pays gas). Relay's swap fees (USDC on Base) need a signature from the fee address ${short(FEES.recipient)}. Launch fees need no claim: they are paid straight to it.</div>
+      <div class="stat" style="margin-top:8px">Fees always go to the fee address ${short(FEES.recipient)}, whichever wallet presses this (it only pays gas). Relay's swap fees need one signature from the fee address. Launch fees need nothing: they're paid to it at launch.</div>
     </div>
-    <div class="stats" style="margin:0 0 6px">
-      <div class="card"><div class="k">Protocol fees to collect</div><div class="v">${fmtUsd(totalUsd)}</div><div class="stat">yours, all versions</div></div>
-      <div class="card"><div class="k">Unclaimed by holders</div><div class="v">${fmtUsd(unclaimedUsd)}</div><div class="stat">paid out, holders haven't claimed yet</div></div>
-      <div class="card"><div class="k">Holder fees not paid out yet</div><div class="v">${fmtUsd(waitingUsd)}</div><div class="stat">use "Pay out" below</div></div>
+    <div class="card" style="margin-bottom:14px">
+      <span class="h">Pay out holder fees</span>
+      <div class="stat" style="margin:4px 0 12px">${fmtUsd(waitingUsd)} of holder fees from trades through other routers (GMGN, aggregators) not sent to holders yet, on ${rows.reduce((n, r) => n + r.tokens.filter(worthPaying).length, 0)} token${rows.reduce((n, r) => n + r.tokens.filter(worthPaying).length, 0) === 1 ? "" : "s"}. Already paid out and waiting for holders to claim: ${fmtUsd(unclaimedUsd)}.</div>
+      <button class="primary" id="payall" type="button" ${waitingUsd < 0.01 ? "disabled" : ""}>Pay out all</button>
     </div>
-    ${rows.map((r, ri) => `
-      ${sec(ri + 1, padLabel(r.P))}
-      <div class="stats" style="margin-top:0">
-        ${r.assets.map((q, i) => `
-          <div class="card">
-            <div class="k">Pending ${qsym(q)}</div>
-            <div class="v">${fmt(r.pending[i], 6)} ${qsym(q)}</div>
-            <div class="stat">${quoteUsd(q) ? "≈ " + usd(r.pending[i], q) : ""}</div>
-            <button class="primary full" data-r="${ri}" data-q="${q}" ${r.pending[i] === 0n ? "disabled" : ""}>Collect ${qsym(q)}</button>
-          </div>`).join("")}
-      </div>
-      <div class="card" style="margin-top:10px">
-        <span class="h">Holder rewards</span>
-        <p class="stat" style="margin:4px 0 8px">${r.P.expiry ? `<b>Expired</b>: rewards holders left unclaimed for more than 7 days, already sent to the fee address for the $PEPES buyback and burn (total ${fmt(r.tokens.reduce((s, x) => s + x.recycled, 0n), 4)} IMD). Anyone can send a holder's expired rewards with <span class="mono">recycle(holder)</span> on the token; claims do it automatically. ` : ""}<b>Unclaimed</b>: already paid out to holders, waiting for them to press Claim (safe, nothing to do). <b>Not paid out</b>: fees from trades through other routers (GMGN, aggregators) not yet sent to holders.${r.P.version < 3 ? ` On v${r.P.version} these can be partly captured by a flash-borrow trick, so pay them out regularly (costs only gas).` : ""}</p>
-        ${r.tokens.length ? `<div class="scroll-x"><table>
-          <thead><tr><th>Token</th><th>Unclaimed</th><th>Not paid out</th><th></th></tr></thead>
-          <tbody>${r.tokens.map((x) => `
-            <tr>
-              <td><a href="#/t/${x.t.token}">$${esc(x.t.symbol)}</a></td>
-              <td>${usd(x.unclaimed, x.t.quote)}<div class="stat">${fmt(x.unclaimed, 6)} ${qsym(x.t.quote)}</div></td>
-              <td>${usd(x.waiting, x.t.quote)}<div class="stat">${fmt(x.waiting, 6)} ${qsym(x.t.quote)}</div></td>
-              <td>${x.waiting > 0n ? `<button data-r="${ri}" data-flush="${x.t.token}" data-direct="${x.t.pendingHolderFees === 0n ? 1 : 0}">Pay out</button>` : ""}</td>
-            </tr>`).join("")}</tbody></table></div>` : `<div class="stat">No tokens yet.</div>`}
-      </div>
-      <div class="card" style="margin-top:10px">
-        <table>
-          <tr><td class="muted">Fees are sent to</td><td class="mono"><a href="${r.P.ch.explorer}/address/${r.feeTo}" target="_blank" rel="noopener">${r.feeTo}</a></td></tr>
-          <tr><td class="muted">Owner</td><td class="mono"><a href="${r.P.ch.explorer}/address/${r.owner}" target="_blank" rel="noopener">${r.owner}</a></td></tr>
-          <tr><td class="muted">Contract</td><td class="mono"><a href="${r.P.ch.explorer}/address/${r.P.pad}" target="_blank" rel="noopener">${r.P.pad}</a></td></tr>
-        </table>
-      </div>`).join("")}
-    ${rows.some((r) => r.P.expiry) ? `${sec(rows.length + 1, "Expired holder rewards (v4 and later)")}
-      <div class="card">
+    ${rows.some((r) => r.P.expiry) ? `<div class="card">
+        <span class="h">Expired holder rewards</span>
         <p class="stat" style="margin:0 0 10px">Rewards of wallets inactive for more than 7 days (no claim, buy, sell or send), except what they earned in their last 7 days. Sending them moves them (in each token's pair asset) from each token to the fee address, for the $PEPES buyback and burn. Wallets that claim send their own expired part automatically; this finds the ones that never come back.</p>
         <div id="rcy" class="stat">Not checked yet.</div>
         <div class="row" style="margin-top:10px"><button id="rcyscan">Find expired rewards</button><button class="primary" id="rcysend" hidden></button></div>
       </div>` : ""}
-    <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. Paying out always pays the token's holders. Sending expired rewards always pays the fee address. The signer only pays gas.</p>`;
+    `;
   // One button for every claim: each launchpad's protocol fees (chain by chain, worth more than 5 cents), then
   // Relay's swap fees when the fee address itself is connected.
   const claims = rows.flatMap((r) => r.assets.map((q, i) => ({ r, q, amt: r.pending[i], usd: toUsd(r.pending[i], q) })))
@@ -2570,44 +2554,18 @@ async function renderAdmin() {
   }).catch(() => { if ($("#claimall-sum")) $("#claimall-sum").textContent = `Protocol fees on every launchpad: ${fmtUsd(totalUsd)} (${claims.length} to collect). Swap fees at Relay: couldn't check.`; });
   $("#claimall").onclick = async () => {
     const b = $("#claimall"); b.disabled = true;
-    let done = 0, skipped = [];
+    const PADI = new ethers.Interface(PAD_ABI);
+    const calls = claims.map((c) => ({ ch: c.r.P.ch, to: c.r.P.pad, data: PADI.encodeFunctionData("collectProtocolFees", [c.q]), label: `${qsym(c.q)} on ${padLabel(c.r.P)}` }));
     try {
-      for (const [i, c] of claims.entries()) {
-        toast(`Collecting ${qsym(c.q)} on ${padLabel(c.r.P)} (${i + 1} of ${claims.length})…`, 30000);
-        try {
-          await ensureGas(c.r.P.ch, (m2) => toast(m2, 30000));
-          await requireWallet(c.r.P.ch);
-          const tx = await new ethers.Contract(c.r.P.pad, PAD_ABI, signer).collectProtocolFees(c.q);
-          await waitReceipt(c.r.P.ch, tx.hash);
-          done++;
-        } catch (e) {
-          if (e?.code === 4001 || e?.code === "ACTION_REJECTED") throw e;
-          skipped.push(`${padLabel(c.r.P)}: ${errMsg(e)}`);
-        }
-      }
-      const mine = account && account.toLowerCase() === FEES.recipient.toLowerCase();
+      const r = calls.length ? await sendAll(calls, (m2) => toast(m2, 30000)) : { done: 0, failed: [] };
       if (relayFees.some((x) => Number(x.amountUsd) >= 0.1)) {
-        if (mine) { await claimRelayFees(relayFees, (m2) => toast(m2, 30000)); done++; }
-        else skipped.push(`Relay swap fees: connect the fee address ${short(FEES.recipient)} to claim them`);
+        try { await claimRelayFees(relayFees, (m2) => toast(m2, 30000)); r.done++; }
+        catch (e) { if (e?.code === 4001 || e?.code === "ACTION_REJECTED") throw e; r.failed.push(`Relay swap fees: ${errMsg(e)}`); }
       }
-      toast(`Claimed ${done}${skipped.length ? `. Not claimed: ${skipped.join("; ")}` : ""}`, skipped.length ? 12000 : 6000);
+      toast(`Claimed ${r.done}${r.failed.length ? `. Not claimed: ${r.failed.join("; ")}` : ""}`, r.failed.length ? 12000 : 6000);
       renderAdmin();
     } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
   };
-  app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
-    b.disabled = true;
-    const r = rows[Number(b.dataset.r)];
-    try {
-      await requireWallet(r.P.ch);
-      const pad = new ethers.Contract(r.P.pad, PAD_ABI, signer);
-      toast("Confirm in your wallet…", 8000);
-      const tx = await pad.collectProtocolFees(b.dataset.q);
-      toast("Collecting…", 15000);
-      await tx.wait();
-      toast(`${qsym(b.dataset.q)} fees sent to ${short(r.feeTo)}`);
-      renderAdmin();
-    } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
-  });
   // v4: find wallets with expired rewards (every address that ever sent or received the token, from Blockscout)
   // and send them to the fee address with recycleMany, in batches.
   let found = [];
@@ -2662,24 +2620,52 @@ async function renderAdmin() {
       renderAdmin();
     } catch (e) { toast((sent ? "Some were sent before stopping. " : "") + errMsg(e), 7000); b.disabled = false; }
   };
-  // Paying out from a wallet transaction runs outside any PoolManager unlock, which is the safe way to distribute.
-  // flush() sends the launchpad's pending fees and distributes them; when only quote already sitting in the token
-  // is left, distribute() on the token does it directly.
-  app.querySelectorAll("button[data-flush]").forEach((b) => b.onclick = async () => {
-    b.disabled = true;
-    const r = rows[Number(b.dataset.r)];
+  // Pay out all: flush() on the launchpad sends its pending holder fees and distributes them; when only quote already
+  // sitting in the token is left, distribute() on the token does it. Sent from a wallet transaction, outside any
+  // PoolManager unlock, which is the safe way to distribute.
+  $("#payall").onclick = async () => {
+    const b = $("#payall"); b.disabled = true;
+    const PADI = new ethers.Interface(PAD_ABI), TOKI = new ethers.Interface(TOKEN_ABI);
+    const calls = rows.flatMap((r) => r.tokens.filter(worthPaying).map((x) => ({ ch: r.P.ch, label: `$${x.t.symbol}`,
+      to: x.t.pendingHolderFees === 0n ? x.t.token : r.P.pad,
+      data: x.t.pendingHolderFees === 0n ? TOKI.encodeFunctionData("distribute") : PADI.encodeFunctionData("flush", [x.t.token]) })));
     try {
-      await requireWallet(r.P.ch);
-      toast("Confirm in your wallet…", 8000);
-      const tx = b.dataset.direct === "1"
-        ? await new ethers.Contract(b.dataset.flush, TOKEN_ABI, signer).distribute()
-        : await new ethers.Contract(r.P.pad, PAD_ABI, signer).flush(b.dataset.flush);
-      toast("Paying out…", 15000);
-      await tx.wait();
-      toast("Holder fees paid out");
+      const r = await sendAll(calls, (m2) => toast(m2, 30000));
+      toast(`Paid out on ${r.done} token${r.done === 1 ? "" : "s"}${r.failed.length ? `. Not paid out: ${r.failed.join("; ")}` : ""}`, r.failed.length ? 12000 : 6000);
       renderAdmin();
-    } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
-  });
+    } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
+  };
+}
+/// Sends `calls` ({ ch, to, data, label }) chain by chain: one confirmation per chain where the wallet batches
+/// (EIP-5792), none at all with the PepesFamily wallet, else one per call. Brings a little gas to a chain that has
+/// none. A failing call is listed and the rest go on; saying no in the wallet stops everything.
+async function sendAll(calls, onStatus) {
+  const byChain = new Map();
+  for (const c of calls) byChain.set(c.ch, [...(byChain.get(c.ch) || []), c]);
+  let done = 0; const failed = [];
+  for (const [ch, list] of byChain) {
+    try {
+      await ensureGas(ch, onStatus);
+      await requireWallet(ch);
+      onStatus?.(`${ch.short}: ${list.length} transaction${list.length === 1 ? "" : "s"}…`);
+      const receipts = list.length > 1 ? await walletBatch(ch, list, `Confirm in your wallet: all ${list.length} on ${ch.short} in one confirmation…`) : null;
+      if (receipts) { done += list.length; continue; }
+      for (const c of list) {
+        try {
+          const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: c.to, data: c.data }] });
+          await waitReceipt(ch, hash);
+          done++;
+        } catch (e) {
+          if (e?.code === 4001 || e?.code === "ACTION_REJECTED") throw e;
+          failed.push(`${c.label} on ${ch.short}: ${errMsg(e)}`);
+        }
+      }
+    } catch (e) {
+      if (e?.code === 4001 || e?.code === "ACTION_REJECTED") throw e;
+      failed.push(`${ch.short}: ${errMsg(e)}`);
+    }
+  }
+  return { done, failed };
 }
 
 /// v4 admin: every address that ever sent or received `token` (Blockscout token transfers), so wallets that sold
