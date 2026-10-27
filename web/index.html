@@ -912,7 +912,7 @@ async function xcExecute(q, o, onStatus) {
       await requireWallet(o.ch);
       const d = item.data;
       if (last && !(fast && d.gas)) await waitReceipt(o.ch, last);
-      onStatus?.(fast ? "Buying…" : step.action || "Confirm in your wallet…");
+      onStatus?.(fast ? o.verb || "Buying…" : step.action || "Confirm in your wallet…");
       last = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: d.to, data: d.data || "0x",
         value: ethers.toQuantity(BigInt(d.value || 0)), ...(d.gas ? { gas: ethers.toQuantity((BigInt(d.gas) * 13n) / 10n) } : {}) }] });
       relayApi("transactions/index", { txHash: last, chainId: String(o.ch.chainId) }).catch(() => {});
@@ -1825,11 +1825,43 @@ function pickSource(dest, usd) {
   const home = CASH.list.find((x) => x.ch === dest);
   const others = CASH.list.filter((x) => x.ch !== dest && x.ch.remote !== undefined && usable(x) >= usd * 1.02);
   const pick = home && usable(home) >= usd ? home : others.find((x) => x.ch.chainId === WALLET_CHAIN) || others[0];
+  const own = { id: "", ch: dest, sym: dest.native?.symbol || "ETH", addr: ZERO_ADDR, dec: 18 };
   if (!pick) {
-    const best = CASH.list[0];
-    return { error: best && best.usd > 0 ? `Not enough on any one chain: your largest balance is ${fmtUsd(Math.max(0, usable(best)))} of ${best.sym} on ${best.ch.short}` : "Your wallet has no ETH, BNB or HYPE yet" };
+    // no single chain covers it, but all of them together do: gatherCash brings the rest to `dest` first
+    const total = CASH.list.reduce((t, x) => t + Math.max(0, usable(x)), 0);
+    const legs = CASH.list.filter((x) => x.ch !== dest && usable(x) >= 0.3).length;
+    if (dest.remote !== undefined && total >= usd * 1.02 + 0.05 * legs) return { o: own, x: home, gather: true };
+    return { error: CASH.total > 0 ? `Not enough cash: you have ${fmtUsd(Math.max(0, total))} to spend across your chains (a little stays on each chain for network fees)` : "Your wallet has no ETH, BNB or HYPE yet" };
   }
   return { o: { id: "", ch: pick.ch, sym: pick.sym, addr: ZERO_ADDR, dec: 18 }, x: pick };
+}
+/// Brings enough of `dest`'s coin to `dest` for a buy of `usd`, from the other chains, biggest first, through Relay
+/// (about 2 s each). For when the cash is spread out and no single chain covers the buy (pickSource's `gather`).
+async function gatherCash(dest, usd, onStatus) {
+  await loadCash(true);
+  const usable = (x) => x.usd - gasKeepUsd(x.ch);
+  const home = CASH.list.find((x) => x.ch === dest);
+  let short = usd * 1.02 - Math.max(0, home ? usable(home) : 0) + 0.03; // a little over for transfer fees and prices moving
+  if (short <= 0) return;
+  const others = CASH.list.filter((x) => x.ch !== dest && x.ch.remote !== undefined && usable(x) >= 0.3);
+  const px = nativeUsd(dest), sym = dest.native?.symbol || "ETH";
+  let n = 0;
+  for (const x of others) {
+    if (short <= 0.08) break; // a few cents short is within the margin: not worth a transfer's fee
+    const takeUsd = Math.min(usable(x), short + 0.03);
+    const srcPx = nativeUsd(x.ch);
+    if (!srcPx || !px) throw new Error(`No ${x.sym} price right now`);
+    onStatus?.(`Moving ${fmtUsd(takeUsd)} of your ${x.sym} on ${x.ch.short} to ${dest.short}…`);
+    const o = { ch: x.ch, sym: x.sym, addr: ZERO_ADDR, dec: 18 };
+    await requireWallet(o.ch);
+    const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: o.ch.chainId, destinationChainId: dest.chainId,
+      originCurrency: ZERO_ADDR, destinationCurrency: ZERO_ADDR, amount: ethers.parseEther((takeUsd / srcPx).toFixed(12)).toString(), tradeType: "EXACT_INPUT" });
+    await xcExecute(q, { ...o, verb: "Moving…" }, () => {});
+    short -= Number(q.details?.currencyOut?.amountUsd || takeUsd * 0.98);
+    n++;
+  }
+  await loadCash(true);
+  if (short > 0.05 + usd * 0.02) throw new Error(`Moved your cash from ${n} chain${n === 1 ? "" : "s"} to ${dest.short}, but it's a little short of ${fmtUsd(usd)} now (prices moved). Try a slightly smaller amount.`);
 }
 // tokens bought through this site, so they show among the positions even when they stop trending
 const heldKey = () => "pf-held:" + (account || "").toLowerCase();
@@ -2157,7 +2189,8 @@ async function renderMarketToken(chKey, addrIn) {
       const src = buySource(usd);
       if (src.error) return ($("#mpv").textContent = src.error);
       o = src.o;
-      if (src.x) $("#msrc").textContent = `Paying with ${o.sym} on ${o.ch.short}${o.ch === ch ? "" : " (no bridging needed: one confirmation)"}`;
+      if (src.gather) $("#msrc").textContent = `Paying from your cash on several chains: it's brought together on ${ch.short} first (a few seconds)`;
+      else if (src.x) $("#msrc").textContent = `Paying with ${o.sym} on ${o.ch.short}${o.ch === ch ? "" : " (no bridging needed: one confirmation)"}`;
       try { amt = coinFor(o, usd); } catch (e) { return ($("#mpv").textContent = errMsg(e)); }
       mLabel(null, o, amt);
     } else {
@@ -2206,11 +2239,12 @@ async function renderMarketToken(chKey, addrIn) {
         if (!usd) throw new Error("Enter an amount in dollars");
         const src = pickSource(ch, usd);
         if (src.error) throw new Error(src.error);
+        if (src.gather) { await gatherCash(ch, usd, (m2) => toast(m2, 30000)); lastQ = null; }
         o = src.o; amt = coinFor(o, usd);
       } else {
         amt = ethers.parseUnits($("#mamt").value.trim() || "0", dec);
         if (!amt) throw new Error("Enter an amount");
-        o = { ch, sym: t.symbol, addr, dec };
+        o = { ch, sym: t.symbol, addr, dec, verb: "Selling…" };
       }
       if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
       if (side === "sell") await ensureGas(ch, (m2) => toast(m2, 30000));
@@ -3354,12 +3388,14 @@ async function renderCreate() {
   setPay(pay);
   // Paying with the chain's coin: from this chain when the wallet holds enough here (launch fee and buy), else from
   // the chain holding the most, through this chain's PepesFamilyRemote and Relay, in one confirmation.
+  let gatherLaunch = 0; // spread over several chains: brought to this chain first (gatherCash)
   function autoFromLaunch() {
-    from = null;
+    from = null; gatherLaunch = 0;
     if (!xcReady(LAUNCH) || pay !== "eth" || !CASH) return;
     const usd = Number(ethers.formatEther((ibAmount() || 0n) + launchFeeWei(ch))) * nativeUsd(ch);
     const src = pickSource(ch, Math.max(usd, 0.01));
     if (src.error) { $("#ibnote").textContent = src.error; return; }
+    if (src.gather) { gatherLaunch = usd; $("#ibnote").textContent = `Paying from your cash on several chains: it's brought together on ${ch.short} first (a few seconds).`; return; }
     if (src.o.ch !== ch) {
       from = src.o;
       $("#ibnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: one confirmation pays the launch, your buy and a little ${NAT} for gas on ${ch.short}. Delivered by Relay in a few seconds.`;
@@ -3388,6 +3424,7 @@ async function renderCreate() {
       if (!account) await connect();
       await loadCash(true).catch(() => {});
       autoFromLaunch();
+      if (gatherLaunch) await gatherCash(ch, gatherLaunch, (m2) => toast(m2, 30000));
       if (from) {
         // paid from another chain: launchFor on this chain's PepesFamilyRemote, delivered by Relay
         if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
@@ -3625,6 +3662,7 @@ async function renderToken(addr) {
   if (q !== ZERO && !viaEth) $("#via")?.parentElement.remove();
   const NAT = P.ch.native?.symbol || "ETH";
   let from = null; // buying with a payment on another chain (Relay), or null
+  let gatherUsd = 0; // spread over several chains: brought to this chain first (gatherCash), then bought here
   const payNative = () => q === ZERO || viaEth || (!!from && tradeSide === "buy"); // paying / receiving the chain's own coin
   const payUnit = () => (payNative() ? NAT : Q);
   const ethRouterW = () => new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer);
@@ -3691,11 +3729,12 @@ async function renderToken(addr) {
   /// Paying with the chain's coin: from this chain when the wallet holds enough here, else from the chain holding
   /// the most (through this chain's PepesFamilyRemote and Relay). Sets `from` and says where the money comes from.
   function autoFrom(amt) {
-    from = null;
+    from = null; gatherUsd = 0;
     if ($("#fromnote")) $("#fromnote").textContent = "";
     if (!xcReady(P) || q === ZERO || tradeSide !== "buy" || !viaEth || !CASH || !amt) return;
     const src = pickSource(P.ch, Number(ethers.formatEther(amt)) * nativeUsd(P.ch));
     if (src.error) { $("#fromnote").textContent = src.error; return; }
+    if (src.gather) { gatherUsd = Number(ethers.formatEther(amt)) * nativeUsd(P.ch); $("#fromnote").textContent = `Paying from your cash on several chains: it's brought together on ${P.ch.short} first (a few seconds).`; return; }
     if (src.o.ch !== P.ch) { from = src.o; $("#fromnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: one confirmation, no bridging needed.`; }
   }
   // The button says what the trade is, like GMGN: "Buy · 0.01 ETH ($23.16)" / "Sell · 1.2M $X ($41.80)", and a
@@ -3711,7 +3750,7 @@ async function renderToken(addr) {
     const usdV = buying ? n * unitUsd() : out != null ? Number(ethers.formatUnits(out, 18)) * unitUsd() : 0;
     btn.innerHTML = `${buying ? "Buy" : "Sell"} <span class="sep"></span> ${esc(compact(n))} ${esc(buying ? payUnit() : "$" + info.symbol)}${usdV > 0 ? ` <span class="usd">(${fmtUsd(usdV)})</span>` : ""}`;
     const have = buying ? (payNative() ? ethBal : quoteBal) : tokBal;
-    warn.hidden = !account || amt <= have || (buying && !!from); // paid from another chain: that chain covers it
+    warn.hidden = !account || amt <= have || (buying && (!!from || gatherUsd > 0)); // paid from other chains: they cover it
     warn.textContent = "Exceeds wallet balance";
   }
   async function preview() {
@@ -3761,6 +3800,7 @@ async function renderToken(addr) {
         return;
       }
       if (tradeSide === "sell") await ensureGas(P.ch, (m2) => toast(m2, 30000));
+      if (tradeSide === "buy" && gatherUsd) await gatherCash(P.ch, gatherUsd, (m2) => toast(m2, 30000));
       await requireWallet(P.ch);
       const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
       if (!amt) throw new Error("Enter an amount");
