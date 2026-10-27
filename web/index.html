@@ -154,6 +154,7 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 
 /* segmented track and underline tabs (selection = brightness, never the hue) */
 .seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface); border-radius: 999px; max-width: 100%; overflow-x: auto; scrollbar-width: none; flex: none; }
+.seg.wrap { flex-wrap: wrap; border-radius: 18px; overflow: visible; } /* pickers whose every choice must stay visible (five chains) */
 .card .seg { background: var(--ground); }
 .seg button { border: 0; min-height: 30px; padding: 5px 14px; color: var(--nav); font-size: 13px; background: transparent; }
 .seg button:hover { color: #fff; background: transparent; }
