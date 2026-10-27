@@ -191,7 +191,7 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .stats .card { background: transparent; border-radius: 0; padding: 16px var(--pad); margin: 0; border-left: 1px solid var(--border); }
 .stats .card:first-child { border-left: 0; }
 .stats.q { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-@media (max-width: 700px) { .stats.q { grid-template-columns: 1fr 1fr; } .stats.q .card:nth-child(odd) { border-left: 0; } .stats.q .card:nth-child(n+3) { border-top: 1px solid var(--border); } }
+@media (max-width: 1280px) { .stats.q { grid-template-columns: 1fr 1fr; } .stats.q .card:nth-child(odd) { border-left: 0; } .stats.q .card:nth-child(n+3) { border-top: 1px solid var(--border); } }
 .stats .k { font-size: 13px; color: var(--muted); }
 .stats .v { font-size: 20px; line-height: 28px; font-weight: 600; margin-top: 2px; }
 
@@ -279,6 +279,12 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .chart { width: 100%; height: 240px; display: block; margin-top: 8px; }
 .preview { margin: 14px 0 4px; font-size: 14px; }
 .fees { font-size: 13px; color: var(--muted); margin-top: 16px; }
+.safety { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; font-size: 14px; }
+.safety li { display: flex; align-items: center; gap: 8px; }
+.safety li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--faint); }
+.safety li.dn { color: var(--negative); } .safety li.dn::before { background: var(--negative); }
+.safety li.wn { color: var(--warning); } .safety li.wn::before { background: var(--warning); }
+.safety li.okk::before { background: var(--positive); }
 .ext { gap: 8px; }
 .ext .btn { min-height: 30px; padding: 4px 12px; font-size: 13px; }
 
@@ -312,6 +318,7 @@ td.n, th.n { text-align: right; }
 .imgrow.drag .imgprev { outline: 2px dashed #fff; }
 .warn-box { margin-top: 8px; padding: 10px 14px; border-radius: var(--radius-nested); background: var(--pill-warning-bg); color: var(--warning); font-size: 13px; }
 .card.warnbox { background: var(--pill-warning-bg); }
+.warn-box.neg { background: var(--pill-negative-bg); color: var(--negative); }
 
 /* rewards, share cards */
 .sharegrid { grid-template-columns: minmax(0, 600px) 1fr; }
@@ -1568,6 +1575,44 @@ const swapSummary = (q) => {
     + ` · fees ≈ ${fmtUsd(fee)} (incl. ${FEES.swapBps / 100}% PepesFamily fee)${q.details?.timeEstimate ? ` · ~${q.details.timeEstimate} s` : ""}`;
 };
 
+/// GoPlus token security for `addr` on `ch` (Ethereum, BSC, Base and Robinhood Chain; not HyperEVM yet).
+/// { supported, danger: [..], warn: [..], ok: [..], honeypot } as plain sentences; danger blocks nothing by itself.
+const GOPLUS_CHAINS = new Set([1, 56, 8453, 4663]);
+async function safetyCheck(ch, addr) {
+  if (!GOPLUS_CHAINS.has(ch.chainId)) return { supported: false };
+  const r = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${ch.chainId}?contract_addresses=${addr.toLowerCase()}`, { signal: AbortSignal.timeout(10000) });
+  const j = await r.json();
+  const v = j?.result?.[addr.toLowerCase()];
+  if (!v) return { supported: true, unknown: true };
+  const yes = (k) => v[k] === "1", pct = (k) => (v[k] === "" || v[k] == null ? null : Number(v[k]) * 100);
+  const danger = [], warn = [], ok = [];
+  const owner = v.owner_address || "";
+  const renounced = !owner || /^0x0{40}$/i.test(owner) || owner.toLowerCase() === "0x000000000000000000000000000000000000dead";
+  if (yes("is_honeypot")) danger.push("Honeypot: buyers can't sell");
+  if (yes("cannot_sell_all")) danger.push("Holders can't sell their whole balance");
+  const bt = pct("buy_tax"), st = pct("sell_tax");
+  if (st != null && st >= 10) danger.push(`Sell tax ${st.toFixed(1)}%`); else if (st) warn.push(`Sell tax ${st.toFixed(1)}%`);
+  if (bt != null && bt >= 10) danger.push(`Buy tax ${bt.toFixed(1)}%`); else if (bt) warn.push(`Buy tax ${bt.toFixed(1)}%`);
+  if (bt === 0 && st === 0) ok.push("No buy or sell tax");
+  if (yes("can_take_back_ownership")) danger.push("The owner can take back ownership");
+  if (yes("hidden_owner")) danger.push("Hidden owner");
+  if (yes("selfdestruct")) danger.push("The contract can self-destruct");
+  if (yes("owner_change_balance")) danger.push("The owner can change balances");
+  if (!renounced) {
+    if (yes("is_mintable")) warn.push("The owner can mint more");
+    if (yes("transfer_pausable")) warn.push("The owner can pause transfers");
+    if (yes("is_blacklisted")) warn.push("The owner can blacklist wallets");
+    if (yes("slippage_modifiable")) warn.push("The owner can change the tax");
+    if (yes("is_proxy")) warn.push("Upgradeable contract (proxy)");
+  }
+  if (renounced) ok.push("Ownership renounced");
+  if (v.is_open_source === "0") danger.push("Contract source not verified");
+  else if (yes("is_open_source")) ok.push("Verified source");
+  if (v.holder_count) ok.push(`${Number(v.holder_count).toLocaleString("en-US")} holders`);
+  if (yes("trust_list")) ok.push("On GoPlus's trusted list");
+  return { supported: true, danger, warn, ok, honeypot: yes("is_honeypot") || yes("cannot_sell_all") };
+}
+
 /// A token from another launchpad or DEX (#/x/<chain>/<address>): price, chart, and buy or sell through Relay,
 /// paying from any chain.
 async function renderMarketToken(chKey, addrIn) {
@@ -1607,7 +1652,7 @@ async function renderMarketToken(chKey, addrIn) {
           </div>
         </div>
         ${t.chart ? `<iframe class="chart" style="height:400px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>` : `<div class="empty">No trading pool found yet.</div>`}
-        <div class="warn-box" style="margin-top:14px">This token wasn't launched on PepesFamily: we didn't check its contract. It may have taxes, a locked sell or an owner who can change it. Only buy what you can afford to lose.</div>
+        <div id="safety" style="margin-top:16px"><div class="h">Safety check</div><div class="skel" style="height:16px;width:60%"></div></div>
       </div>
       <div class="stats q">
         <div class="card"><div class="k">Market cap</div><div class="v">${mc ? fmtUsd(mc) : "—"}</div></div>
@@ -1625,6 +1670,7 @@ async function renderMarketToken(chKey, addrIn) {
         <div class="quick" id="mquick"></div>
         <div class="stat" id="mbal" style="margin-top:8px"></div>
         <div class="preview" id="mpv">&nbsp;</div>
+        <div class="warn-box neg" id="mrisk" hidden></div>
         <button class="primary full" id="mgo" style="margin-top:6px"></button>
         <div class="fees">Trades go through Relay. Every buy and sell includes a ${FEES.swapBps / 100}% PepesFamily fee; network and Relay fees are shown before you confirm.</div>
       </div>
@@ -1688,6 +1734,7 @@ async function renderMarketToken(chKey, addrIn) {
       const amt = amountWei();
       if (!amt) throw new Error("Enter an amount");
       const o = side === "buy" ? payOpt() : { ch, sym: t.symbol, addr, dec };
+      if (side === "buy" && !$("#mrisk").hidden && !confirm(`${$("#mrisk").textContent}\n\nBuy $${t.symbol} anyway?`)) throw new Error("Cancelled");
       await requireWallet(o.ch); // connects too
       if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
       toast("Getting the price…", 6000);
@@ -1701,6 +1748,24 @@ async function renderMarketToken(chKey, addrIn) {
     btn.disabled = false;
   };
   setSide("buy");
+  // GoPlus safety check: shown on the page, and its red flags repeated next to the Buy button
+  safetyCheck(ch, addr).then((sc) => {
+    if (stale() || !$("#safety")) return;
+    const li = (list, cls) => list.map((t2) => `<li class="${cls}">${esc(t2)}</li>`).join("");
+    const note = `<div class="stat" style="margin-top:8px">Not launched on PepesFamily: this is an automated check by GoPlus, not a guarantee. Only buy what you can afford to lose.</div>`;
+    if (!sc.supported) $("#safety").innerHTML = `<div class="h">Safety check</div><div class="stat">Not available on ${esc(ch.name)} yet: GoPlus doesn't cover it. This token wasn't launched on PepesFamily and nobody has checked its contract here. Only buy what you can afford to lose.</div>`;
+    else if (sc.unknown) $("#safety").innerHTML = `<div class="h">Safety check</div><div class="stat">GoPlus has no data on this token yet.</div>${note}`;
+    else {
+      const verdict = sc.danger.length ? `<span class="pill neg">${sc.danger.length} red flag${sc.danger.length === 1 ? "" : "s"}</span>`
+        : sc.warn.length ? `<span class="pill warn">${sc.warn.length} to check</span>` : `<span class="pill pos">No issues found</span>`;
+      $("#safety").innerHTML = `<div class="row" style="margin-bottom:8px"><span class="h" style="margin:0">Safety check</span>${verdict}<span class="spacer"></span><a class="stat lnk" href="https://gopluslabs.io/token-security/${ch.chainId}/${addr}" target="_blank" rel="noopener noreferrer">GoPlus ↗</a></div>
+        <ul class="safety">${li(sc.danger, "dn")}${li(sc.warn, "wn")}${li(sc.ok, "okk")}</ul>${note}`;
+      if (sc.danger.length) {
+        $("#mrisk").hidden = false;
+        $("#mrisk").textContent = (sc.honeypot ? "Likely a honeypot: you may not be able to sell. " : "Red flags: ") + sc.danger.join(" · ");
+      }
+    }
+  }).catch(() => { if (!stale() && $("#safety")) $("#safety").innerHTML = `<div class="h">Safety check</div><div class="stat">The safety check didn't load. Check the contract yourself before buying.</div>`; });
 }
 
 // ---------------------------------------------------------------- Market data
