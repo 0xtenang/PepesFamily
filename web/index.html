@@ -345,6 +345,33 @@ td.n, th.n { text-align: right; }
 @media (max-width: 760px) { .mint-top { grid-template-columns: 1fr; } }
 
 /* wallet picker */
+/* candle chart (GMGN-style) */
+.cbox { margin-top: 16px; }
+.cbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.cbar .seg button { padding: 4px 10px; min-height: 26px; font-size: 12px; }
+.cwrap { position: relative; height: 420px; background: var(--ground); border-radius: 12px; overflow: hidden; }
+.cplot { position: absolute; inset: 0; }
+.clegend { position: absolute; top: 8px; left: 10px; z-index: 2; font-size: 11px; color: var(--faint); pointer-events: none; font-variant-numeric: tabular-nums; }
+.clegend b { font-weight: 500; margin-right: 6px; }
+.clegend .pos, .chgs .pos, .tstrip .pos { color: var(--positive); } .clegend .neg, .chgs .neg, .tstrip .neg { color: var(--negative); }
+.cmsg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 13px; pointer-events: none; }
+.cmsg:empty { display: none; }
+@media (max-width: 720px) { .cwrap { height: 320px; } }
+.tstrip { display: flex; align-items: flex-end; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
+.tstrip .k { font-size: 12px; color: var(--faint); } .tstrip .v { font-size: 16px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.tstrip .tprice { display: flex; align-items: baseline; gap: 10px; }
+.chgs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 14px; max-width: 480px; }
+.chgs > div > :last-child { white-space: nowrap; }
+.chgs > div { background: var(--ground); border-radius: 10px; padding: 6px 8px; gap: 4px; min-width: 0; display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; }
+.chgs span:first-child { color: var(--faint); }
+/* trade panel: green buy, red sell, joined quick amounts (GMGN-style) */
+.tradebtn.buy { background: var(--positive); color: #08130a; } .tradebtn.buy:hover { filter: brightness(1.08); background: var(--positive); }
+.tradebtn.sell { background: var(--negative); color: #fff; } .tradebtn.sell:hover { filter: brightness(1.08); background: var(--negative); }
+.tabs button.buy.on { color: var(--positive); } .tabs button.sell.on { color: var(--negative); }
+.quick { gap: 0; border: 1px solid var(--nested); border-radius: 12px; overflow: hidden; flex-wrap: nowrap; }
+.quick button { flex: 1; border: 0; border-radius: 0; min-height: 36px; padding: 6px 4px; background: transparent; font-variant-numeric: tabular-nums; }
+.quick button + button { border-left: 1px solid var(--nested); }
+.quick button:hover { background: var(--nested); }
 .tradebtn { display: flex; align-items: center; justify-content: center; gap: 8px; font-variant-numeric: tabular-nums; }
 .tradebtn .sep { width: 1px; height: 16px; background: currentColor; opacity: .35; }
 .tradebtn .usd { opacity: .7; font-weight: 500; }
@@ -1987,6 +2014,8 @@ async function marketToken(ch, addr) {
     if (p) return { name: p.baseToken.name, symbol: p.baseToken.symbol, image: p.info?.imageUrl || "", price: Number(p.priceUsd) || 0,
       mc: Number(p.marketCap || p.fdv) || 0, liq: Number(p.liquidity?.usd) || 0, vol: Number(p.volume?.h24) || 0,
       chg: p.priceChange?.h24 != null ? Number(p.priceChange.h24) / 100 : null,
+      chgs: Object.fromEntries(["m5", "h1", "h6", "h24"].map((k) => [k, p.priceChange?.[k] != null ? Number(p.priceChange[k]) / 100 : null])),
+      buys: p.txns?.h24?.buys ?? null, sells: p.txns?.h24?.sells ?? null,
       chart: `https://dexscreener.com/${p.chainId}/${p.pairAddress}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15` };
   } catch {}
   const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 60_000);
@@ -1994,6 +2023,8 @@ async function marketToken(ch, addr) {
   return { name: t.name, symbol: t.symbol, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "", price: Number(t.price_usd) || 0,
     mc: Number(t.market_cap_usd || t.fdv_usd) || 0, liq: Number(t.total_reserve_in_usd) || 0, vol: Number(t.volume_usd?.h24) || 0,
     chg: pool?.price_change_percentage?.h24 != null ? Number(pool.price_change_percentage.h24) / 100 : null,
+    chgs: Object.fromEntries(["m5", "h1", "h6", "h24"].map((k) => [k, pool?.price_change_percentage?.[k] != null ? Number(pool.price_change_percentage[k]) / 100 : null])),
+    buys: pool?.transactions?.h24?.buys ?? null, sells: pool?.transactions?.h24?.sells ?? null,
     chart: pool ? `https://www.geckoterminal.com/${ch.gt}/pools/${pool.address}?embed=1&info=0&swaps=0&light_chart=0&chart_type=price&resolution=15m` : "" };
 }
 /// A Relay quote for a swap at `swapBps`: `amount` of `from` (on `fromCh`) into `to` (on `toCh`), exact in.
@@ -2175,22 +2206,21 @@ async function renderMarketToken(chKey, addrIn) {
           <div style="min-width:0"><div class="row"><h1>${esc(t.name)}</h1><span class="pill">$${esc(t.symbol)}</span><span class="pill">${esc(ch.short)}</span><span class="pill warn">Not launched on PepesFamily</span></div>
             <div class="stat" style="margin-top:4px"><a class="lnk" href="${ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)}</a> · <button type="button" class="sharebtn" id="mcopy">Copy address</button></div></div>
         </div>
-        <div class="row" style="margin-top:20px;align-items:flex-end;gap:16px">
-          <div><div class="stat">Price</div><div class="price-big">${price ? fmtUsd(price) : "—"}</div></div>${chgText(chg)}
+        <div class="tstrip">
+          <div class="tprice"><div class="price-big">${price ? tinyUsd(price) : "—"}</div>${chgText(chg)}</div>
+          <div><div class="k">Market cap</div><div class="v">${mc ? "$" + compact(mc) : "—"}</div></div>
+          <div><div class="k">Liquidity</div><div class="v">${t.liq ? "$" + compact(t.liq) : "—"}</div></div>
+          <div><div class="k">24h volume</div><div class="v">${t.vol ? "$" + compact(t.vol) : "—"}</div></div>
+          ${t.buys != null ? `<div><div class="k">24h buys / sells</div><div class="v"><span class="pos">${compact(t.buys)}</span> / <span class="neg">${compact(t.sells)}</span></div></div>` : ""}
           <span class="spacer"></span>
           <div class="row ext">
             ${ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
             ${ch.dex ? `<a class="btn" href="https://dexscreener.com/${ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>` : ""}
           </div>
         </div>
-        ${t.chart ? `<iframe class="chart" style="height:400px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>` : `<div class="empty">No trading pool found yet.</div>`}
+        ${t.chgs ? `<div class="chgs">${[["5m", "m5"], ["1h", "h1"], ["6h", "h6"], ["24h", "h24"]].map(([l, k]) => `<div><span>${l}</span>${chgText(t.chgs[k])}</div>`).join("")}</div>` : ""}
+        <div class="cbox" id="cbox"></div>
         <div id="safety" style="margin-top:16px"><div class="h">Safety check</div><div class="skel" style="height:16px;width:60%"></div></div>
-      </div>
-      <div class="stats q">
-        <div class="card"><div class="k">Market cap</div><div class="v">${mc ? fmtUsd(mc) : "—"}</div></div>
-        <div class="card"><div class="k">Liquidity</div><div class="v">${t.liq ? fmtUsd(t.liq) : "—"}</div></div>
-        <div class="card"><div class="k">24h volume</div><div class="v">${t.vol ? fmtUsd(t.vol) : "—"}</div></div>
-        <div class="card"><div class="k">24h change</div><div class="v">${chgText(chg)}</div></div>
       </div>
     </div>
     <div class="mside">
@@ -2208,6 +2238,11 @@ async function renderMarketToken(chKey, addrIn) {
       </div>
     </div></div>`;
   $("#mcopy").onclick = async () => { try { await navigator.clipboard.writeText(addr); toast("Contract address copied"); } catch { toast(addr, 8000); } };
+  // GeckoTerminal's candles; DexScreener's embedded chart when it has none for this token
+  candleChart($("#cbox"), { load: (sec) => gtCandles(ch, addr, sec), mcap: (k) => k * (price ? mc / price : 0), every: 30_000 }).then(async () => {
+    const empty = !(await gtCandles(ch, addr, 3600).catch(() => [])).length;
+    if (empty && t.chart && !stale() && $("#cbox")) $("#cbox").outerHTML = `<iframe class="chart" style="height:420px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>`;
+  }).catch(() => {});
   // A buy is an amount in dollars, paid from the wallet's coins wherever they are (pickSource); a sell is an
   // amount of the token, paid out in this chain's coin.
   let side = "buy", seq = 0, timer = 0, tokBal = 0n;
@@ -2280,6 +2315,7 @@ async function renderMarketToken(chKey, addrIn) {
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
     $("#mamt").placeholder = side === "buy" ? "$0" : "0.0";
     $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ETH on ${HOME().short})`;
+    $("#mgo").classList.toggle("buy", side === "buy"); $("#mgo").classList.toggle("sell", side === "sell");
     mLabel(null);
     const q = side === "buy" ? ["$5", "$20", "$50", "$100"] : ["25%", "50%", "100%"];
     $("#mquick").innerHTML = q.map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
@@ -3659,8 +3695,8 @@ async function renderToken(addr) {
               ${((a) => `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>`)(CONFIG.audits.tokens[addr.toLowerCase()] || (P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
             </div>
           </div>
-          <svg class="chart skel" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="Price after each trade"></svg>
-          <div class="row" style="justify-content:space-between"><span class="stat">Price after each trade, in USD</span>${links ? `<div class="links" style="margin:0">${links}</div>` : ""}</div>
+          <div class="cbox" id="cbox"><div class="cmsg">Loading chart…</div></div>
+          ${links ? `<div class="row" style="justify-content:flex-end"><div class="links" style="margin:0">${links}</div></div>` : ""}
           ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
         </div>
         <div class="stats q">
@@ -3775,6 +3811,7 @@ async function renderToken(addr) {
     if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
 
     $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
+    $("#trade").classList.toggle("buy", buying); $("#trade").classList.toggle("sell", !buying);
     tradeLabel(0n, null);
     const payBal = payNative() ? ethBal : quoteBal;
     $("#bal").textContent = account ? `Balance: ${fmt(buying ? payBal : tokBal)} ${buying ? payUnit() : "$" + info.symbol}` : "";
@@ -3986,7 +4023,8 @@ async function fetchTradeLogs(P, addr, createdBlock, pages = 6) {
     }
     return items
       .filter((i) => i.topics[0] === tradeTopic && i.topics[1]?.toLowerCase() === ethers.zeroPadValue(addr, 32).toLowerCase())
-      .map((i) => ({ ...padC.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args.toObject(), hash: i.transaction_hash }))
+      .map((i) => ({ ...padC.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args.toObject(), hash: i.transaction_hash,
+        time: i.block_timestamp ? Math.floor(Date.parse(i.block_timestamp) / 1000) : 0 }))
       .reverse();
   } catch (e) {
     console.warn("Blockscout unavailable, using RPC for recent trades", e);
@@ -3997,7 +4035,10 @@ async function fetchTradeLogs(P, addr, createdBlock, pages = 6) {
     for (let start = from; start <= latest; start += CHUNK) {
       logs.push(...(await padC.queryFilter(padC.filters.Trade(addr), start, Math.min(start + CHUNK - 1, latest))));
     }
-    return logs.map((l) => ({ ...l.args.toObject(), hash: l.transactionHash }));
+    // times from block numbers: the chain's pace measured over the scanned range
+    const [bl, b0] = await Promise.all([P.ch.reader.getBlock(latest), P.ch.reader.getBlock(from)]);
+    const per = latest > from ? (bl.timestamp - b0.timestamp) / (latest - from) : 1;
+    return logs.map((l) => ({ ...l.args.toObject(), hash: l.transactionHash, time: Math.round(bl.timestamp - (latest - l.blockNumber) * per) }));
   }
 }
 
@@ -4014,25 +4055,128 @@ async function loadTrades(P, addr, info, stale = () => false, pages = 6) {
     <td class="n"><a href="${P.ch.explorer}/tx/${t.hash}" target="_blank" rel="noopener">↗</a></td></tr>`).join("")
     : `<tr><td colspan="5" class="muted">No trades yet</td></tr>`;
 
-  // price series: launch price, then price after each trade
-  const startSqrt = trades.length ? null : info.sqrtPriceX96;
-  const pts = startSqrt ? [priceOf(startSqrt, info.quoteIsCurrency0)] : trades.map((t) => priceOf(t.sqrtPriceX96, info.quoteIsCurrency0));
-  drawChart(pts.map((x) => x * (quoteUsd(info.quote) || 1)));
+  // candles from the trades: each trade's price (USD) and size; a token with no trades yet shows its launch price
+  const qu = quoteUsd(info.quote) || 0;
+  const list = trades.map((t) => ({ time: Number(t.time), price: priceOf(t.sqrtPriceX96, info.quoteIsCurrency0) * qu, usd: Number(ethers.formatUnits(t.quoteAmount, 18)) * qu }));
+  if (!list.length) list.push({ time: Number(info.createdAt) || Math.floor(Date.now() / 1000), price: priceOf(info.sqrtPriceX96, info.quoteIsCurrency0) * qu, usd: 0 });
+  CHART_TRADES.set(addr.toLowerCase(), list);
+  const box = $("#cbox");
+  if (box && !box.dataset.on) {
+    box.dataset.on = "1";
+    box.chart = await candleChart(box, { load: async (sec) => tradeCandles(CHART_TRADES.get(addr.toLowerCase()) || [], sec), mcap: (k) => k * 1e9, every: 15_000 });
+  } else box?.chart?.refresh();
+}
+const CHART_TRADES = new Map(); // token -> its trades as { time, price, usd }, for the candle chart
+
+// ---------------------------------------------------------------- Candle chart (TradingView Lightweight Charts)
+// GMGN-style: timeframes, price or market cap, candles with volume under them, the OHLC of the candle under the
+// cursor. The library (/js, ~190 KB) loads only on token pages.
+let lwcLoading = null;
+const loadLwc = () => (lwcLoading ||= new Promise((ok, fail) => {
+  const sc = document.createElement("script");
+  sc.src = "/js/lightweight-charts-5.1.0.js";
+  sc.onload = () => ok(window.LightweightCharts);
+  sc.onerror = () => { lwcLoading = null; fail(new Error("The chart couldn't load")); };
+  document.head.appendChild(sc);
+}));
+const TFS = [["1m", 60], ["5m", 300], ["15m", 900], ["1h", 3600], ["4h", 14400], ["1D", 86400]];
+/// $0.0₄292 for tiny prices (the zeros after the point counted, as GMGN does), else 4 significant digits.
+function tinyUsd(v, cur = "$") {
+  if (!(v > 0)) return cur + "0";
+  if (v >= 1000) return cur + compact(v);
+  if (v >= 0.0001) return cur + v.toLocaleString("en-US", { maximumSignificantDigits: 4 });
+  const z = Math.floor(-Math.log10(v)); // zeros right after the point: 0.0000292 has 4
+  const digits = Math.round(v * 10 ** (z + 4)).toString().slice(0, 4).replace(/0+$/, "") || "0";
+  return `${cur}0.0${String(z).split("").map((d) => "₀₁₂₃₄₅₆₇₈₉"[d]).join("")}${digits}`;
+}
+/// Candles from trades (our tokens): each trade's price closes it, the previous close opens the next.
+function tradeCandles(trades, sec) {
+  const out = [];
+  let prev = null;
+  for (const t of trades) {
+    if (!t.time || !(t.price > 0)) continue;
+    const time = Math.floor(t.time / sec) * sec;
+    const last = out[out.length - 1];
+    if (last && last.time === time) {
+      last.high = Math.max(last.high, t.price); last.low = Math.min(last.low, t.price); last.close = t.price; last.volume += t.usd;
+    } else {
+      const open = prev ?? t.price;
+      out.push({ time, open, high: Math.max(open, t.price), low: Math.min(open, t.price), close: t.price, volume: t.usd });
+    }
+    prev = t.price;
+  }
+  return out;
+}
+/// GeckoTerminal candles for `addr` on `ch`, in USD, from its most liquid pool there; oldest first.
+async function gtCandles(ch, addr, sec) {
+  const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000);
+  const pool = (j.included || []).filter((x) => x.type === "pool").sort((a, b) => Number(b.attributes.reserve_in_usd || 0) - Number(a.attributes.reserve_in_usd || 0))[0];
+  if (!pool) return [];
+  const [unit, agg] = sec >= 86400 ? ["day", 1] : sec >= 3600 ? ["hour", sec / 3600] : ["minute", sec / 60];
+  const base = pool.relationships?.base_token?.data?.id?.toLowerCase().endsWith(addr.toLowerCase()) ? "base" : "quote";
+  const o = await gtGet(`/networks/${ch.gt}/pools/${pool.attributes.address}/ohlcv/${unit}?aggregate=${agg}&limit=1000&currency=usd&token=${base}`, Math.min(sec * 1000, 60_000));
+  return (o.data?.attributes?.ohlcv_list || []).map(([time, open, high, low, close, volume]) => ({ time, open, high, low, close, volume })).reverse();
+}
+/// Puts a candle chart in `box`. `src.load(sec)` gives candles in USD (oldest first); `src.mcap` turns a price into
+/// a market cap. Redraws every `src.every` ms while the page is open; returns { refresh }.
+async function candleChart(box, src) {
+  let tf = (() => { try { return Number(localStorage.getItem("pf-tf")) || 900; } catch { return 900; } })();
+  let mode = "price";
+  box.innerHTML = `<div class="cbar"><div class="seg" id="ctf">${TFS.map(([l, v]) => `<button type="button" data-v="${v}">${l}</button>`).join("")}</div>
+      <span class="spacer"></span><div class="seg" id="cmode"><button type="button" data-v="price">Price</button><button type="button" data-v="mc">MCap</button></div></div>
+    <div class="cwrap"><div class="clegend" id="clegend"></div><div class="cplot" id="cplot"></div><div class="cmsg" id="cmsg">Loading chart…</div></div>`;
+  const LW = await loadLwc();
+  if (!box.isConnected) return { refresh() {} };
+  const css = getComputedStyle(document.documentElement);
+  const up = css.getPropertyValue("--positive").trim() || "#8fd66a", down = css.getPropertyValue("--negative").trim() || "#ff5c61";
+  const chart = LW.createChart(box.querySelector("#cplot"), {
+    autoSize: true,
+    layout: { background: { type: "solid", color: "transparent" }, textColor: "#8a8a8a", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11, attributionLogo: true },
+    grid: { vertLines: { color: "rgba(255,255,255,.04)" }, horzLines: { color: "rgba(255,255,255,.04)" } },
+    rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.22 } },
+    timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 4, barSpacing: 8 },
+    crosshair: { mode: 0, vertLine: { color: "rgba(255,255,255,.25)", labelBackgroundColor: "#2a2a2a" }, horzLine: { color: "rgba(255,255,255,.25)", labelBackgroundColor: "#2a2a2a" } },
+  });
+  const fmtP = (v) => (mode === "mc" ? "$" + compact(v) : tinyUsd(v));
+  const candles = chart.addSeries(LW.CandlestickSeries, { upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, borderVisible: false,
+    priceFormat: { type: "custom", formatter: (v) => fmtP(v), minMove: 1e-12 } });
+  const vol = chart.addSeries(LW.HistogramSeries, { priceScaleId: "", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+  vol.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+  let data = [];
+  const legend = (c) => {
+    const el = box.querySelector("#clegend");
+    if (!el) return;
+    if (!c) return (el.innerHTML = "");
+    const cls = c.close >= c.open ? "pos" : "neg";
+    el.innerHTML = `O <b class="${cls}">${fmtP(c.open)}</b> H <b class="${cls}">${fmtP(c.high)}</b> L <b class="${cls}">${fmtP(c.low)}</b> C <b class="${cls}">${fmtP(c.close)}</b>${c.volume ? ` · Vol <b>$${compact(c.volume)}</b>` : ""}`;
+  };
+  chart.subscribeCrosshairMove((p) => {
+    const c = p?.time != null && data.find((x) => x.time === p.time);
+    legend(c || data[data.length - 1]);
+  });
+  let seq = 0;
+  const draw = async (fit) => {
+    const my = ++seq;
+    box.querySelectorAll("#ctf button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === tf));
+    box.querySelectorAll("#cmode button").forEach((b) => b.classList.toggle("on", b.dataset.v === mode));
+    let raw;
+    try { raw = await src.load(tf); } catch (e) { if (my === seq && box.isConnected) box.querySelector("#cmsg").textContent = "Chart data isn't available right now."; return; }
+    if (my !== seq || !box.isConnected) return;
+    const k = mode === "mc" ? src.mcap(1) : 1;
+    data = raw.map((c) => ({ ...c, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k }));
+    box.querySelector("#cmsg").textContent = data.length ? "" : "No trades in this range yet.";
+    candles.setData(data);
+    vol.setData(data.map((c) => ({ time: c.time, value: c.volume || 0, color: c.close >= c.open ? up + "66" : down + "66" })));
+    if (fit) chart.timeScale().scrollToRealTime();
+    legend(data[data.length - 1]);
+  };
+  box.querySelectorAll("#ctf button").forEach((b) => b.onclick = () => { tf = Number(b.dataset.v); try { localStorage.setItem("pf-tf", tf); } catch {} draw(true); });
+  box.querySelectorAll("#cmode button").forEach((b) => b.onclick = () => { mode = b.dataset.v; draw(false); });
+  await draw(true);
+  const timer = setInterval(() => (!box.isConnected ? (clearInterval(timer), chart.remove()) : !document.hidden && draw(false)), src.every || 30_000);
+  return { refresh: () => draw(false) };
 }
 
-function drawChart(pts) {
-  const svg = $("#chart"); if (!svg) return;
-  svg.classList.remove("skel");
-  if (pts.length < 2) pts = [pts[0], pts[0]];
-  const W = 600, H = 200, pad = 10;
-  const min = Math.min(...pts), max = Math.max(...pts), span = max - min || max || 1;
-  const xy = pts.map((v, i) => [pad + (i * (W - 2 * pad)) / (pts.length - 1), H - pad - ((v - min) / span) * (H - 2 * pad)]);
-  const d = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
-  const up = pts[pts.length - 1] >= pts[0];
-  const c = up ? "var(--accent)" : "var(--down)";
-  svg.innerHTML = `<path d="${d}L${W - pad},${H - pad}L${pad},${H - pad}Z" fill="${c}" opacity=".12"/>
-    <path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
-}
 
 // The screen's frame paints at once (its title and grey bars where the figures will go); the chains fill it in.
 (() => {
