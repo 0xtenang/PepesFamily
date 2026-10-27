@@ -882,9 +882,23 @@ async function loadPrices() {
   await Promise.all([
     ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {}),
     ethPerToken(CHAINS.robinhood, "0xf7dc0af99fce7169eb76854c0b39beb9915526894d42229946e5cb469cab50b1").then((v) => (prices.cashcatEth = v)).catch(() => {}),
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid,binancecoin&vs_currencies=usd", { signal: AbortSignal.timeout(8000) })
-      .then((r) => r.json()).then((j) => { prices.hypeUsd = j?.hyperliquid?.usd || 0; prices.bnbUsd = j?.binancecoin?.usd || 0; }).catch(() => {}),
+    // HYPE and BNB in USD: Relay's price of each chain's coin (the same service the cross-chain payments use, so
+    // privacy blockers let it through; CoinGecko is blocked by Brave's shields and others), CoinGecko as a fallback.
+    coinUsd(999, "hyperliquid").then((v) => { if (v) prices.hypeUsd = v; }),
+    coinUsd(56, "binancecoin").then((v) => { if (v) prices.bnbUsd = v; }),
   ]);
+}
+/// The USD price of `chainId`'s own coin: Relay first, then CoinGecko (`cgId`); 0 if neither answers.
+async function coinUsd(chainId, cgId) {
+  try {
+    const r = await fetch(`https://api.relay.link/currencies/token/price?address=${ZERO_ADDR}&chainId=${chainId}`, { signal: AbortSignal.timeout(8000) });
+    const v = Number((await r.json())?.price);
+    if (v > 0) return v;
+  } catch {}
+  try {
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=usd`, { signal: AbortSignal.timeout(8000) });
+    return Number((await r.json())?.[cgId]?.usd) || 0;
+  } catch { return 0; }
 }
 const quoteUsd = (q) => {
   if (q === ZERO) return prices.ethUsd;
