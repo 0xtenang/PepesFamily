@@ -722,7 +722,7 @@
       g.drawImage(src, (1200 - src.width * k) / 2, (675 - src.height * k) / 2, src.width * k, src.height * k);
       g.fillStyle = "rgba(0,0,0,.72)"; g.fillRect(0, 627, 1200, 48);
       g.fillStyle = GREEN; g.font = "600 20px monospace"; g.fillText("PEPESFAMILY HALL", 20, 658);
-      g.fillStyle = "#fff"; g.textAlign = "right"; g.fillText("pepesfamily.fun", 1180, 658);
+      g.fillStyle = "#fff"; g.textAlign = "right"; g.fillText("pepesimd.fun", 1180, 658);
       const url = c.toDataURL("image/png");
       const m = $("hmodal");
       m.hidden = false;
@@ -740,7 +740,7 @@
         const a = e.target.closest("[data-a]")?.dataset.a;
         if (e.target === m || a === "close") { m.hidden = true; m.innerHTML = ""; return; }
         if (a === "dl") { const l = document.createElement("a"); l.href = url; l.download = "pepesfamily-hall.png"; l.click(); }
-        if (a === "x") window.open("https://x.com/intent/tweet?text=" + encodeURIComponent("Hanging out in the PepesFamily Hall 🐸\nhttps://pepesfamily.fun/"), "_blank", "noopener,noreferrer");
+        if (a === "x") window.open("https://x.com/intent/tweet?text=" + encodeURIComponent("Hanging out in the PepesFamily Hall 🐸\nhttps://pepesimd.fun/"), "_blank", "noopener,noreferrer");
         if (a === "launch") { api.useAsLaunchImage(url); }
       };
       m.onkeydown = (e) => { if (e.key === "Escape") { m.hidden = true; m.innerHTML = ""; } };
