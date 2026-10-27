@@ -3877,6 +3877,18 @@ async function renderToken(addr) {
   let gatherUsd = 0; // spread over several chains: brought to this chain first (gatherCash), then bought here
   const payNative = () => q === ZERO || viaEth || (!!from && tradeSide === "buy"); // paying / receiving the chain's own coin
   const payUnit = () => (payNative() ? NAT : Q);
+  // Buying with the chain's coin is an amount in dollars, like other tokens: paid from the wallet's cash on any chain
+  // (autoFrom). Buying with the pair token, and selling, are amounts of that token.
+  const usdMode = () => tradeSide === "buy" && (q === ZERO || viaEth);
+  const amtIn = () => {
+    const v = $("#amt").value.trim().replace(/^\$/, "");
+    if (!v) return 0n;
+    try {
+      if (!usdMode()) return ethers.parseUnits(v, 18);
+      const n = Number(v), px = nativeUsd(P.ch);
+      return n > 0 && px ? ethers.parseEther((n / px).toFixed(12)) : 0n;
+    } catch { return 0n; }
+  };
   const ethRouterW = () => new ethers.Contract(P.ethRouter, ETH_ROUTER_ABI, signer);
 
   async function loadPosition() {
@@ -3904,17 +3916,19 @@ async function renderToken(addr) {
     app.querySelectorAll("#via button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "eth") === viaEth));
     if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
 
-    $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
+    $("#amtl").textContent = usdMode() ? "Amount (USD)" : buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
+    $("#amt").placeholder = usdMode() ? "$0" : "0.0";
     $("#trade").classList.toggle("buy", buying); $("#trade").classList.toggle("sell", !buying);
     tradeLabel(0n, null);
     const payBal = payNative() ? ethBal : quoteBal;
-    $("#bal").textContent = account ? `Balance: ${fmt(buying ? payBal : tokBal)} ${buying ? payUnit() : "$" + info.symbol}` : "";
-    const opts = buying ? (payNative() ? NATIVE_QUICK[NAT] || NATIVE_QUICK.ETH : QUOTES[q.toLowerCase()]?.quick || ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
-    const short = (o) => (o.endsWith("%") ? o : Number(o) >= 1e6 ? Number(o) / 1e6 + "M" : Number(o) >= 1e3 ? Number(o) / 1e3 + "K" : o);
+    $("#bal").textContent = !account ? "" : usdMode() ? (CASH ? `Cash: ${fmtUsd(CASH.total)} across your chains` : "") : `Balance: ${fmt(buying ? payBal : tokBal)} ${buying ? payUnit() : "$" + info.symbol}`;
+    if (account && usdMode() && !CASH) loadCash().then(() => tradeSide === "buy" && !stale() && setSide(tradeSide)).catch(() => {});
+    const opts = usdMode() ? ["$5", "$20", "$50", "$100"] : buying ? QUOTES[q.toLowerCase()]?.quick || ["1", "5", "10", "50"] : ["25%", "50%", "75%", "100%"];
+    const short = (o) => (o.endsWith("%") || o.startsWith("$") ? o : Number(o) >= 1e6 ? Number(o) / 1e6 + "M" : Number(o) >= 1e3 ? Number(o) / 1e3 + "K" : o);
     $("#quick").innerHTML = opts.map((o) => `<button type="button" data-v="${o}">${short(o)}</button>`).join("");
     $("#quick").querySelectorAll("button").forEach((b) => b.onclick = () => {
       const t = b.dataset.v;
-      $("#amt").value = t.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(t))) / 100n, 18) : t;
+      $("#amt").value = t.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(t))) / 100n, 18) : t.replace(/^\$/, "");
       preview();
     });
     preview();
@@ -3944,11 +3958,16 @@ async function renderToken(addr) {
   function autoFrom(amt) {
     from = null; gatherUsd = 0;
     if ($("#fromnote")) $("#fromnote").textContent = "";
-    if (!xcReady(P) || q === ZERO || tradeSide !== "buy" || !viaEth || !CASH || !amt) return;
-    const src = pickSource(P.ch, Number(ethers.formatEther(amt)) * nativeUsd(P.ch));
+    if (!usdMode() || !CASH || !amt) return;
+    const usdV = Number(ethers.formatEther(amt)) * nativeUsd(P.ch);
+    const src = pickSource(P.ch, usdV);
     if (src.error) { $("#fromnote").textContent = src.error; return; }
-    if (src.gather) { gatherUsd = Number(ethers.formatEther(amt)) * nativeUsd(P.ch); $("#fromnote").textContent = `Paying from your cash on several chains: it's brought together on ${P.ch.short} first (a few seconds).`; return; }
-    if (src.o.ch !== P.ch) { from = src.o; $("#fromnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: one confirmation, no bridging needed.`; }
+    if (src.o.ch === P.ch && !src.gather) return; // enough on this chain
+    // one other chain covers it and this launchpad takes payments from other chains (PepesFamilyRemote): one Relay
+    // payment buys it; otherwise the cash is brought to this chain first (gatherCash), then bought here
+    if (!src.gather && q !== ZERO && xcReady(P)) { from = src.o; $("#fromnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: no bridging needed.`; return; }
+    gatherUsd = usdV;
+    $("#fromnote").textContent = `Paying from your cash on ${src.gather ? "several chains" : src.o.ch.short}: it's brought to ${P.ch.short} first (a few seconds).`;
   }
   // The button says what the trade is, like GMGN: "Buy · 0.01 ETH ($23.16)" / "Sell · 1.2M $X ($41.80)", and a
   // line under it when the amount is more than the wallet holds.
@@ -3961,14 +3980,17 @@ async function renderToken(addr) {
     const n = Number(ethers.formatUnits(amt, 18));
     // dollars: what is paid when buying, what comes back when selling (once the quote is in)
     const usdV = buying ? n * unitUsd() : out != null ? Number(ethers.formatUnits(out, 18)) * unitUsd() : 0;
-    btn.innerHTML = `${buying ? "Buy" : "Sell"} <span class="sep"></span> ${esc(compact(n))} ${esc(buying ? payUnit() : "$" + info.symbol)}${usdV > 0 ? ` <span class="usd">(${fmtUsd(usdV)})</span>` : ""}`;
+    btn.innerHTML = usdMode()
+      ? `Buy <span class="sep"></span> ${fmtUsd(usdV)} <span class="usd">(${esc(compact(n))} ${esc(NAT)})</span>`
+      : `${buying ? "Buy" : "Sell"} <span class="sep"></span> ${esc(compact(n))} ${esc(buying ? payUnit() : "$" + info.symbol)}${usdV > 0 ? ` <span class="usd">(${fmtUsd(usdV)})</span>` : ""}`;
     const have = buying ? (payNative() ? ethBal : quoteBal) : tokBal;
-    warn.hidden = !account || amt <= have || (buying && (!!from || gatherUsd > 0)); // paid from other chains: they cover it
+    // dollars: whatever the wallet's cash on every chain covers (pickSource); else this chain's balance
+    warn.hidden = !account || (usdMode() ? !(CASH && pickSource(P.ch, usdV).error) : amt <= have || (buying && (!!from || gatherUsd > 0)));
     warn.textContent = "Exceeds wallet balance";
   }
   async function preview() {
     const seq = ++pvSeq;
-    let amt = 0n; try { amt = ethers.parseUnits($("#amt").value.trim() || "0", 18); } catch {}
+    const amt = amtIn();
     autoFrom(amt);
     updCost(amt);
     tradeLabel(amt, null);
@@ -3979,7 +4001,8 @@ async function renderToken(addr) {
         ? await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt)
         : await quoteSwap(P, addr, info.quoteIsCurrency0, buying, amt);
       if (seq === pvSeq && !stale()) {
-        $("#pv").textContent = `${compact(Number(ethers.formatUnits(amt, 18)))} ${buying ? payUnit() : "$" + info.symbol} ≈ ${compact(Number(ethers.formatUnits(out, 18)))} ${buying ? "$" + info.symbol : payUnit()}`;
+        const paid = usdMode() ? fmtUsd(Number(ethers.formatEther(amt)) * nativeUsd(P.ch)) : `${compact(Number(ethers.formatUnits(amt, 18)))} ${buying ? payUnit() : "$" + info.symbol}`;
+        $("#pv").textContent = `${paid} ≈ ${compact(Number(ethers.formatUnits(out, 18)))} ${buying ? "$" + info.symbol : payUnit()}`;
         tradeLabel(amt, out);
       }
     } catch (e) { if (seq === pvSeq && !stale()) $("#pv").textContent = "Can't quote this amount"; }
@@ -3991,11 +4014,11 @@ async function renderToken(addr) {
     try {
       if (!account) await connect();
       await loadCash().catch(() => {});
-      try { autoFrom(ethers.parseUnits($("#amt").value.trim() || "0", 18)); } catch {}
+      autoFrom(amtIn());
       if (from && tradeSide === "buy") {
         // paid on another chain: buyFor on this chain's PepesFamilyRemote, delivered by Relay
         const o = from;
-        const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
+        const amt = amtIn();
         if (!amt) throw new Error("Enter an amount");
         const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
         await requireWallet(o.ch); // connects too
@@ -4016,7 +4039,7 @@ async function renderToken(addr) {
       if (tradeSide === "buy" && gatherUsd) await gatherCash(P.ch, gatherUsd, (m2) => toast(m2, 30000));
       await requireWallet(P.ch);
       const nat0 = tradeSide === "sell" && P.ch !== HOME() ? await P.ch.reader.getBalance(account).catch(() => null) : null;
-      const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
+      const amt = amtIn();
       if (!amt) throw new Error("Enter an amount");
       const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
       let tx;
