@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#000000" />
 <meta name="description" content="Discover, launch and trade memecoins on Robinhood Chain and Ethereum. Pay from any chain; every trade pays holders." />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; base-uri 'none'; form-action 'none'; object-src 'none'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; frame-src https://www.geckoterminal.com https://dexscreener.com; base-uri 'none'; form-action 'none'; object-src 'none'" />
 <meta name="referrer" content="no-referrer" />
 <title>PepesFamily</title>
 <link rel="icon" href="/favicon.ico" sizes="32x32" />
@@ -217,7 +217,7 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 @media (max-width: 1180px) { .dgrid { grid-template-columns: 1fr; } .rail .tapecard { flex: none; } .rail .tapecard .tape { max-height: 460px; flex: none; } }
 .listcard { padding: 4px 0 6px; }
 .listcard .tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 var(--pad); }
-.listcard .tools .utabs { flex: 1; min-width: 0; }
+.listcard .tools .utabs { flex: 1 1 340px; min-width: 0; }
 .thead, .lrow { display: grid; grid-template-columns: 26px 48px minmax(0, 1fr) 112px 104px 76px 72px; gap: 12px; align-items: center; padding: 0 var(--pad); }
 .thead { height: 40px; font-size: 12px; color: var(--faint); }
 .thead span:nth-child(n+4), .lrow .r { text-align: right; }
@@ -457,13 +457,13 @@ const CONFIG = {
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const CHAINS = {
   robinhood: {
-    key: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
+    key: "robinhood", gt: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
     explorer: CONFIG.explorer, blockscoutApi: CONFIG.blockscoutApi, quoter: CONFIG.quoter, imd: CONFIG.imd, imdEthKey: CONFIG.imdEthKey,
     gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, stateView: CONFIG.stateView,
     remote: "0x54AAf9060067E43c92164894232dFd59C90F0178", remotePads: ["0xC26003787503b978033427F77047fAF5551Ca8CC", "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDG", "0x5fc5360D0400a0fD4F2AF552ADd042d716F1D168", 6]], blurb: "Robinhood Chain: low gas, home of $PEPES.",
   },
   ethereum: {
-    key: "ethereum", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
+    key: "ethereum", gt: "eth", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
     explorer: "https://etherscan.io", blockscoutApi: "https://eth.blockscout.com/api/v2", quoter: "0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203",
     imd: "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
@@ -472,20 +472,20 @@ const CHAINS = {
     stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
   },
   base: {
-    key: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
+    key: "base", gt: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
     explorer: "https://basescan.org", blockscoutApi: "https://base.blockscout.com/api/v2", quoter: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D",
     gmgn: "base", dex: "base", native: { name: "Ether", symbol: "ETH" }, blurb: "Base: low gas, paired with ETH.",
     remote: "0x4889969aE82f44375320c61ad647AAc820155A10", remotePads: ["0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]],
   },
   hyperevm: {
-    key: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
+    key: "hyperevm", gt: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
     explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
     gmgn: "hyperevm", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
     remote: "0xf268298cCeF5c2906667E1861B0316e06f9137e4", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
   },
   // BNB Smart Chain: Uniswap v4 (PoolManager 0x28e2…e9dF). No Blockscout there, so trade history comes from the RPC.
   bsc: {
-    key: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
+    key: "bsc", gt: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
     gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
     remote: "0xB18aC5C7bB28b89759Dd9c855bcD7bb5d6906BAc", remotePads: ["0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
@@ -786,6 +786,17 @@ const REMOTE_IFACE = new ethers.Interface([
   "function creatorOf(address token) view returns (address)",
 ]);
 /// Gas left on the destination chain when the user has (almost) none there: enough to claim and sell a few times.
+/// PepesFamily's own fees, all paid to `recipient` (the owner wallet):
+///   swapBps  on buys and sells of tokens from other launchpads and DEXes, through Relay (100 = 1%)
+///   xcBps    on payments made from another chain for our own launches and buys, through Relay (50 = 0.5%)
+///   launchUsd  a flat launch fee, pump.fun style, in the launch chain's coin (none on testnets)
+/// Relay keeps the app fees for `recipient` in USDC until claimed (relay.link app, free to claim on Base).
+const FEES = { recipient: "0x3c8A4d94B3219F6633F2cC94094f4765b30c691C", swapBps: 100, xcBps: 50, launchUsd: 2 };
+const appFees = (bps) => (bps > 0 ? [{ recipient: FEES.recipient, fee: String(bps) }] : undefined);
+/// USD price of `ch`'s own coin (0 while unknown, and on testnets).
+const nativeUsd = (ch) => (ch.testnet ? 0 : { ETH: prices.ethUsd, BNB: prices.bnbUsd, HYPE: prices.hypeUsd }[ch.native?.symbol || "ETH"] || 0);
+/// The launch fee on `ch`, in its coin: FEES.launchUsd at today's price (0 while the price is unknown).
+const launchFeeWei = (ch) => { const u = nativeUsd(ch); return u > 0 && FEES.launchUsd > 0 ? ethers.parseEther((FEES.launchUsd / u).toFixed(9)) : 0n; };
 const GAS_DROP = { ethereum: "0.0004", robinhood: "0.00005", base: "0.00005", hyperevm: "0.02", bsc: "0.0003" };
 /// Can launchpad P be used from another chain? (Its chain's PepesFamilyRemote exists and works with it.)
 const xcReady = (P) => !!(P?.ch.remoteLive && P.ch.remotePads?.some((a) => a.toLowerCase() === P.pad.toLowerCase()));
@@ -813,11 +824,14 @@ async function relayApi(path, body) {
   return j;
 }
 /// A quote for running `data` with `value` of the destination coin on `dest`'s PepesFamilyRemote, paid with `o`.
-async function xcQuote(o, dest, value, data) {
+/// `pre`: plain coin transfers on `dest` delivered in the same fill (the launch fee). Carries the app fee FEES.xcBps.
+async function xcQuote(o, dest, value, data, pre = []) {
+  const extra = pre.reduce((t, x) => t + x.value, 0n);
   return relayApi("quote/v2", {
     user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
     originChainId: o.ch.chainId, destinationChainId: dest.chainId, originCurrency: o.addr, destinationCurrency: ZERO_ADDR,
-    amount: value.toString(), tradeType: "EXACT_OUTPUT", txs: [{ to: dest.remote, value: value.toString(), data }],
+    amount: (value + extra).toString(), tradeType: "EXACT_OUTPUT", appFees: appFees(FEES.xcBps),
+    txs: [...pre.map((x) => ({ to: x.to, value: x.value.toString(), data: "0x" })), { to: dest.remote, value: value.toString(), data }],
   });
 }
 /// "You pay ≈ 0.0123 ETH on Robinhood · fees ≈ $0.03 · ~2 s" for a quote.
@@ -1170,12 +1184,13 @@ const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a to
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
-  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/rewards") ? "/rewards" : h;
+  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/x/") ? "/x" : h.startsWith("/rewards") ? "/rewards" : h;
   for (const a of document.querySelectorAll("#nav a, #tabbar a")) a.classList.toggle("on", a.dataset.r === (page === "/tokens" ? "/" : page));
   document.title = (TITLES[page] && page !== "/" ? TITLES[page] + " · " : "") + "PepesFamily";
   window.scrollTo(0, 0);
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
+  if (h.startsWith("/x/")) { const [k, a] = h.slice(3).split("/"); return renderMarketToken(k, a); }
   if (h === "/create") return renderCreate();
   if (h === "/admin") return renderAdmin();
   if (h === "/mint") return renderMint();
@@ -1262,7 +1277,7 @@ function discoverFrame(chains) {
     </div>
     <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours</span></div>
     <div class="trend" id="trend">${Array.from({ length: 5 }, () => `<div class="tc"><div class="head"><div class="avatar"></div><div class="skel" style="height:14px;width:50%"></div></div><div class="skel" style="height:24px;width:60%"></div></div>`).join("")}</div>
-    <div class="hsec"><h2>All tokens</h2></div>
+    <div class="hsec"><h2>All tokens</h2><div class="seg" id="scope" style="margin-left:auto"><button type="button" data-v="own">Launched here</button><button type="button" data-v="market">Every chain</button></div></div>
     <div class="dgrid">
       <section class="card listcard" aria-label="All tokens">
         <div class="tools">
@@ -1299,6 +1314,8 @@ async function renderHome() {
   let chainMode = "all";
   try { const c = localStorage.getItem("tokenChain"); if (c && (c === "all" || chains.some((x) => x.key === c))) chainMode = c; } catch {}
   let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15;
+  let scope = "own", market = null, marketErr = null;
+  try { if (localStorage.getItem("tokenScope") === "market") scope = "market"; } catch {}
   const M = (t) => mk.per.get(t.token.toLowerCase());
   const chainOf = (t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch;
   const row = (t, n) => {
@@ -1325,10 +1342,35 @@ async function renderHome() {
     if (q) shown = shown.filter((t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q) || t.token.toLowerCase().startsWith(q));
     return shown;
   };
+  // "Every chain": trending tokens from other launchpads and DEXes on our chains (GeckoTerminal), bought through Relay
+  const mscore = { hot: (x) => x.vol, new: (x) => x.created, mc: (x) => x.mc, gain: (x) => x.chg ?? -1e9 };
+  const showMarket = () => {
+    if (!market) {
+      $("#list").innerHTML = THEAD + (marketErr ? `<div class="empty">Couldn't load the markets: ${esc(marketErr)}. <button type="button" id="mretry">Retry</button></div>`
+        : `<div class="lrow"><span></span><div class="avatar"></div><div><div class="skel" style="height:14px;width:38%"></div></div></div>`.repeat(8));
+      const r = $("#mretry"); if (r) r.onclick = () => { marketErr = null; loadMarket(); };
+      return;
+    }
+    const q = SEARCH.toLowerCase().replace(/^\$/, "");
+    let shown = chainMode === "all" ? market : market.filter((x) => x.ch.key === chainMode);
+    if (q) shown = shown.filter((x) => x.name.toLowerCase().includes(q) || x.symbol.toLowerCase().includes(q) || x.address.toLowerCase().startsWith(q));
+    const all = [...shown].sort((a, b) => mscore[sortMode](b) - mscore[sortMode](a)), rows = all.slice(0, shownCount);
+    $("#list").innerHTML = THEAD + (rows.length ? rows.map((x, i) => `<a class="lrow" href="#/x/${x.ch.key}/${x.address}">
+      <span class="rk">${i + 1}</span>${mAvatar(x)}
+      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(x.name)}</b></div><div class="sub">$${esc(x.symbol)} · ${esc(x.ch.short)} · ${x.created ? ago(x.created) : "—"}</div></div>
+      <span class="r mcc">${x.mc ? fmtUsd(x.mc) : "—"}</span><span class="r vol">${fmtUsd(x.vol)}</span>
+      <span class="r chgc">${chgText(x.chg)}</span><span class="act">Buy</span></a>`).join("")
+      : `<div class="empty">${SEARCH ? `No trending token matches “${esc(SEARCH)}”. Paste its contract address in the search to open it.` : "Nothing trending on this chain right now."}</div>`)
+      + (all.length > shownCount ? `<div class="more"><button type="button" id="more">Show more · ${shownCount} of ${all.length}</button></div>` : "");
+    const more = $("#more"); if (more) more.onclick = () => { shownCount += 25; showList(); };
+  };
+  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => { marketErr = errMsg(e); }).finally(() => showList());
   const showList = window.showDiscoverList = () => {
     if (gen !== routeGen || !$("#list")) return;
     $("#sort").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.s === sortMode); b.setAttribute("aria-selected", b.dataset.s === sortMode); });
     $("#chainf").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.c === chainMode));
+    $("#scope").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === scope));
+    if (scope === "market") return showMarket();
     if (!listed) return;
     const all = ranked(sortMode, inScope());
     const sorted = all.slice(0, shownCount);
@@ -1383,6 +1425,13 @@ async function renderHome() {
     try { localStorage.setItem("tokenSort", sortMode); } catch {}
     showList();
   });
+  $("#scope").querySelectorAll("button").forEach((b) => b.onclick = () => {
+    scope = b.dataset.v; shownCount = 15;
+    try { localStorage.setItem("tokenScope", scope); } catch {}
+    if (scope === "market" && !market) loadMarket();
+    showList();
+  });
+  if (scope === "market") loadMarket();
   $("#chainf").querySelectorAll("button").forEach((b) => b.onclick = () => {
     chainMode = b.dataset.c; shownCount = 15;
     try { localStorage.setItem("tokenChain", chainMode); } catch {}
@@ -1431,6 +1480,227 @@ async function loadOfficial() {
     try { await navigator.clipboard.writeText(t.token); toast("Contract address copied"); }
     catch { toast(t.token, 8000); }
   };
+}
+
+// ---------------------------------------------------------------- Every chain
+// Tokens from other launchpads and DEXes on our chains: prices and trending lists from GeckoTerminal (free, about
+// 30 requests a minute, so cached), trades through Relay with the PepesFamily app fee (FEES.swapBps).
+const GT = "https://api.geckoterminal.com/api/v2";
+const gtCache = new Map();
+async function gtGet(path, ttl = 120_000) {
+  const hit = gtCache.get(path);
+  if (hit && Date.now() - hit.at < ttl) return hit.p;
+  const p = fetch(GT + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10000) }).then(async (r) => {
+    if (r.status === 429) throw new Error("price data is busy, try again in a minute");
+    if (!r.ok) throw new Error("price data answered " + r.status);
+    return r.json();
+  });
+  gtCache.set(path, { at: Date.now(), p });
+  p.catch(() => gtCache.delete(path));
+  return p;
+}
+const gtChains = () => Object.values(CHAINS).filter((c) => c.gt && !c.testnet);
+// coins, wrapped coins and stablecoins: trending pools are full of them, they are not what people come to find
+const MAJORS = new Set(["ETH", "WETH", "BNB", "WBNB", "HYPE", "WHYPE", "KHYPE", "STHYPE", "USDC", "USDT", "USDT0", "USD₮0", "USDG",
+  "USDE", "USDS", "DAI", "FDUSD", "USD1", "USDH", "BTC", "WBTC", "BTCB", "UBTC", "CBBTC", "STETH", "WSTETH", "CBETH", "UETH"]);
+/// Trending tokens on every chain (one entry per token, its busiest pool): { ch, address, name, symbol, image, price,
+/// mc, vol, chg, liq, created, pool }. Our own launches are left out (they have their own list).
+async function marketTokens() {
+  const lists = await Promise.all(gtChains().map(async (ch) => {
+    const j = await gtGet(`/networks/${ch.gt}/trending_pools?page=1&include=base_token`).catch(() => null);
+    if (!j?.data) return [];
+    const toks = new Map((j.included || []).map((t) => [t.id, t.attributes]));
+    return j.data.map((p) => {
+      const a = p.attributes, t = toks.get(p.relationships?.base_token?.data?.id);
+      if (!t || MAJORS.has(String(t.symbol).toUpperCase()) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
+      return { ch, address: ethers.getAddress(t.address), name: t.name, symbol: t.symbol, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "",
+        price: Number(a.base_token_price_usd) || 0, mc: Number(a.market_cap_usd || a.fdv_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
+        chg: a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null, liq: Number(a.reserve_in_usd) || 0,
+        created: a.pool_created_at ? Date.parse(a.pool_created_at) / 1000 : 0, pool: a.address };
+    }).filter(Boolean);
+  }));
+  const best = new Map();
+  for (const x of lists.flat()) { const k = x.ch.key + x.address.toLowerCase(), o = best.get(k); if (!o || x.vol > o.vol) best.set(k, x); }
+  if (!best.size && lists.every((l) => !l.length)) throw new Error("no chain answered");
+  return [...best.values()];
+}
+/// A token's picture from the market data (falls back to its ticker letters like our own tokens).
+const mAvatar = (x, cls = "") => (x.image ? `<img class="avatar ${cls}" width="${cls === "lg" ? 64 : 48}" height="${cls === "lg" ? 64 : 48}" src="${esc(x.image)}" alt="${esc(String(x.symbol).slice(0, 2))}" loading="lazy" referrerpolicy="no-referrer">`
+  : `<div class="avatar ${cls}">${esc(String(x.symbol || "?").slice(0, 2))}</div>`);
+/// Which of our chains `addr` trades on (DexScreener; the most liquid pair wins): the chain key, or null.
+async function findMarketChain(addr) {
+  const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, { signal: AbortSignal.timeout(10000) });
+  const ids = new Map(gtChains().filter((c) => c.dex).map((c) => [c.dex, c.key]));
+  const pairs = ((await r.json())?.pairs || []).filter((p) => ids.has(p.chainId)).sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
+  return pairs.length ? ids.get(pairs[0].chainId) : null;
+}
+/// One token's market data on `ch`: DexScreener first (its most liquid pair), GeckoTerminal if DexScreener has
+/// nothing. { name, symbol, image, price, mc, liq, vol, chg, chart (an embeddable chart URL or "") }.
+async function marketToken(ch, addr) {
+  try {
+    const r = await fetch(`https://api.dexscreener.com/tokens/v1/${ch.dex}/${addr}`, { signal: AbortSignal.timeout(10000) });
+    const p = (await r.json()).filter?.((x) => x.baseToken?.address?.toLowerCase() === addr.toLowerCase())
+      .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+    if (p) return { name: p.baseToken.name, symbol: p.baseToken.symbol, image: p.info?.imageUrl || "", price: Number(p.priceUsd) || 0,
+      mc: Number(p.marketCap || p.fdv) || 0, liq: Number(p.liquidity?.usd) || 0, vol: Number(p.volume?.h24) || 0,
+      chg: p.priceChange?.h24 != null ? Number(p.priceChange.h24) / 100 : null,
+      chart: `https://dexscreener.com/${p.chainId}/${p.pairAddress}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15` };
+  } catch {}
+  const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 60_000);
+  const t = j.data.attributes, pool = (j.included || []).find((x) => x.type === "pool")?.attributes;
+  return { name: t.name, symbol: t.symbol, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "", price: Number(t.price_usd) || 0,
+    mc: Number(t.market_cap_usd || t.fdv_usd) || 0, liq: Number(t.total_reserve_in_usd) || 0, vol: Number(t.volume_usd?.h24) || 0,
+    chg: pool?.price_change_percentage?.h24 != null ? Number(pool.price_change_percentage.h24) / 100 : null,
+    chart: pool ? `https://www.geckoterminal.com/${ch.gt}/pools/${pool.address}?embed=1&info=0&swaps=0&light_chart=0&chart_type=price&resolution=15m` : "" };
+}
+/// A Relay quote for a swap at `swapBps`: `amount` of `from` (on `fromCh`) into `to` (on `toCh`), exact in.
+function swapQuote(fromCh, from, toCh, to, amount) {
+  return relayApi("quote/v2", {
+    user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
+    originChainId: fromCh.chainId, destinationChainId: toCh.chainId, originCurrency: from, destinationCurrency: to,
+    amount: amount.toString(), tradeType: "EXACT_INPUT", appFees: appFees(FEES.swapBps),
+  });
+}
+const swapSummary = (q) => {
+  const o = q.details?.currencyOut, f = q.fees || {};
+  const fee = ["gas", "relayer", "app"].reduce((t, k) => t + Number(f[k]?.amountUsd || 0), 0);
+  return `You get ≈ ${Number(o?.amountFormatted || 0).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${esc(o?.currency?.symbol || "")}`
+    + ` · fees ≈ ${fmtUsd(fee)} (incl. ${FEES.swapBps / 100}% PepesFamily fee)${q.details?.timeEstimate ? ` · ~${q.details.timeEstimate} s` : ""}`;
+};
+
+/// A token from another launchpad or DEX (#/x/<chain>/<address>): price, chart, and buy or sell through Relay,
+/// paying from any chain.
+async function renderMarketToken(chKey, addrIn) {
+  const ch = CHAINS[chKey];
+  if (!ch?.gt || !ethers.isAddress(addrIn)) return ($("#app").innerHTML = `<div class="card empty">Unknown token or chain.</div>`);
+  const addr = ethers.getAddress(addrIn);
+  if (TOKEN_PAD.has(addr.toLowerCase())) return (location.hash = "#/t/" + addr); // one of ours: its own page
+  const gen = routeGen, stale = () => gen !== routeGen, app = $("#app");
+  let t, dec;
+  try {
+    [t, dec] = await Promise.all([marketToken(ch, addr), new ethers.Contract(addr, ["function decimals() view returns (uint8)"], ch.reader).decimals()]);
+    dec = Number(dec);
+  } catch (e) {
+    if (!stale()) {
+      app.innerHTML = `<div class="card empty"><h1>Token</h1><p>Couldn't load this token on ${esc(ch.name)}: ${esc(errMsg(e))}.</p><button type="button" id="mretry">Retry</button></div>`;
+      $("#mretry").onclick = () => route();
+    }
+    return;
+  }
+  if (stale()) return;
+  const NAT = ch.native?.symbol || "ETH";
+  const x = { symbol: t.symbol, image: t.image }, price = t.price, mc = t.mc, chg = t.chg;
+  document.title = `$${t.symbol} · PepesFamily`;
+  app.innerHTML = `<div class="two mfirst">
+    <div class="mflat">
+      <div class="card mlead">
+        <div class="thead-token">${mAvatar(x, "lg")}
+          <div style="min-width:0"><div class="row"><h1>${esc(t.name)}</h1><span class="pill">$${esc(t.symbol)}</span><span class="pill">${esc(ch.short)}</span><span class="pill warn">Not launched on PepesFamily</span></div>
+            <div class="stat" style="margin-top:4px"><a class="lnk" href="${ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)}</a> · <button type="button" class="sharebtn" id="mcopy">Copy address</button></div></div>
+        </div>
+        <div class="row" style="margin-top:20px;align-items:flex-end;gap:16px">
+          <div><div class="stat">Price</div><div class="price-big">${price ? fmtUsd(price) : "—"}</div></div>${chgText(chg)}
+          <span class="spacer"></span>
+          <div class="row ext">
+            ${ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
+            ${ch.dex ? `<a class="btn" href="https://dexscreener.com/${ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>` : ""}
+          </div>
+        </div>
+        ${t.chart ? `<iframe class="chart" style="height:400px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>` : `<div class="empty">No trading pool found yet.</div>`}
+        <div class="warn-box" style="margin-top:14px">This token wasn't launched on PepesFamily: we didn't check its contract. It may have taxes, a locked sell or an owner who can change it. Only buy what you can afford to lose.</div>
+      </div>
+      <div class="stats q">
+        <div class="card"><div class="k">Market cap</div><div class="v">${mc ? fmtUsd(mc) : "—"}</div></div>
+        <div class="card"><div class="k">Liquidity</div><div class="v">${t.liq ? fmtUsd(t.liq) : "—"}</div></div>
+        <div class="card"><div class="k">24h volume</div><div class="v">${t.vol ? fmtUsd(t.vol) : "—"}</div></div>
+        <div class="card"><div class="k">24h change</div><div class="v">${chgText(chg)}</div></div>
+      </div>
+    </div>
+    <div class="mside">
+      <div class="card">
+        <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
+        <div class="row" id="mfromrow" style="margin-bottom:10px"><span class="stat">Pay with</span><span class="spacer"></span><select id="mfrom" aria-label="Pay with"></select></div>
+        <label for="mamt" id="mamtl" style="margin-top:0"></label>
+        <input id="mamt" inputmode="decimal" placeholder="0.0" autocomplete="off" />
+        <div class="quick" id="mquick"></div>
+        <div class="stat" id="mbal" style="margin-top:8px"></div>
+        <div class="preview" id="mpv">&nbsp;</div>
+        <button class="primary full" id="mgo" style="margin-top:6px"></button>
+        <div class="fees">Trades go through Relay. Every buy and sell includes a ${FEES.swapBps / 100}% PepesFamily fee; network and Relay fees are shown before you confirm.</div>
+      </div>
+    </div></div>`;
+  $("#mcopy").onclick = async () => { try { await navigator.clipboard.writeText(addr); toast("Contract address copied"); } catch { toast(addr, 8000); } };
+  // pay options: the chain's own coin there, then every other chain and stablecoin Relay serves for us
+  const opts = [{ id: "", ch, sym: NAT, addr: ZERO_ADDR, dec: 18 }, ...payOptions(ch)];
+  $("#mfrom").innerHTML = opts.map((o, i) => `<option value="${i}">${esc(o.sym)} on ${esc(o.ch.short)}</option>`).join("");
+  let side = "buy", seq = 0, timer = 0, tokBal = 0n;
+  const payOpt = () => opts[Number($("#mfrom").value) || 0];
+  const tokR = new ethers.Contract(addr, ["function balanceOf(address) view returns (uint256)"], ch.reader);
+  const refreshBal = async () => {
+    if (!account) return ($("#mbal").textContent = "Connect a wallet to see your balance.");
+    try {
+      if (side === "sell") { tokBal = await tokR.balanceOf(account); $("#mbal").textContent = `You hold ${fmt(ethers.parseUnits(ethers.formatUnits(tokBal, dec), 18))} $${t.symbol}`; }
+      else {
+        const o = payOpt();
+        const b = o.addr === ZERO_ADDR ? await o.ch.reader.getBalance(account) : await new ethers.Contract(o.addr, ["function balanceOf(address) view returns (uint256)"], o.ch.reader).balanceOf(account);
+        $("#mbal").textContent = `Balance: ${Number(ethers.formatUnits(b, o.dec)).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${o.sym} on ${o.ch.short}`;
+      }
+    } catch { $("#mbal").textContent = ""; }
+  };
+  const amountWei = () => {
+    const v = $("#mamt").value.trim();
+    try { return v ? ethers.parseUnits(v, side === "sell" ? dec : payOpt().dec) : 0n; } catch { return null; }
+  };
+  const quote = (amt) => side === "buy" ? swapQuote(payOpt().ch, payOpt().addr, ch, addr, amt) : swapQuote(ch, addr, ch, ZERO_ADDR, amt);
+  const preview = () => {
+    clearTimeout(timer);
+    const amt = amountWei();
+    if (amt === null) return ($("#mpv").textContent = "Enter a valid amount");
+    if (!amt) return ($("#mpv").innerHTML = "&nbsp;");
+    $("#mpv").textContent = "Getting a price…";
+    timer = setTimeout(async () => {
+      const my = ++seq;
+      try { const q = await quote(amt); if (my === seq && !stale()) $("#mpv").innerHTML = swapSummary(q); }
+      catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
+    }, 500);
+  };
+  const setSide = (s2) => {
+    side = s2; $("#mamt").value = "";
+    app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
+    $("#mfromrow").hidden = side === "sell";
+    $("#mamtl").textContent = side === "buy" ? "Amount to spend" : `Amount of $${t.symbol} to sell (you receive ${NAT} on ${ch.short})`;
+    $("#mgo").textContent = side === "buy" ? `Buy $${t.symbol}` : `Sell $${t.symbol}`;
+    const q = side === "buy" ? (payOpt().dec === 18 && payOpt().sym !== "USDC" ? ["0.01", "0.05", "0.1", "0.5"] : ["5", "20", "50", "100"]) : ["25%", "50%", "100%"];
+    $("#mquick").innerHTML = q.map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
+    $("#mquick").querySelectorAll("button").forEach((b) => b.onclick = () => {
+      const v = b.dataset.v;
+      $("#mamt").value = v.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(v))) / 100n, dec) : v;
+      preview();
+    });
+    $("#mpv").innerHTML = "&nbsp;"; refreshBal();
+  };
+  app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => setSide(b.dataset.s));
+  $("#mfrom").onchange = () => setSide("buy");
+  $("#mamt").oninput = preview;
+  $("#mgo").onclick = async () => {
+    const btn = $("#mgo"); btn.disabled = true;
+    try {
+      const amt = amountWei();
+      if (!amt) throw new Error("Enter an amount");
+      const o = side === "buy" ? payOpt() : { ch, sym: t.symbol, addr, dec };
+      await requireWallet(o.ch); // connects too
+      if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
+      toast("Getting the price…", 6000);
+      const q = await quote(amt);
+      $("#mpv").innerHTML = swapSummary(q);
+      await xcExecute(q, o, (m2) => toast(m2, 30000));
+      toast(side === "buy" ? `Bought $${t.symbol}` : `Sold $${t.symbol}`, 8000);
+      $("#mamt").value = ""; $("#mpv").innerHTML = "&nbsp;";
+      refreshBal();
+    } catch (e) { toast(errMsg(e), 8000); }
+    btn.disabled = false;
+  };
+  setSide("buy");
 }
 
 // ---------------------------------------------------------------- Market data
@@ -2429,6 +2699,7 @@ async function renderCreate() {
         <div class="stat" id="ibcost"></div>
         <div class="stat" id="ibnote"></div>
         ${sec(LAUNCH?.split ? 5 : 4, "Launch")}
+        <div class="stat" id="lfee" style="margin-top:12px"></div>
         <button class="primary full" id="go" type="submit">Launch token</button>
       </form>
       <div class="card" style="margin-top:26px">
@@ -2504,8 +2775,9 @@ async function renderCreate() {
       try {
         const { amt, drop, value } = await xcValue();
         const data = REMOTE_IFACE.encodeFunctionData("launchFor", [LAUNCH.pad, account || "0x000000000000000000000000000000000000dEaD", "Quote", "QUOTE", "{}", [0, 300, 0], amt, 0, value - amt]);
-        const q = await xcQuote(from, ch, value, data);
-        if (seq === costSeq) $("#ibcost").innerHTML = xcSummary(q) + (value - amt > 0n ? ` · includes ${fmt(value - amt, 6)} ${esc(NAT)} for gas on ${esc(ch.short)}` : "");
+        const fee = launchFeeWei(ch);
+        const q = await xcQuote(from, ch, value, data, fee ? [{ to: FEES.recipient, value: fee }] : []);
+        if (seq === costSeq) $("#ibcost").innerHTML = xcSummary(q) + (fee ? ` · includes the $${FEES.launchUsd} launch fee` : "") + (value - amt > 0n ? ` and ${fmt(value - amt, 6)} ${esc(NAT)} for gas on ${esc(ch.short)}` : "");
       } catch (e) { if (seq === costSeq) $("#ibcost").textContent = "Can't get a price from this chain right now: " + errMsg(e); }
     }, 600);
   };
@@ -2544,6 +2816,7 @@ async function renderCreate() {
   };
   $("#ib").oninput = updPreview;
   updStart();
+  { const fee = launchFeeWei(ch); $("#lfee").textContent = fee ? `Launch fee: $${FEES.launchUsd} (≈ ${fmt(fee, 6)} ${NAT}), paid to PepesFamily when you launch.` : ""; }
   const image = setupImageField();
 
   $("#cf").onsubmit = async (ev) => {
@@ -2575,7 +2848,8 @@ async function renderCreate() {
         }
         const data = REMOTE_IFACE.encodeFunctionData("launchFor", [LAUNCH.pad, account, form.name, form.symbol, JSON.stringify(m), [split.c, split.h, split.b], buy, minOut, drop]);
         toast("Getting the price…", 6000);
-        const q = await xcQuote(o, ch, value, data);
+        const fee = launchFeeWei(ch);
+        const q = await xcQuote(o, ch, value, data, fee ? [{ to: FEES.recipient, value: fee }] : []);
         $("#ibcost").innerHTML = xcSummary(q);
         const hashes = await xcExecute(q, o, (m2) => toast(m2, 30000));
         let token = null;
@@ -2602,8 +2876,14 @@ async function renderCreate() {
         await ensureImdAllowance(imdBuy, LAUNCH.router, quote);
       }
       const router = new ethers.Contract(LAUNCH.router, ROUTER_ABI, signer);
-      toast(ethBuy ? "Step 1 of 2: confirm the launch in your wallet…" : "Confirm the launch in your wallet…", 8000);
       if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
+      const fee = launchFeeWei(ch);
+      if (fee > 0n) {
+        if ((await signer.provider.getBalance(account)) < fee + ethBuy) throw new Error(`Not enough ${NAT}: the launch fee is ${fmt(fee, 6)} ${NAT}${ethBuy ? ", plus your buy" : ""}`);
+        toast(`Confirm the $${FEES.launchUsd} launch fee (${fmt(fee, 6)} ${NAT}) in your wallet…`, 10000);
+        await (await signer.sendTransaction({ to: FEES.recipient, value: fee })).wait();
+      }
+      toast(ethBuy ? "Confirm the launch in your wallet (your buy comes next)…" : "Confirm the launch in your wallet…", 8000);
       const tx = LAUNCH.split
         ? await router.launchWithSplit(form.name, form.symbol, JSON.stringify(m), quote, [split.c, split.h, split.b], imdBuy, minOut, { value: 0n })
         : await router.launch(form.name, form.symbol, JSON.stringify(m), quote, imdBuy, minOut, { value: 0n });
@@ -2617,7 +2897,7 @@ async function renderCreate() {
           for (let i = 0; i < 6 && !info; i++) { try { info = await LAUNCH.v.getTokenInfo(token); } catch { await new Promise((r) => setTimeout(r, 1500)); } }
           if (!info) throw new Error("the new token isn't visible yet");
           const expected = await quoteSwapEth(LAUNCH, token, info.quoteIsCurrency0, true, ethBuy);
-          toast(`Token launched! Step 2 of 2: confirm your ${NAT} buy…`, 10000);
+          toast(`Token launched! Now confirm your ${NAT} buy…`, 10000);
           const tx2 = await new ethers.Contract(LAUNCH.ethRouter, ETH_ROUTER_ABI, signer)
             .buyWithEth(token, withSlippage(expected, 500), deadline(), { value: ethBuy });
           toast("Buying…", 15000);
@@ -2654,7 +2934,13 @@ async function renderToken(addr) {
     try { info = await cand.v.getTokenInfo(addr); P = cand; break; } catch {}
   }
   if (stale()) return;
-  if (!P) return (app.innerHTML = `<div class="card empty">Token not found on this launchpad.</div>`);
+  if (!P) {
+    // not launched here: open it as a market token if it trades on one of our chains
+    const k = await findMarketChain(addr).catch(() => null);
+    if (stale()) return;
+    if (k) return (location.hash = `#/x/${k}/${ethers.getAddress(addr)}`);
+    return (app.innerHTML = `<div class="card empty"><h1>Token not found</h1><p>${esc(short(addr))} isn't a PepesFamily token and doesn't trade on Robinhood Chain, Ethereum, Base, HyperEVM or BSC.</p></div>`);
+  }
   const sp = await splitOf(P, addr).catch(() => null); // v5: where this token's 3% goes
   if (stale()) return;
   const p = info, q = info.quote, Q = qsym(q), m = meta(info.metadata);

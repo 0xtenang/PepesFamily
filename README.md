@@ -343,3 +343,16 @@ The owner **can't** change the fee percentages, touch pool liquidity or unexpire
 - **Hosting headers.** Serve the site over HTTPS, and set `X-Frame-Options: DENY` / `frame-ancestors 'none'` on your host. These headers can't be set from the HTML file.
 
 **Not audited.** Get an independent audit before significant value flows through it.
+
+## Every chain and PepesFamily fees
+
+Discover's **Every chain** list shows trending tokens from other launchpads and DEXes on our chains (GeckoTerminal),
+and any token address opens its own page (`#/x/<chain>/<address>`, data from DexScreener). Those trades go through
+Relay, paid from any chain and any supported currency. The fees (`FEES` in `web/index.html`) go to the owner wallet:
+
+| Fee | Amount | How |
+|---|---|---|
+| Swaps of tokens not launched here | 1% (`swapBps`) | Relay app fee, kept in USDC by Relay until claimed (relay.link app) |
+| Cross-chain launches and buys of our tokens | 0.5% (`xcBps`) | Relay app fee |
+| Launch fee | $2 in the chain's coin (`launchUsd`) | a transfer before the launch, or inside the Relay fill when paid from another chain |
+| Trades of our tokens | 1% protocol fee | on-chain, collected from each launchpad (Admin page) |
