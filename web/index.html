@@ -728,7 +728,14 @@ const SUPPLY = 10n ** 27n;
 const ONE = 10n ** 18n;
 
 for (const ch of Object.values(CHAINS)) {
-  ch.reader = new ethers.JsonRpcProvider(ch.rpc, ch.chainId, { staticNetwork: true });
+  // one read per request: free RPCs refuse a whole batch when one read in it is too old for them (PublicNode's BSC
+  // keeps only the last 128 blocks of state), which would fail every other read in that batch too
+  ch.reader = new ethers.JsonRpcProvider(ch.rpc, ch.chainId, { staticNetwork: true, batchMaxCount: 1 });
+  const send = ch.reader.send.bind(ch.reader);
+  ch.reader.send = (method, params) => send(method, params).catch((e) => {
+    if (/archive|personal token/i.test(JSON.stringify(e?.info || e?.message || ""))) console.warn(`${ch.name} RPC refused an old-data read`, method, params);
+    throw e;
+  });
   ch.quoterR = new ethers.Contract(ch.quoter, QUOTER_ABI, ch.reader);
 }
 const reader = CHAINS.robinhood.reader; // Robinhood-only features ($EARN, Pepes, prices) read here
@@ -1146,6 +1153,7 @@ function toast(msg, ms = 4000) {
   clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = "none"), ms);
 }
 function errMsg(e) {
+  if (/Archive requests require/i.test(JSON.stringify(e?.info?.responseBody || e?.error?.message || e?.message || ""))) return "The chain's data service refused a request for older data. Try again in a moment.";
   if (PRIVY_ERR && Date.now() - PRIVY_ERR.at < 10000) { const m = PRIVY_ERR.msg; PRIVY_ERR = null; return m; }
   // ethers' "could not coalesce error" wraps a wallet error it didn't recognize: show the wallet's own words
   const inner = e?.error?.message || e?.info?.error?.message;
@@ -4148,10 +4156,10 @@ async function fetchTradeLogs(P, addr, createdBlock, pages = 6) {
     const latest = await P.ch.reader.getBlockNumber();
     const CHUNK = 900, MAX_CHUNKS = 8;
     const from = Math.max(Number(createdBlock), latest - CHUNK * MAX_CHUNKS);
-    const logs = [];
-    for (let start = from; start <= latest; start += CHUNK) {
-      logs.push(...(await padC.queryFilter(padC.filters.Trade(addr), start, Math.min(start + CHUNK - 1, latest))));
-    }
+    const starts = [];
+    for (let start = from; start <= latest; start += CHUNK) starts.push(start);
+    // the chunks at once (one request each), oldest first in the result
+    const logs = (await Promise.all(starts.map((start) => padC.queryFilter(padC.filters.Trade(addr), start, Math.min(start + CHUNK - 1, latest))))).flat();
     // times from block numbers: the chain's pace measured over the scanned range
     const [bl, b0] = await Promise.all([P.ch.reader.getBlock(latest), P.ch.reader.getBlock(from)]);
     const per = latest > from ? (bl.timestamp - b0.timestamp) / (latest - from) : 1;
