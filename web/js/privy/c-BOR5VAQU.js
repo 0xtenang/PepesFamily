@@ -1,0 +1,1 @@
+import{a as o}from"./c-VVYWJ3JX.js";import{b as h}from"./c-Y4USFN7N.js";import{f as s}from"./c-K7HT7LU7.js";var e=s(h(),1);var r=({icon:t,name:i})=>typeof t=="string"?(0,e.jsx)("img",{alt:`${i||"wallet"} logo`,src:t,style:{height:24,width:24,borderRadius:4}}):t===void 0?(0,e.jsx)(o,{style:{height:24,width:24}}):t?(0,e.jsx)(t,{style:{height:24,width:24}}):null;export{r as a};

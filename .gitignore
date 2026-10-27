@@ -4,3 +4,4 @@ contracts/broadcast/*/31337/
 contracts/broadcast/**/dry-run/
 .env
 .DS_Store
+privy/node_modules/

@@ -356,3 +356,15 @@ Relay, paid from any chain and any supported currency. The fees (`FEES` in `web/
 | Cross-chain launches and buys of our tokens | 0.5% (`xcBps`) | Relay app fee |
 | Launch fee | $2 in the chain's coin (`launchUsd`) | a transfer before the launch, or inside the Relay fill when paid from another chain |
 | Trades of our tokens | 1% protocol fee | on-chain, collected from each launchpad (Admin page) |
+
+## Email sign-in (PepesFamily wallet, by Privy)
+
+Visitors can sign in with email, Google or Apple instead of a wallet app. Privy creates a wallet for them and the
+site trades with it without wallet windows (a trade above `CONFIG.privyConfirmUsd`, $250, asks once on the page).
+They add funds by sending ETH, BNB or HYPE to the address in the wallet menu, and can export the key there.
+
+- Source: `privy/island.jsx`. Build with `cd privy && npm install && npm run build`; it writes `web/js/privy/` and
+  updates `CONFIG.privyScript` in `web/index.html`.
+- Turn it on: set `CONFIG.privyAppId` (public; Privy dashboard > App settings). In the dashboard, add
+  `https://pepesimd.fun` and `https://www.pepesimd.fun` to the allowed domains, pick the login methods, and turn on
+  EVM embedded wallets.

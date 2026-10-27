@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#000000" />
 <meta name="description" content="Discover, launch and trade memecoins on Robinhood Chain and Ethereum. Pay from any chain; every trade pays holders." />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; frame-src https://www.geckoterminal.com https://dexscreener.com; base-uri 'none'; form-action 'none'; object-src 'none'" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; frame-src https://www.geckoterminal.com https://dexscreener.com https://auth.privy.io https://challenges.cloudflare.com; child-src https://auth.privy.io; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'" />
 <meta name="referrer" content="no-referrer" />
 <title>PepesFamily</title>
 <link rel="icon" href="/favicon.ico" sizes="32x32" />
@@ -345,6 +345,8 @@ td.n, th.n { text-align: right; }
 @media (max-width: 760px) { .mint-top { grid-template-columns: 1fr; } }
 
 /* wallet picker */
+.wopt.privy { display: grid; text-align: left; gap: 2px; border-color: var(--accent, #8fd66a); }
+.wopt .wsub { order: 2; font-size: 12px; color: var(--muted, #9a9a9a); font-weight: 400; }
 .modal { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .7); display: grid; place-items: center; }
 .modal .card { width: min(360px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 8px; background: var(--raised); box-shadow: 0 20px 60px rgba(0,0,0,.6); } /* taste-skill-ignore: a dialog floats */
 .modal .card.big { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
@@ -379,6 +381,11 @@ td.n, th.n { text-align: right; }
 // ---------------------------------------------------------------- Config
 // Robinhood Chain mainnet deployments (see contracts/deployments/).
 const CONFIG = {
+  // Privy (privy.io): "Email, Google or Apple" sign-in with a PepesFamily wallet that trades without wallet windows.
+  // The App ID is public (Privy dashboard > App settings); empty hides the option. privyScript is set by privy/build.mjs.
+  privyAppId: "",
+  privyConfirmUsd: 250, // a trade above this asks once on the page
+  privyScript: "/js/privy/privy-IMWF3Z4L.js",
   chainId: 4663,
   chainName: "Robinhood Chain",
   rpc: "https://robinhood-rpc.publicnode.com",       // reads; swap in a paid RPC for heavy traffic
@@ -1072,6 +1079,7 @@ document.addEventListener("error", (e) => {
   img.replaceWith(div);
 }, true);
 function toast(msg, ms = 4000) {
+  if (WALLET_KIND === "privy" && /in your wallet/i.test(msg)) msg = "Sending…"; // the PepesFamily wallet signs without a window
   const t = $("#toast"); t.textContent = msg; t.style.display = "block";
   clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = "none"), ms);
 }
@@ -1089,7 +1097,7 @@ window.addEventListener("eip6963:announceProvider", (e) => {
 });
 window.dispatchEvent(new Event("eip6963:requestProvider"));
 
-let WALLET = null, walletName = "Your wallet", listening = null;
+let WALLET = null, walletName = "Your wallet", listening = null, WALLET_KIND = "";
 
 /// Name of an injected (pre-EIP-6963) provider from its flags.
 function legacyName(p) {
@@ -1121,12 +1129,13 @@ async function walletOptions() {
 
 async function pickWallet() {
   const opts = await walletOptions();
+  if (CONFIG.privyAppId) opts.unshift({ privy: true, info: { name: "Email, Google or Apple", icon: "" } });
   if (opts.length <= 1) return opts[0] || null;
   return new Promise((resolve) => {
     const m = document.createElement("div");
     m.className = "modal";
-    m.innerHTML = `<div class="card"><span class="h">Connect a wallet</span>
-      ${opts.map((w, i) => `<button class="wopt" data-i="${i}">${/^data:image\//.test(w.info.icon || "") ? `<img src="${esc(w.info.icon)}" alt="" />` : ""}<span>${esc(w.info.name)}</span></button>`).join("")}
+    m.innerHTML = `<div class="card"><span class="h">Sign in or connect a wallet</span>
+      ${opts.map((w, i) => `<button class="wopt${w.privy ? " privy" : ""}" data-i="${i}">${w.privy ? `<span class="wsub">No wallet app needed. Trades go through without a wallet window.</span>` : ""}${/^data:image\//.test(w.info.icon || "") ? `<img src="${esc(w.info.icon)}" alt="" />` : ""}<span>${esc(w.info.name)}</span></button>`).join("")}
       <button class="wopt" data-cancel="1">Cancel</button></div>`;
     m.onclick = (ev) => {
       const b = ev.target.closest("button");
@@ -1153,11 +1162,18 @@ function listen(eth) {
 /// Connects the wallet and switches it to `ch` (Robinhood Chain by default). `quiet` skips the page re-render
 /// (used when an action switches the network in the middle of a flow).
 async function connect(ch = CHAINS.robinhood, quiet = false) {
-  const picked = WALLET ? { provider: WALLET, info: { name: walletName } } : await pickWallet();
+  let picked = WALLET ? { provider: WALLET, info: { name: walletName } } : await pickWallet();
   if (!picked) {
     if (!WALLETS.length && !window.ethereum) toast("No wallet found. Install a browser wallet such as MetaMask, Rabby or Phantom.");
     return;
   }
+  if (picked.privy) {
+    toast("Opening sign-in…", 4000);
+    const w = await (await loadPrivy()).connect();
+    picked = { provider: guardPrivy(w.provider), info: { name: "PepesFamily wallet" } };
+    WALLET_KIND = "privy";
+    try { localStorage.setItem("pf-privy", "1"); } catch {}
+  } else if (!WALLET) WALLET_KIND = "";
   const eth = picked.provider;
   walletName = picked.info?.name || "Your wallet";
   // Ask for the account first: some wallets (Phantom) reject every other request until the site is authorized.
@@ -1220,6 +1236,88 @@ async function requireWallet(ch = CHAINS.robinhood) {
   }
 }
 
+// ---------------------------------------------------------------- PepesFamily wallet (Privy)
+// Sign in with email, Google or Apple and get a wallet that trades without wallet windows (a Privy embedded wallet:
+// its key is split and secured by Privy, the visitor can export it any time). Privy's code (privy/ in the repo, about
+// 0.5 MB) loads only for visitors who choose it, or who signed in with it before.
+let privyLoading = null;
+function loadPrivy() {
+  return (privyLoading ||= new Promise((ok, fail) => {
+    const sc = document.createElement("script");
+    sc.type = "module"; sc.src = CONFIG.privyScript;
+    sc.onload = () => {
+      const chains = Object.values(CHAINS).filter((c) => !c.testnet).map((c) => ({ id: c.chainId, name: c.name,
+        native: c.native || { name: "Ether", symbol: "ETH" }, rpc: c.walletRpc || c.rpc, explorer: c.explorer }));
+      window.PFPrivy.init({ appId: CONFIG.privyAppId, chains, defaultChainId: CHAINS.robinhood.chainId });
+      ok(window.PFPrivy);
+    };
+    sc.onerror = () => { privyLoading = null; fail(new Error("Sign-in couldn't load. Check your connection and try again.")); };
+    document.head.appendChild(sc);
+  }));
+}
+/// Trades worth more than CONFIG.privyConfirmUsd still ask once, on the page (the wallet itself never shows a window).
+function guardPrivy(p) {
+  const big = async (wei) => {
+    const id = Number(await p.request({ method: "eth_chainId" }));
+    const ch = Object.values(CHAINS).find((c) => c.chainId === id);
+    const usdV = ch ? Number(ethers.formatEther(wei)) * nativeUsd(ch) : 0;
+    if (usdV > CONFIG.privyConfirmUsd && !confirm(`Send ${fmtUsd(usdV)} from your PepesFamily wallet?`)) {
+      throw Object.assign(new Error("Cancelled"), { code: 4001 });
+    }
+  };
+  return {
+    request: async (a) => {
+      if (a.method === "eth_sendTransaction") await big(BigInt(a.params?.[0]?.value || 0));
+      if (a.method === "wallet_sendCalls") await big((a.params?.[0]?.calls || []).reduce((t, c) => t + BigInt(c.value || 0), 0n));
+      return p.request(a);
+    },
+    on: (...x) => p.on?.(...x),
+    removeListener: (...x) => p.removeListener?.(...x),
+  };
+}
+/// A visitor who signed in with the PepesFamily wallet before is signed in again on load, quietly.
+async function restorePrivy() {
+  try { if (!CONFIG.privyAppId || localStorage.getItem("pf-privy") !== "1") return; } catch { return; }
+  try {
+    const w = await (await loadPrivy()).restore();
+    if (!w) { try { localStorage.removeItem("pf-privy"); } catch {} return; }
+    if (account) return; // connected another wallet meanwhile
+    WALLET = guardPrivy(w.provider); walletName = "PepesFamily wallet"; WALLET_KIND = "privy";
+    await connect(CHAINS.robinhood);
+  } catch (e) { console.warn("privy restore", e); }
+}
+function signOutState() {
+  signer = null; account = null; WALLET = null; WALLET_KIND = ""; listening = null; IS_ADMIN = false;
+  $("#connect").textContent = "Connect wallet"; $("#connect").classList.remove("addr"); $("#adminlink").hidden = true;
+  walletChanged();
+}
+/// The PepesFamily wallet's menu: its address to add funds to, export the key, sign out.
+async function privyMenu() {
+  const m = document.createElement("div");
+  m.className = "modal";
+  m.innerHTML = `<div class="card" role="dialog" aria-label="Your PepesFamily wallet"><span class="h">Your PepesFamily wallet</span>
+    <div class="stat">Add funds: send ETH (on Robinhood Chain, Ethereum or Base), BNB on BSC or HYPE on HyperEVM to this address. Only send from a network listed here.</div>
+    <div class="ca" style="margin:12px 0"><code style="word-break:break-all">${account}</code></div>
+    <button class="wopt" data-a="copy">Copy address</button>
+    <button class="wopt" data-a="export">Export private key</button>
+    <button class="wopt" data-a="out">Sign out</button>
+    <button class="wopt" data-a="close">Close</button></div>`;
+  document.body.appendChild(m);
+  m.onclick = async (ev) => {
+    const b = ev.target.closest("button");
+    if (!b && ev.target !== m) return;
+    const a = b?.dataset.a;
+    if (a === "copy") { try { await navigator.clipboard.writeText(account); toast("Address copied"); } catch { toast(account, 8000); } return; }
+    m.remove();
+    if (a === "export") (await loadPrivy()).exportWallet().catch((e) => toast(errMsg(e), 7000));
+    if (a === "out") {
+      try { localStorage.removeItem("pf-privy"); } catch {}
+      await (await loadPrivy()).logout().catch(() => {});
+      signOutState(); route();
+    }
+  };
+}
+
 /// One wallet confirmation for several calls on `ch` (EIP-5792 `wallet_sendCalls`, atomic: all or nothing), when
 /// the wallet supports it (MetaMask does, through its smart account). Resolves with the receipts once mined; null
 /// when the wallet can't batch, so the caller sends the calls one by one as before. Rejecting it throws.
@@ -1259,7 +1357,7 @@ const ERC20_IFACE = new ethers.Interface(ERC20_ABI.concat(["function deposit() p
 const ROUTER_IFACE = new ethers.Interface(ROUTER_ABI), ETH_ROUTER_IFACE = new ethers.Interface(ETH_ROUTER_ABI);
 /// The chain the wallet is on now (so a buy can pay from it without a network switch), or 0.
 let WALLET_CHAIN = 0;
-$("#connect").onclick = () => connect().catch((e) => toast(errMsg(e), 7000));
+$("#connect").onclick = () => (account && WALLET_KIND === "privy" ? privyMenu() : connect()).catch((e) => toast(errMsg(e), 7000));
 
 async function ensureImdAllowance(amount, spender, imdAddr = CONFIG.imd) {
   const imd = new ethers.Contract(imdAddr, ERC20_ABI, signer);
@@ -3630,6 +3728,7 @@ const booted = fromCache
   : Promise.all([loadPads(), loadPrices()]);
 booted.finally(() => {
   route();
+  restorePrivy();
   // A chain whose RPC failed: its tokens are missing for now, so say so rather than hide them silently.
   const down = [...new Set(PADS.filter((P) => P.readErr).map((P) => P.ch.name))];
   if (LAUNCH && down.length) toast(`${down.join(" and ")} couldn't be reached: its tokens are missing until you reload.`, 9000);

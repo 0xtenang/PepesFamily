@@ -1,0 +1,1 @@
+import{a as o}from"./c-Y4USFN7N.js";import{f as c}from"./c-K7HT7LU7.js";var t=c(o(),1),u=e=>{let[r,s]=(0,t.useState)();return(0,t.useEffect)(()=>{e().then(a=>{s(a)}).catch(()=>{})},[]),r};export{u as a};
