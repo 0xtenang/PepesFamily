@@ -226,6 +226,7 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .lrow .rk { color: var(--faint); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
 .lrow .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lrow .nm b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pfmark { width: 16px; height: 16px; flex: none; vertical-align: -3px; margin-left: 2px; }
 .lrow .sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
 .lrow .r { font-weight: 500; }
 .lrow .r.dim { color: var(--muted); font-weight: 400; }
@@ -1282,9 +1283,9 @@ function discoverFrame(chains) {
       <div><div class="k">Traded, last 24h</div><div class="v" id="k-vol24"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="k-vol24-sub">&nbsp;</div></div>
       <div><div class="k">Tokens</div><div class="v" id="tot-count"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-count-sub">&nbsp;</div></div>
     </div>
-    <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours</span></div>
+    <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours, every chain</span></div>
     <div class="trend" id="trend">${Array.from({ length: 5 }, () => `<div class="tc"><div class="head"><div class="avatar"></div><div class="skel" style="height:14px;width:50%"></div></div><div class="skel" style="height:24px;width:60%"></div></div>`).join("")}</div>
-    <div class="hsec"><h2>All tokens</h2><div class="seg" id="scope" style="margin-left:auto"><button type="button" data-v="own">Launched here</button><button type="button" data-v="market">Every chain</button></div></div>
+    <div class="hsec"><h2>Tokens</h2><span class="stat">every chain · <svg class="pfmark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/></svg> launched on PepesFamily</span></div>
     <div class="dgrid">
       <section class="card listcard" aria-label="All tokens">
         <div class="tools">
@@ -1320,91 +1321,70 @@ async function renderHome() {
   try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain"].includes(v)) sortMode = v; } catch {}
   let chainMode = "all";
   try { const c = localStorage.getItem("tokenChain"); if (c && (c === "all" || chains.some((x) => x.key === c))) chainMode = c; } catch {}
-  let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15;
-  let scope = "own", market = null, marketErr = null;
-  try { if (localStorage.getItem("tokenScope") === "market") scope = "market"; } catch {}
+  let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15, market = null;
   const M = (t) => mk.per.get(t.token.toLowerCase());
   const chainOf = (t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch;
-  const row = (t, n) => {
-    const m = M(t);
-    return `<a class="lrow" href="#/t/${t.token}">
-      <span class="rk">${n}</span>${avatar(t)}
-      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(t.name)}</b>${t.token.toLowerCase() === CONFIG.pepes.toLowerCase() ? `<span class="pill">Official</span>` : ""}</div>
-        <div class="sub">$${esc(t.symbol)} · ${esc(chainOf(t)?.short || "")} · ${ago(t.createdAt)}</div></div>
-      <span class="r mcc">${usd(t.marketCap, t.quote)}</span>
-      <span class="r vol${m ? "" : " dim"}">${m ? usd(m.vol, t.quote) : "—"}</span>
-      <span class="r chgc">${chgText(pctOf(t, m))}</span>
-      <span class="act">Buy</span></a>`;
+  const ownHot = (list) => [...list].sort((a, b) => (M(b) ? toUsdNum(M(b).vol, b.quote) : 0) - (M(a) ? toUsdNum(M(a).vol, a.quote) : 0)
+    || toUsdNum(b.marketCap, b.quote) - toUsdNum(a.marketCap, a.quote));
+  // One list, like a trading app: tokens launched here and trending tokens from other launchpads and DEXes on our
+  // chains (GeckoTerminal), in the same shape. Ours carry the frog mark; every row buys the same way.
+  const FROG = `<svg class="pfmark" viewBox="0 0 32 32" aria-label="Launched on PepesFamily" role="img"><title>Launched on PepesFamily</title><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.4" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.4" fill="#fff"/></svg>`;
+  const items = () => {
+    const own = (listed || []).map((t) => {
+      const m = M(t);
+      return { href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: chainOf(t), address: t.token, created: Number(t.createdAt),
+        mc: toUsdNum(t.marketCap, t.quote), vol: m ? toUsdNum(m.vol, t.quote) : 0, chg: pctOf(t, m), own: true,
+        official: t.token.toLowerCase() === CONFIG.pepes.toLowerCase() };
+    });
+    const ext = (market || []).map((x) => ({ ...x, href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), own: false }));
+    return [...own, ...ext];
   };
-  const score = {
-    hot: (t) => [M(t) ? toUsdNum(M(t).vol, t.quote) : 0, toUsdNum(t.marketCap, t.quote)],
-    new: (t) => [Number(t.createdAt), 0],
-    mc: (t) => [toUsdNum(t.marketCap, t.quote), 0],
-    gain: (t) => [pctOf(t, M(t)) ?? -1e9, toUsdNum(t.marketCap, t.quote)],
-  };
-  const ranked = (mode, list) => list.map((t) => ({ t, k: score[mode](t) })).sort((a, b) => b.k[0] - a.k[0] || b.k[1] - a.k[1]).map((x) => x.t);
+  const score = { hot: (x) => x.vol, new: (x) => x.created, mc: (x) => x.mc, gain: (x) => x.chg ?? -1e9 };
+  const ranked = (mode, list) => [...list].sort((a, b) => score[mode](b) - score[mode](a) || b.mc - a.mc);
   const inScope = () => {
     const q = SEARCH.toLowerCase().replace(/^\$/, "");
-    let shown = chainMode === "all" ? listed : listed.filter((t) => chainOf(t)?.key === chainMode);
-    if (q) shown = shown.filter((t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q) || t.token.toLowerCase().startsWith(q));
+    let shown = chainMode === "all" ? items() : items().filter((x) => x.ch?.key === chainMode);
+    if (q) shown = shown.filter((x) => x.name.toLowerCase().includes(q) || x.symbol.toLowerCase().includes(q) || x.address.toLowerCase().startsWith(q));
     return shown;
   };
-  // "Every chain": trending tokens from other launchpads and DEXes on our chains (GeckoTerminal), bought through Relay
-  const mscore = { hot: (x) => x.vol, new: (x) => x.created, mc: (x) => x.mc, gain: (x) => x.chg ?? -1e9 };
-  const showMarket = () => {
-    if (!market) {
-      $("#list").innerHTML = THEAD + (marketErr ? `<div class="empty">Couldn't load the markets: ${esc(marketErr)}. <button type="button" id="mretry">Retry</button></div>`
-        : `<div class="lrow"><span></span><div class="avatar"></div><div><div class="skel" style="height:14px;width:38%"></div></div></div>`.repeat(8));
-      const r = $("#mretry"); if (r) r.onclick = () => { marketErr = null; loadMarket(); };
-      return;
-    }
-    const q = SEARCH.toLowerCase().replace(/^\$/, "");
-    let shown = chainMode === "all" ? market : market.filter((x) => x.ch.key === chainMode);
-    if (q) shown = shown.filter((x) => x.name.toLowerCase().includes(q) || x.symbol.toLowerCase().includes(q) || x.address.toLowerCase().startsWith(q));
-    const all = [...shown].sort((a, b) => mscore[sortMode](b) - mscore[sortMode](a)), rows = all.slice(0, shownCount);
-    $("#list").innerHTML = THEAD + (rows.length ? rows.map((x, i) => `<a class="lrow" href="#/x/${x.ch.key}/${x.address}">
-      <span class="rk">${i + 1}</span>${mAvatar(x)}
-      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(x.name)}</b></div><div class="sub">$${esc(x.symbol)} · ${esc(x.ch.short)} · ${x.created ? ago(x.created) : "—"}</div></div>
-      <span class="r mcc">${x.mc ? fmtUsd(x.mc) : "—"}</span><span class="r vol">${fmtUsd(x.vol)}</span>
-      <span class="r chgc">${chgText(x.chg)}</span><span class="act">Buy</span></a>`).join("")
-      : `<div class="empty">${SEARCH ? `No trending token matches “${esc(SEARCH)}”. Paste its contract address in the search to open it.` : "Nothing trending on this chain right now."}</div>`)
-      + (all.length > shownCount ? `<div class="more"><button type="button" id="more">Show more · ${shownCount} of ${all.length}</button></div>` : "");
-    const more = $("#more"); if (more) more.onclick = () => { shownCount += 25; showList(); };
-  };
-  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => { marketErr = errMsg(e); }).finally(() => showList());
+  const row = (x, n) => `<a class="lrow" href="${x.href}">
+      <span class="rk">${n}</span>${x.av}
+      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? FROG : ""}${x.official ? `<span class="pill">Official</span>` : ""}</div>
+        <div class="sub">$${esc(x.symbol)} · ${esc(x.ch?.short || "")} · ${x.created ? ago(x.created) : "—"}</div></div>
+      <span class="r mcc">${x.mc ? fmtUsd(x.mc) : "—"}</span>
+      <span class="r vol${x.vol ? "" : " dim"}">${x.vol ? fmtUsd(x.vol) : "—"}</span>
+      <span class="r chgc">${chgText(x.chg)}</span>
+      <span class="act">Buy</span></a>`;
   const showList = window.showDiscoverList = () => {
     if (gen !== routeGen || !$("#list")) return;
     $("#sort").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.s === sortMode); b.setAttribute("aria-selected", b.dataset.s === sortMode); });
     $("#chainf").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.c === chainMode));
-    $("#scope").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === scope));
-    if (scope === "market") return showMarket();
-    if (!listed) return;
+    if (!listed && !market) return;
     const all = ranked(sortMode, inScope());
     const sorted = all.slice(0, shownCount);
     // one row that fails to render (odd creator data) is skipped, never the whole list
-    const safe = (t, i) => { try { return row(t, i + 1); } catch (e) { console.warn("token row", t.token, e); return ""; } };
+    const safe = (x, i) => { try { return row(x, i + 1); } catch (e) { console.warn("token row", x.address, e); return ""; } };
     $("#list").innerHTML = THEAD + (sorted.length ? sorted.map(safe).join("")
-      : `<div class="empty">${SEARCH ? `No token matches “${esc(SEARCH)}”.` : `No tokens on ${esc(CHAINS[chainMode]?.name || "this chain")} yet.`} <a class="lnk" href="#/create">Launch one</a></div>`)
+      : `<div class="empty">${SEARCH ? `No token matches “${esc(SEARCH)}”. Paste a contract address in the search to open any token.` : `No tokens on ${esc(CHAINS[chainMode]?.name || "this chain")} yet.`} <a class="lnk" href="#/create">Launch one</a></div>`)
       + (all.length > shownCount ? `<div class="more"><button type="button" id="more">Show ${Math.min(25, all.length - shownCount)} more · ${shownCount} of ${all.length}</button></div>` : "");
     const more = $("#more"); if (more) more.onclick = () => { shownCount += 25; showList(); };
   };
   const showTrend = () => {
-    if (gen !== routeGen || !listed || !$("#trend")) return;
+    if (gen !== routeGen || (!listed && !market) || !$("#trend")) return;
     const skip = new Set(CONFIG.kingExclude.map((a) => a.toLowerCase()));
-    const top = ranked("hot", listed.filter((t) => !skip.has(t.token.toLowerCase()))).slice(0, 5);
-    $("#trend").innerHTML = top.map((t) => {
-      const m = M(t);
-      return `<a class="tc" href="#/t/${t.token}">
-        <div class="head">${avatar(t)}<div style="min-width:0"><div class="nm">${esc(t.name)}</div><div class="meta">$${esc(t.symbol)}<span class="ch"> · ${esc(chainOf(t)?.short || "")}</span></div></div></div>
-        <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${usd(t.marketCap, t.quote)}</div></div>${chgText(pctOf(t, m))}</div>
-        <div class="meta">${m ? `${usd(m.vol, t.quote)} in ${m.n} trade${m.n === 1 ? "" : "s"}` : "No trades in 24h"}</div></a>`;
-    }).join("") || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
+    const top = ranked("hot", items().filter((x) => !skip.has(x.address.toLowerCase()))).slice(0, 5);
+    $("#trend").innerHTML = top.map((x) => `<a class="tc" href="${x.href}">
+        <div class="head">${x.av}<div style="min-width:0"><div class="nm">${esc(x.name)}${x.own ? FROG : ""}</div><div class="meta">$${esc(x.symbol)}<span class="ch"> · ${esc(x.ch?.short || "")}</span></div></div></div>
+        <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${x.mc ? fmtUsd(x.mc) : "—"}</div></div>${chgText(x.chg)}</div>
+        <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
+      || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
   };
+  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => console.warn("markets", e)).finally(() => { showList(); showTrend(); });
   const showFinding = () => {
     if (gen !== routeGen || !listed || !$("#finding")) return;
     let vol = 0, n = 0;
     for (const t of listed) { const m = M(t); if (m) { vol += toUsdNum(m.vol, t.quote); n += m.n; } }
-    const lead = ranked("hot", listed).find((t) => M(t));
+    const lead = ownHot(listed).find((t) => M(t));
     $("#finding").innerHTML = lead
       ? `$${esc(lead.symbol)} leads today with ${usd(M(lead).vol, lead.quote)} traded. ${n.toLocaleString("en-US")} trade${n === 1 ? "" : "s"} across ${listed.length} tokens in the last 24 hours.`
       : `No trades in the last 24 hours yet: the first buy sets the trend.`;
@@ -1432,13 +1412,7 @@ async function renderHome() {
     try { localStorage.setItem("tokenSort", sortMode); } catch {}
     showList();
   });
-  $("#scope").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    scope = b.dataset.v; shownCount = 15;
-    try { localStorage.setItem("tokenScope", scope); } catch {}
-    if (scope === "market" && !market) loadMarket();
-    showList();
-  });
-  if (scope === "market") loadMarket();
+  loadMarket();
   $("#chainf").querySelectorAll("button").forEach((b) => b.onclick = () => {
     chainMode = b.dataset.c; shownCount = 15;
     try { localStorage.setItem("tokenChain", chainMode); } catch {}
