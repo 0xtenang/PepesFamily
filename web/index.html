@@ -836,7 +836,7 @@ const REMOTE_IFACE = new ethers.Interface([
 ///   xcBps    on payments made from another chain for our own launches and buys, through Relay (50 = 0.5%)
 ///   launchUsd  a flat launch fee, pump.fun style, in the launch chain's coin (none on testnets)
 /// Relay keeps the app fees for `recipient` in USDC until claimed (relay.link app, free to claim on Base).
-const FEES = { recipient: "0x3c8A4d94B3219F6633F2cC94094f4765b30c691C", swapBps: 100, xcBps: 50, launchUsd: 2 };
+const FEES = { recipient: "0x3c8A4d94B3219F6633F2cC94094f4765b30c691C", swapBps: 100, xcBps: 50, launchUsd: 0.5 };
 const appFees = (bps) => (bps > 0 ? [{ recipient: FEES.recipient, fee: String(bps) }] : undefined);
 /// USD price of `ch`'s own coin (0 while unknown, and on testnets).
 const nativeUsd = (ch) => (ch.testnet ? 0 : { ETH: prices.ethUsd, BNB: prices.bnbUsd, HYPE: prices.hypeUsd }[ch.native?.symbol || "ETH"] || 0);
@@ -3454,7 +3454,7 @@ async function renderCreate() {
         const data = REMOTE_IFACE.encodeFunctionData("launchFor", [LAUNCH.pad, account || "0x000000000000000000000000000000000000dEaD", "Quote", "QUOTE", "{}", [0, 300, 0], amt, 0, value - amt]);
         const fee = launchFeeWei(ch);
         const q = await xcQuote(from, ch, value, data, fee ? [{ to: FEES.recipient, value: fee }] : []);
-        if (seq === costSeq) $("#ibcost").innerHTML = xcSummary(q) + (fee ? ` · includes the $${FEES.launchUsd} launch fee` : "") + (value - amt > 0n ? ` and ${fmt(value - amt, 6)} ${esc(NAT)} for gas on ${esc(ch.short)}` : "");
+        if (seq === costSeq) $("#ibcost").innerHTML = xcSummary(q) + (fee ? ` · includes the ${fmtUsd(FEES.launchUsd)} launch fee` : "") + (value - amt > 0n ? ` and ${fmt(value - amt, 6)} ${esc(NAT)} for gas on ${esc(ch.short)}` : "");
       } catch (e) { if (seq === costSeq) $("#ibcost").textContent = "Can't get a price from this chain right now: " + errMsg(e); }
     }, 600);
   };
@@ -3499,7 +3499,7 @@ async function renderCreate() {
   }
   $("#ib").oninput = updPreview;
   updStart();
-  { const fee = launchFeeWei(ch); $("#lfee").textContent = fee ? `Launch fee: $${FEES.launchUsd} (≈ ${fmt(fee, 6)} ${NAT}), paid to PepesFamily when you launch.` : ""; }
+  { const fee = launchFeeWei(ch); $("#lfee").textContent = fee ? `Launch fee: ${fmtUsd(FEES.launchUsd)} (≈ ${fmt(fee, 6)} ${NAT}), paid to PepesFamily when you launch.` : ""; }
   const image = setupImageField();
 
   $("#cf").onsubmit = async (ev) => {
@@ -3586,7 +3586,7 @@ async function renderCreate() {
       }
       if (imdBuy > 0n) await ensureImdAllowance(imdBuy, LAUNCH.router, quote);
       if (fee > 0n) {
-        toast(`Confirm the $${FEES.launchUsd} launch fee (${fmt(fee, 6)} ${NAT}) in your wallet…`, 10000);
+        toast(`Confirm the ${fmtUsd(FEES.launchUsd)} launch fee (${fmt(fee, 6)} ${NAT}) in your wallet…`, 10000);
         await (await signer.sendTransaction({ to: FEES.recipient, value: fee })).wait();
       }
       toast(ethBuy ? "Confirm the launch in your wallet (your buy comes next)…" : "Confirm the launch in your wallet…", 8000);

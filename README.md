@@ -354,7 +354,7 @@ Relay, paid from any chain and any supported currency. The fees (`FEES` in `web/
 |---|---|---|
 | Swaps of tokens not launched here | 1% (`swapBps`) | Relay app fee, kept in USDC by Relay until claimed (relay.link app) |
 | Cross-chain launches and buys of our tokens | 0.5% (`xcBps`) | Relay app fee |
-| Launch fee | $2 in the chain's coin (`launchUsd`) | a transfer before the launch, or inside the Relay fill when paid from another chain |
+| Launch fee | $0.50 in the chain's coin (`launchUsd`) | a transfer before the launch, or inside the Relay fill when paid from another chain |
 | Trades of our tokens | 1% protocol fee | on-chain, collected from each launchpad (Admin page) |
 
 ## Email sign-in (PepesFamily wallet, by Privy)
