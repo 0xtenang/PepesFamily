@@ -16,8 +16,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="preconnect" href="https://api.geckoterminal.com" crossorigin />
 <link rel="preconnect" href="https://robinhood-rpc.publicnode.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
-<script src="/js/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<link rel="preload" as="script" href="/js/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" />
+<!-- the font never holds up the first paint: system font first, Inter swaps in when it arrives -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
 <style>
 /* PepesFamily app. Style: true-black flat (tasteskill app sheet, seed 1669543942).
    Elevation by lightness alone: #000 ground, #111 card, #2a2a2a nested panel; no borders or shadows on cards.
@@ -404,10 +405,12 @@ td.n, th.n { text-align: right; }
   <form class="search" id="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search tokens or paste a contract…" autocomplete="off" spellcheck="false" aria-label="Search tokens"></form>
   <div class="acct"><span class="cashpill" id="cash" hidden></span><button id="connect" type="button">Connect wallet</button></div>
 </header>
-<main id="app" tabindex="-1"></main>
+<main id="app" tabindex="-1"><div class="card" style="height:240px" aria-busy="true"><div class="skel" style="height:18px;width:30%"></div></div></main>
 <nav class="tabbar" id="tabbar" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a></nav>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<!-- the wallet library (500 KB) after the page's frame, so the sidebar and top bar paint while it downloads -->
+<script src="/js/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 // ---------------------------------------------------------------- Config
 // Robinhood Chain mainnet deployments (see contracts/deployments/).
@@ -1721,7 +1724,7 @@ async function renderHome() {
   // the first trending page of every chain at once, then the rest (about 100 tokens a chain) when it comes in
   const loadMarket = () => marketTokens().then((m) => { if (!market || market.length < m.length) market = m; }).catch((e) => console.warn("markets", e))
     .finally(() => { showList(); showTrend(); saveCache(); })
-    .then(() => marketTokens(true)).then((m) => { if (gen === routeGen && m.length > (market?.length || 0)) { market = m; showList(); showTrend(); saveCache(); } })
+    .then(() => marketTokens(true, () => gen !== routeGen)).then((m) => { if (gen === routeGen && m.length > (market?.length || 0)) { market = m; showList(); showTrend(); saveCache(); } })
     .catch((e) => console.warn("more markets", e));
   // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
   let posSeq = 0;
@@ -1967,7 +1970,8 @@ async function gtGet(path, ttl = 120_000) {
   const once = async () => {
     let r = null;
     try { r = await fetch("/api/gt?p=" + encodeURIComponent(path), { signal: AbortSignal.timeout(12000) }); } catch {}
-    if (!r || r.status === 404 || r.status === 405 || r.status === 502) {
+    // no proxy here, or GeckoTerminal is limiting the proxy (its IPs are shared): straight from this browser instead
+    if (!r || r.status === 404 || r.status === 405 || r.status === 502 || r.status === 429) {
       try { r = await fetch(GT + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10000) }); }
       catch { r = { status: 429 }; } // the browser hides a refused (rate-limited) answer as a network error
     }
@@ -1992,7 +1996,8 @@ const MAJORS = new Set(["ETH", "WETH", "BNB", "WBNB", "HYPE", "WHYPE", "KHYPE", 
 /// mc, vol, chg, liq, created, pool }. Our own launches are left out (they have their own list).
 /// `deep`: also trending pages 2-5 and the 3 pages of busiest pools (by 24 h volume) per chain, about 100 tokens a
 /// chain like DexScreener's first page; otherwise only trending page 1 (20 pools), the quick first paint.
-async function marketTokens(deep = false) {
+const MARKET_POOL = new Map(); // chain key + token -> its most liquid pool seen in the lists ({ pool, liq }), for the chart
+async function marketTokens(deep = false, stop = () => false) {
   const paths = (ch) => [`/networks/${ch.gt}/trending_pools?page=1&include=base_token`,
     ...(deep ? [2, 3, 4, 5].map((n) => `/networks/${ch.gt}/trending_pools?page=${n}&include=base_token`) : []),
     ...(deep ? [1, 2, 3].map((n) => `/networks/${ch.gt}/pools?page=${n}&include=base_token&sort=h24_volume_usd_desc`) : [])];
@@ -2001,7 +2006,7 @@ async function marketTokens(deep = false) {
   let next = 0;
   const lists = new Array(all.length);
   await Promise.all(Array.from({ length: deep ? 4 : all.length }, async () => {
-    while (next < all.length) { const i = next++; lists[i] = await one(all[i]); }
+    while (next < all.length && !stop()) { const i = next++; lists[i] = await one(all[i]); }
   }));
   async function one({ ch, path }) {
     const j = await gtGet(path, deep ? 300_000 : 120_000).catch(() => null);
@@ -2017,10 +2022,10 @@ async function marketTokens(deep = false) {
         price: Number(a.base_token_price_usd) || 0, mc: Number(a.market_cap_usd || a.fdv_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
         chg: a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null, liq: Number(a.reserve_in_usd) || 0,
         created: a.pool_created_at ? Date.parse(a.pool_created_at) / 1000 : 0, pool: a.address };
-    }).filter(Boolean);
+    }).filter(Boolean).map((x) => { if (!MARKET_POOL.has(x.ch.key + x.address.toLowerCase()) || x.liq > (MARKET_POOL.get(x.ch.key + x.address.toLowerCase()).liq || 0)) MARKET_POOL.set(x.ch.key + x.address.toLowerCase(), { pool: x.pool, liq: x.liq }); return x; });
   }
   const best = new Map();
-  for (const x of lists.flat()) { const k = x.ch.key + x.address.toLowerCase(), o = best.get(k); if (!o || x.vol > o.vol) best.set(k, x); }
+  for (const x of lists.flat().filter(Boolean)) { const k = x.ch.key + x.address.toLowerCase(), o = best.get(k); if (!o || x.vol > o.vol) best.set(k, x); }
   if (!best.size && lists.every((l) => !l.length)) throw new Error("no chain answered");
   return [...best.values()];
 }
@@ -2214,6 +2219,7 @@ async function renderMarketToken(chKey, addrIn) {
   const addr = ethers.getAddress(addrIn);
   if (TOKEN_PAD.has(addr.toLowerCase())) return (location.hash = "#/t/" + addr); // one of ours: its own page
   const gen = routeGen, stale = () => gen !== routeGen, app = $("#app");
+  prefetchChart(ch, addr); // the chart's library and candles load while the token's details do
   let t, dec;
   try {
     [t, dec] = await Promise.all([marketToken(ch, addr), new ethers.Contract(addr, ["function decimals() view returns (uint8)"], ch.reader).decimals()]);
@@ -3675,6 +3681,7 @@ async function renderCreate() {
 // ---------------------------------------------------------------- Token page
 let tradeSide = "buy";
 async function renderToken(addr) {
+  loadLwc().catch(() => {}); // the chart's library loads while the token's details do
   if (!ethers.isAddress(addr)) return ($("#app").innerHTML = `<div class="card empty">Invalid token address</div>`);
   const app = $("#app");
   // Each render (a navigation, or the refresh after a trade) takes a new generation, so older loads can tell they
@@ -4110,6 +4117,29 @@ const loadLwc = () => (lwcLoading ||= new Promise((ok, fail) => {
   sc.onerror = () => { lwcLoading = null; fail(new Error("The chart couldn't load")); };
   document.head.appendChild(sc);
 }));
+const chartTf = () => { try { return Number(localStorage.getItem("pf-tf")) || 900; } catch { return 900; } };
+/// Starts loading what a token's chart needs (the library; for other tokens, the candles) before it is shown.
+function prefetchChart(ch, addr) {
+  loadLwc().catch(() => {});
+  if (ch && addr) gtCandles(ch, addr, chartTf()).catch(() => {});
+}
+// A pointer resting on a token link (Discover rows, trending cards, positions, search) starts loading its chart, so
+// the page opens with it ready.
+{
+  let hoverT = 0;
+  const seen = new Set();
+  document.addEventListener("pointerover", (e) => {
+    const a = e.target.closest?.('a[href^="#/x/"], a[href^="#/t/"]');
+    if (!a || seen.has(a.getAttribute("href"))) return;
+    clearTimeout(hoverT);
+    hoverT = setTimeout(() => {
+      const h = a.getAttribute("href");
+      seen.add(h);
+      const m = h.match(/^#\/x\/([a-z]+)\/(0x[0-9a-fA-F]{40})/);
+      if (m && CHAINS[m[1]]) prefetchChart(CHAINS[m[1]], m[2]); else loadLwc().catch(() => {});
+    }, 120);
+  }, { passive: true });
+}
 const TFS = [["1m", 60], ["5m", 300], ["15m", 900], ["1h", 3600], ["4h", 14400], ["1D", 86400]];
 /// $0.0₄292 for tiny prices (the zeros after the point counted, as GMGN does), else 4 significant digits.
 function tinyUsd(v, cur = "$") {
@@ -4140,18 +4170,24 @@ function tradeCandles(trades, sec) {
 }
 /// GeckoTerminal candles for `addr` on `ch`, in USD, from its most liquid pool there; oldest first.
 async function gtCandles(ch, addr, sec) {
-  const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000);
-  const pool = (j.included || []).filter((x) => x.type === "pool").sort((a, b) => Number(b.attributes.reserve_in_usd || 0) - Number(a.attributes.reserve_in_usd || 0))[0];
-  if (!pool) return [];
+  // the pool: known from the Discover lists (one request less), else the most liquid of the token's top pools
+  let pool = MARKET_POOL.get(ch.key + addr.toLowerCase())?.pool, base = "base";
+  if (!pool) {
+    const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000);
+    const p = (j.included || []).filter((x) => x.type === "pool").sort((a, b) => Number(b.attributes.reserve_in_usd || 0) - Number(a.attributes.reserve_in_usd || 0))[0];
+    if (!p) return [];
+    pool = p.attributes.address;
+    base = p.relationships?.base_token?.data?.id?.toLowerCase().endsWith(addr.toLowerCase()) ? "base" : "quote";
+    MARKET_POOL.set(ch.key + addr.toLowerCase(), { pool, base });
+  } else base = MARKET_POOL.get(ch.key + addr.toLowerCase()).base || "base";
   const [unit, agg] = sec >= 86400 ? ["day", 1] : sec >= 3600 ? ["hour", sec / 3600] : ["minute", sec / 60];
-  const base = pool.relationships?.base_token?.data?.id?.toLowerCase().endsWith(addr.toLowerCase()) ? "base" : "quote";
-  const o = await gtGet(`/networks/${ch.gt}/pools/${pool.attributes.address}/ohlcv/${unit}?aggregate=${agg}&limit=1000&currency=usd&token=${base}`, Math.min(sec * 1000, 60_000));
+  const o = await gtGet(`/networks/${ch.gt}/pools/${pool}/ohlcv/${unit}?aggregate=${agg}&limit=1000&currency=usd&token=${base}`, Math.min(sec * 1000, 60_000));
   return (o.data?.attributes?.ohlcv_list || []).map(([time, open, high, low, close, volume]) => ({ time, open, high, low, close, volume })).reverse();
 }
 /// Puts a candle chart in `box`. `src.load(sec)` gives candles in USD (oldest first); `src.mcap` turns a price into
 /// a market cap. Redraws every `src.every` ms while the page is open; returns { refresh }.
 async function candleChart(box, src) {
-  let tf = (() => { try { return Number(localStorage.getItem("pf-tf")) || 900; } catch { return 900; } })();
+  let tf = chartTf();
   let mode = "price";
   box.innerHTML = `<div class="cbar"><div class="seg" id="ctf">${TFS.map(([l, v]) => `<button type="button" data-v="${v}">${l}</button>`).join("")}</div>
       <span class="spacer"></span><div class="seg" id="cmode"><button type="button" data-v="price">Price</button><button type="button" data-v="mc">MCap</button></div></div>
@@ -4194,7 +4230,7 @@ async function candleChart(box, src) {
     try { raw = await src.load(tf); }
     catch (e) {
       if (my === seq && box.isConnected && !data.length) box.querySelector("#cmsg").textContent = "Chart data is busy: trying again…";
-      if (my === seq) setTimeout(() => box.isConnected && my === seq && draw(fit), 8000);
+      if (my === seq) setTimeout(() => box.isConnected && my === seq && draw(fit), 3000);
       return;
     }
     if (my !== seq || !box.isConnected) return;
