@@ -896,28 +896,47 @@ async function xcExecute(q, o, onStatus) {
       q = { ...q, steps: [] }; // all sent
     }
   }
+  // Each transaction goes to the wallet as it is (no extra round trips through ethers), and Relay is told about it
+  // the moment it's sent, so it starts filling before the block is final. The PepesFamily wallet sends approve and
+  // payment back to back (the chain runs them in order); other wallets wait for each one, polled every 0.4 s.
+  const fast = WALLET_KIND === "privy";
+  let last = null;
   for (const step of q.steps || []) {
     if (step.kind !== "transaction") throw new Error("This payment needs a signature type the site doesn't support yet: pay with the chain's coin instead.");
     for (const item of step.items || []) {
       if (item.status === "complete") continue;
       await requireWallet(o.ch);
       const d = item.data;
-      onStatus?.(step.action || "Confirm in your wallet…");
-      const tx = await signer.sendTransaction({ to: d.to, data: d.data, value: BigInt(d.value || 0), ...(d.gas ? { gasLimit: (BigInt(d.gas) * 13n) / 10n } : {}) });
-      await tx.wait();
+      if (last && !(fast && d.gas)) await waitReceipt(o.ch, last);
+      onStatus?.(fast ? "Buying…" : step.action || "Confirm in your wallet…");
+      last = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: d.to, data: d.data || "0x",
+        value: ethers.toQuantity(BigInt(d.value || 0)), ...(d.gas ? { gas: ethers.toQuantity((BigInt(d.gas) * 13n) / 10n) } : {}) }] });
+      relayApi("transactions/index", { txHash: last, chainId: String(o.ch.chainId) }).catch(() => {});
       if (item.check) check = item.check.endpoint;
     }
   }
   if (!check) throw new Error("Relay gave no way to follow this payment");
-  onStatus?.("Paid. Delivering on the other chain…");
-  for (let i = 0; i < 120; i++) {
-    await new Promise((r) => setTimeout(r, 2500));
+  onStatus?.(fast ? "Almost there…" : "Paid. Delivering…");
+  const sent = last && waitReceipt(o.ch, last).catch((e) => e); // a payment that fails on its own chain ends the wait
+  for (let i = 0; i < 400; i++) {
+    await new Promise((r) => setTimeout(r, i < 20 ? 700 : 2000));
+    if (sent && i % 3 === 2) { const r = await Promise.race([sent, null]); if (r instanceof Error) throw r; }
     const st = await relayApi(check.replace(/^\//, "")).catch(() => null);
     if (!st) continue;
     if (st.status === "success") return st.txHashes || [];
     if (st.status === "failure" || st.status === "refund" || st.status === "refunded") throw new Error(`The delivery didn't go through (${st.status}); Relay refunds the payment.`);
   }
-  throw new Error("Still delivering after 5 minutes: check your wallet on the other chain shortly.");
+  throw new Error("Still delivering after 10 minutes: check your wallet on the other chain shortly.");
+}
+/// Waits for `hash` on `ch` through our own connection, checking every 0.4 s; throws if it failed on chain.
+async function waitReceipt(ch, hash, maxMs = 300_000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    const r = await ch.reader.getTransactionReceipt(hash).catch(() => null);
+    if (r) { if (r.status === 0) throw new Error(`The transaction failed on ${ch.name}.`); return r; }
+    await new Promise((ok) => setTimeout(ok, 400));
+  }
+  throw new Error(`Still waiting for ${ch.name} to confirm the transaction. Check your wallet shortly.`);
 }
 /// Gas to leave the user on `dest`: GAS_DROP when they have less than that there, else none.
 async function gasDropFor(dest) {
@@ -1213,6 +1232,7 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
   WALLET = eth;
   listen(eth);
   const provider = new ethers.BrowserProvider(eth);
+  provider.pollingInterval = WALLET_KIND === "privy" ? 400 : 1000; // receipts noticed in under a second
   signer = await provider.getSigner();
   account = await signer.getAddress();
   // account is a checksummed hex address (safe as HTML); the first part is hidden on very narrow screens
@@ -1237,7 +1257,9 @@ async function requireWallet(ch = CHAINS.robinhood) {
   WALLET_CHAIN = ch.chainId;
   // The signer must be bound to `ch` too (it is rebuilt by connect after a switch).
   if (Number((await signer.provider.getNetwork()).chainId) !== ch.chainId) {
-    signer = await new ethers.BrowserProvider(WALLET).getSigner();
+    const bp = new ethers.BrowserProvider(WALLET);
+    bp.pollingInterval = WALLET_KIND === "privy" ? 400 : 1000;
+    signer = await bp.getSigner();
   }
 }
 
@@ -1291,6 +1313,37 @@ function guardPrivy(p) {
     if (bal < value + gas * price) short(value + gas * price);
     return gas;
   };
+  // The fast path, as trading apps do it: Privy only signs (in its secure enclave, ~0.1 s), and the signed transaction
+  // goes straight to the chain through our own connection, with nonces and fees tracked here. Back-to-back
+  // transactions (approve, then trade) go out at once without waiting for each other: the chain runs them in nonce order.
+  const nonces = {}, feeCache = {}, sent = new Map(); // hash -> signed transaction, for ethers' "is it there yet?"
+  let canSign = true;
+  const feesOf = async (ch) => {
+    const c = feeCache[ch.chainId];
+    if (c && Date.now() - c.at < 15000) return c.fee;
+    const fee = await ch.reader.getFeeData();
+    feeCache[ch.chainId] = { at: Date.now(), fee };
+    return fee;
+  };
+  const fastSend = async (ch, tx, gas) => {
+    const [fee, pending] = await Promise.all([feesOf(ch), ch.reader.getTransactionCount(account, "pending")]);
+    const nonce = Math.max(pending, nonces[ch.chainId] ?? 0);
+    const t = { from: account, to: tx.to, data: tx.data || "0x", value: ethers.toQuantity(BigInt(tx.value || 0)), gas: ethers.toQuantity(gas),
+      nonce: ethers.toQuantity(nonce), chainId: ethers.toQuantity(ch.chainId) };
+    if (fee.maxFeePerGas) Object.assign(t, { type: "0x2", maxFeePerGas: ethers.toQuantity((fee.maxFeePerGas * 12n) / 10n), maxPriorityFeePerGas: ethers.toQuantity(fee.maxPriorityFeePerGas || 0n) });
+    else Object.assign(t, { type: "0x0", gasPrice: ethers.toQuantity(((fee.gasPrice || 0n) * 12n) / 10n) });
+    const raw = await p.request({ method: "eth_signTransaction", params: [t] });
+    nonces[ch.chainId] = nonce + 1;
+    sent.set(ethers.keccak256(raw), raw);
+    try { return await ch.reader.send("eth_sendRawTransaction", [raw]); }
+    catch (e) {
+      delete nonces[ch.chainId];
+      if (/already known/i.test(errMsg(e))) return ethers.keccak256(raw);
+      throw e;
+    }
+  };
+  const SIGNING = new Set(["eth_chainId", "eth_accounts", "eth_requestAccounts", "eth_sendTransaction", "eth_signTransaction", "personal_sign",
+    "eth_sign", "eth_signTypedData", "eth_signTypedData_v4", "wallet_switchEthereumChain", "wallet_addEthereumChain"]);
   return {
     request: async (a) => {
       if (a.method === "eth_estimateGas" || a.method === "eth_sendTransaction") {
@@ -1299,7 +1352,31 @@ function guardPrivy(p) {
         if (ch) {
           const gas = await funds(a.method === "eth_estimateGas" ? { ...tx, gas: undefined } : tx, ch);
           if (a.method === "eth_estimateGas") return ethers.toQuantity(gas);
+          if (canSign) {
+            try { return await fastSend(ch, tx, tx.gas ? BigInt(tx.gas) : (gas * 12n) / 10n); }
+            catch (e) {
+              if (e?.code === 4001) throw e;
+              // a wallet that can't sign without sending: Privy sends it itself from now on
+              if (/not supported|unsupported|does not support/i.test(errMsg(e))) canSign = false;
+              else fail(`The network didn't take this trade: ${errMsg(e).slice(0, 160)}. Try again.`);
+            }
+          }
         }
+      } else if (!SIGNING.has(a.method) && !a.method.startsWith("wallet_")) {
+        // reads (receipts, balances, calls) from our own connection to the chain: the same node the trade went to
+        const ch = await chainNow();
+        if (!ch) return p.request(a);
+        const res = await ch.reader.send(a.method, a.params || []);
+        // a transaction we just sent that this node hasn't listed yet: answer from the signed transaction itself
+        const raw = a.method === "eth_getTransactionByHash" && !res && sent.get(String(a.params?.[0]).toLowerCase());
+        if (raw) {
+          const t = ethers.Transaction.from(raw), q = (v) => (v == null ? undefined : ethers.toQuantity(v));
+          return { hash: t.hash, type: q(t.type), from: t.from, to: t.to, nonce: q(t.nonce), gas: q(t.gasLimit), gasPrice: q(t.gasPrice ?? t.maxFeePerGas),
+            maxFeePerGas: q(t.maxFeePerGas), maxPriorityFeePerGas: q(t.maxPriorityFeePerGas), value: q(t.value), input: t.data, chainId: q(t.chainId),
+            accessList: t.type ? [] : undefined, r: t.signature.r, s: t.signature.s, v: q(t.signature.v), yParity: t.type ? q(t.signature.yParity) : undefined,
+            blockHash: null, blockNumber: null, transactionIndex: null };
+        }
+        return res;
       }
       if (a.method === "wallet_sendCalls") await big((a.params?.[0]?.calls || []).reduce((t, c) => t + BigInt(c.value || 0), 0n));
       return p.request(a);
@@ -1355,6 +1432,7 @@ async function privyMenu() {
 /// the wallet supports it (MetaMask does, through its smart account). Resolves with the receipts once mined; null
 /// when the wallet can't batch, so the caller sends the calls one by one as before. Rejecting it throws.
 async function walletBatch(ch, calls, label) {
+  if (WALLET_KIND === "privy") return null; // no windows to save: the fast path sends them back to back
   const hex = "0x" + ch.chainId.toString(16);
   let caps = null;
   try { caps = await WALLET.request({ method: "wallet_getCapabilities", params: [account, [hex]] }); } catch { return null; }
@@ -2034,7 +2112,7 @@ async function renderMarketToken(chKey, addrIn) {
       const my = ++seq;
       try {
         const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
-        if (my === seq && !stale()) $("#mpv").innerHTML = swapSummary(q);
+        if (my === seq && !stale()) { $("#mpv").innerHTML = swapSummary(q); lastQ = { key: qKey(o || { ch, addr }, amt), who: account, at: Date.now(), q }; }
       } catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
     }, 500);
   };
@@ -2055,12 +2133,15 @@ async function renderMarketToken(chKey, addrIn) {
   };
   app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => setSide(b.dataset.s));
   $("#mamt").oninput = preview;
+  // the price already on screen is the one Buy uses (under 25 s old, same amount and wallet): no second wait for it
+  let lastQ = null;
+  const qKey = (o, amt) => `${side}:${o.ch.key}:${o.addr}:${amt}`;
   $("#mgo").onclick = async () => {
     const btn = $("#mgo"); btn.disabled = true;
     try {
       if (side === "buy" && !$("#mrisk").hidden && !confirm(`${$("#mrisk").textContent}\n\nBuy $${t.symbol} anyway?`)) throw new Error("Cancelled");
       if (!account) await connect();
-      await loadCash(true);
+      await loadCash();
       let o, amt;
       if (side === "buy") {
         const usd = usdIn();
@@ -2075,14 +2156,17 @@ async function renderMarketToken(chKey, addrIn) {
       }
       await requireWallet(o.ch); // the paying chain
       if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
-      toast("Getting the price…", 6000);
-      const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
+      const fresh = lastQ && lastQ.key === qKey(o, amt) && lastQ.who === account && Date.now() - lastQ.at < 25_000;
+      if (!fresh) toast("Getting the price…", 6000);
+      const q = fresh ? lastQ.q : side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
+      lastQ = null; // a quote is used once
       $("#mpv").innerHTML = swapSummary(q);
+      const t0 = Date.now();
       await xcExecute(q, o, (m2) => toast(m2, 30000));
       if (side === "buy") rememberHeld(ch, addr, dec, t.symbol);
-      toast(side === "buy" ? `Bought $${t.symbol}` : `Sold $${t.symbol}`, 8000);
+      toast(`${side === "buy" ? "Bought" : "Sold"} $${t.symbol} in ${((Date.now() - t0) / 1000).toFixed(1)} s`, 8000);
       $("#mamt").value = ""; $("#mpv").innerHTML = "&nbsp;";
-      await loadCash(true).catch(() => {});
+      loadCash(true).then(() => window.refreshPositions?.()).catch(() => {});
       refreshBal();
     } catch (e) { toast(errMsg(e), 8000); }
     btn.disabled = false;
@@ -3574,7 +3658,7 @@ async function renderToken(addr) {
     const btn = $("#trade"); btn.disabled = true;
     try {
       if (!account) await connect();
-      await loadCash(true).catch(() => {});
+      await loadCash().catch(() => {});
       try { autoFrom(ethers.parseUnits($("#amt").value.trim() || "0", 18)); } catch {}
       if (from && tradeSide === "buy") {
         // paid on another chain: buyFor on this chain's PepesFamilyRemote, delivered by Relay
@@ -3648,8 +3732,9 @@ async function renderToken(addr) {
             : await routerW().sell(addr, amt, withSlippage(expected, slipBps), dl);
         }
       }
-      if (!receipts) { toast("Transaction sent…", 15000); await tx.wait(); }
-      toast(tradeSide === "buy" ? "Bought" : "Sold");
+      const t0 = Date.now();
+      if (!receipts) { toast(WALLET_KIND === "privy" ? (tradeSide === "buy" ? "Buying…" : "Selling…") : "Transaction sent…", 15000); await waitReceipt(P.ch, tx.hash); }
+      toast(`${tradeSide === "buy" ? "Bought" : "Sold"}${receipts ? "" : ` in ${((Date.now() - t0) / 1000).toFixed(1)} s`}`);
       if (!stale()) renderToken(addr);
     } catch (e) { toast(errMsg(e), 7000); }
     btn.disabled = false;

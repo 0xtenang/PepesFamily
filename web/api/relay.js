@@ -3,9 +3,11 @@
 // browser. Without the key it answers 404 and the page calls Relay directly (fine while Relay serves keyless quotes).
 //   POST /api/relay?p=quote/v2                       -> Relay's quote
 //   GET  /api/relay?p=intents/status/v3?requestId=…  -> a payment's status
-// Only those two Relay endpoints are passed on.
+//   POST /api/relay?p=transactions/index             -> "this payment was just sent" (Relay starts filling sooner)
+// Only those three Relay endpoints are passed on.
 
-const ALLOWED = [/^quote\/v2$/, /^intents\/status\/v3\?requestId=0x[0-9a-fA-F]{64}$/];
+const ALLOWED = [/^quote\/v2$/, /^intents\/status\/v3\?requestId=0x[0-9a-fA-F]{64}$/, /^transactions\/index$/];
+const POSTS = /^(quote\/v2|transactions\/index)$/;
 const ORIGINS = ["https://pepesfamily.fun", "https://www.pepesfamily.fun", "https://pepesimd.fun", "https://www.pepesimd.fun"];
 
 module.exports = async (req, res) => {
@@ -16,7 +18,7 @@ module.exports = async (req, res) => {
   if (req.method === "POST" && !ORIGINS.includes(origin)) return res.status(403).json({ error: "Forbidden" });
   const path = String(req.query.p || "");
   if (!ALLOWED.some((r) => r.test(path))) return res.status(400).json({ error: "Not a Relay endpoint this site uses" });
-  if ((req.method === "POST") !== path.startsWith("quote")) return res.status(405).json({ error: "Method not allowed" });
+  if ((req.method === "POST") !== POSTS.test(path)) return res.status(405).json({ error: "Method not allowed" });
   try {
     const r = await fetch("https://api.relay.link/" + path, {
       method: req.method,
