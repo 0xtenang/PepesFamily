@@ -1958,11 +1958,24 @@ const gtCache = new Map();
 async function gtGet(path, ttl = 120_000) {
   const hit = gtCache.get(path);
   if (hit && Date.now() - hit.at < ttl) return hit.p;
-  const p = fetch(GT + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10000) }).then(async (r) => {
+  // through /api/gt (Vercel's cache, shared by every visitor) when it's there, else GeckoTerminal directly; a busy
+  // answer (429) is tried once more after a moment
+  const once = async () => {
+    let r = null;
+    try { r = await fetch("/api/gt?p=" + encodeURIComponent(path), { signal: AbortSignal.timeout(12000) }); } catch {}
+    if (!r || r.status === 404 || r.status === 405 || r.status === 502) {
+      try { r = await fetch(GT + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10000) }); }
+      catch { r = { status: 429 }; } // the browser hides a refused (rate-limited) answer as a network error
+    }
+    return r;
+  };
+  const p = (async () => {
+    let r = await once();
+    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 2500)); r = await once(); }
     if (r.status === 429) throw new Error("price data is busy, try again in a minute");
     if (!r.ok) throw new Error("price data answered " + r.status);
     return r.json();
-  });
+  })();
   gtCache.set(path, { at: Date.now(), p });
   p.catch(() => gtCache.delete(path));
   return p;
@@ -2239,10 +2252,11 @@ async function renderMarketToken(chKey, addrIn) {
     </div></div>`;
   $("#mcopy").onclick = async () => { try { await navigator.clipboard.writeText(addr); toast("Contract address copied"); } catch { toast(addr, 8000); } };
   // GeckoTerminal's candles; DexScreener's embedded chart when it has none for this token
-  candleChart($("#cbox"), { load: (sec) => gtCandles(ch, addr, sec), mcap: (k) => k * (price ? mc / price : 0), every: 30_000 }).then(async () => {
-    const empty = !(await gtCandles(ch, addr, 3600).catch(() => [])).length;
-    if (empty && t.chart && !stale() && $("#cbox")) $("#cbox").outerHTML = `<iframe class="chart" style="height:420px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>`;
-  }).catch(() => {});
+  candleChart($("#cbox"), { load: (sec) => gtCandles(ch, addr, sec), mcap: (k) => k * (price ? mc / price : 0), every: 30_000 }).catch(() => {});
+  gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000).then((j) => {
+    const none = !(j.included || []).some((x) => x.type === "pool"); // GeckoTerminal has no pool for it: DexScreener's chart
+    if (none && t.chart && !stale() && $("#cbox")) $("#cbox").outerHTML = `<iframe class="chart" style="height:420px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>`;
+  }).catch((e) => { if (/answered 404/.test(errMsg(e)) && t.chart && !stale() && $("#cbox")) $("#cbox").outerHTML = `<iframe class="chart" style="height:420px;border:0;border-radius:12px" title="Price chart" loading="lazy" src="${esc(t.chart)}"></iframe>`; });
   // A buy is an amount in dollars, paid from the wallet's coins wherever they are (pickSource); a sell is an
   // amount of the token, paid out in this chain's coin.
   let side = "buy", seq = 0, timer = 0, tokBal = 0n;
@@ -4160,7 +4174,12 @@ async function candleChart(box, src) {
     box.querySelectorAll("#ctf button").forEach((b) => b.classList.toggle("on", Number(b.dataset.v) === tf));
     box.querySelectorAll("#cmode button").forEach((b) => b.classList.toggle("on", b.dataset.v === mode));
     let raw;
-    try { raw = await src.load(tf); } catch (e) { if (my === seq && box.isConnected) box.querySelector("#cmsg").textContent = "Chart data isn't available right now."; return; }
+    try { raw = await src.load(tf); }
+    catch (e) {
+      if (my === seq && box.isConnected && !data.length) box.querySelector("#cmsg").textContent = "Chart data is busy: trying again…";
+      if (my === seq) setTimeout(() => box.isConnected && my === seq && draw(fit), 8000);
+      return;
+    }
     if (my !== seq || !box.isConnected) return;
     const k = mode === "mc" ? src.mcap(1) : 1;
     data = raw.map((c) => ({ ...c, open: c.open * k, high: c.high * k, low: c.low * k, close: c.close * k }));
