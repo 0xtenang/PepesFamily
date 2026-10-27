@@ -13,6 +13,9 @@
 <link rel="icon" type="image/png" href="/icon-192.png" sizes="192x192" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://api.geckoterminal.com" crossorigin />
+<link rel="preconnect" href="https://robinhood-rpc.publicnode.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="/js/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <style>
@@ -710,6 +713,21 @@ const chainBadge = (P) => (P && P.ch.key !== "robinhood" ? `<span class="pill ch
 let LAUNCH = null; // newest live launchpad on the chosen chain: where new tokens are created
 let padR = null;   // LAUNCH's contract (launch form + admin owner lookups)
 const LAUNCHES = {}; // chain key -> newest live launchpad there for each pair asset (array, newest first)
+// What was deployed at the last visit (contracts never disappear), so a returning visitor's page opens at once and the
+// chains are checked again in the background.
+const LIVE_KEY = "pf-live:v1";
+const liveSig = () => JSON.stringify({ p: PADS.filter((P) => P.live).map((P) => P.pad.toLowerCase()), e: PADS.filter((P) => P.ethLive).map((P) => P.pad.toLowerCase()),
+  r: Object.values(CHAINS).filter((c) => c.remoteLive).map((c) => c.key) });
+function loadPadsCached() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LIVE_KEY) || "null");
+    if (!v || Date.now() - v.at > 7 * 86400_000 || !v.p?.length) return false;
+    for (const P of PADS) { P.live = v.p.includes(P.pad.toLowerCase()); P.ethLive = v.e.includes(P.pad.toLowerCase()); }
+    for (const c of Object.values(CHAINS)) c.remoteLive = v.r.includes(c.key);
+    sortLaunches();
+    return true;
+  } catch { return false; }
+}
 async function loadPads() {
   await Promise.all(PADS.map(async (P) => {
     try {
@@ -721,6 +739,11 @@ async function loadPads() {
   await Promise.all(Object.values(CHAINS).filter((c) => c.remote).map(async (c) => {
     try { c.remoteLive = (await c.reader.getCode(c.remote)).length > 2; } catch { c.remoteLive = false; }
   }));
+  if (!PADS.some((P) => P.readErr)) try { localStorage.setItem(LIVE_KEY, JSON.stringify({ ...JSON.parse(liveSig()), at: Date.now() })); } catch {}
+  sortLaunches();
+}
+function sortLaunches() {
+  for (const k of Object.keys(LAUNCHES)) delete LAUNCHES[k];
   for (const P of PADS) {
     if (!P.live || P.nft || P.version < 4) continue; // v1-v3 took several pair assets: never used for new launches
     const L = (LAUNCHES[P.ch.key] ||= []);
@@ -922,6 +945,16 @@ async function loadPrices() {
     coinUsd(999, "hyperliquid").then((v) => { if (v) prices.hypeUsd = v; }),
     coinUsd(56, "binancecoin").then((v) => { if (v) prices.bnbUsd = v; }),
   ]);
+  if (prices.ethUsd > 0) try { localStorage.setItem("pf-prices", JSON.stringify({ ...prices, at: Date.now() })); } catch {}
+}
+/// The prices from the last visit (under an hour old) so the first paint has dollar values; loadPrices refreshes them.
+function loadPricesCached() {
+  try {
+    const v = JSON.parse(localStorage.getItem("pf-prices") || "null");
+    if (!v || Date.now() - v.at > 3600_000 || !(v.ethUsd > 0)) return false;
+    for (const k of Object.keys(prices)) if (v[k] > 0) prices[k] = v[k];
+    return true;
+  } catch { return false; }
 }
 /// The USD price of `chainId`'s own coin: Relay first, then CoinGecko (`cgId`); 0 if neither answers.
 async function coinUsd(chainId, cgId) {
@@ -1370,6 +1403,16 @@ async function renderHome() {
   let chainMode = "all";
   try { const c = localStorage.getItem("tokenChain"); if (c && (c === "all" || chains.some((x) => x.key === c))) chainMode = c; } catch {}
   let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15, market = null;
+  // The list as the last visit saw it, shown at once and replaced as the chains and markets answer
+  let cached = null;
+  try {
+    const v = JSON.parse(localStorage.getItem("pf-discover:v1") || "null");
+    if (v && Date.now() - v.at < 86400_000) cached = v.items.map((x) => ({ ...x, ch: CHAINS[x.ch] })).filter((x) => x.ch);
+  } catch {}
+  const saveCache = () => {
+    if (!listed || !market) return;
+    try { localStorage.setItem("pf-discover:v1", JSON.stringify({ at: Date.now(), items: items().map((x) => ({ ...x, ch: x.ch?.key })) })); } catch {}
+  };
   const M = (t) => mk.per.get(t.token.toLowerCase());
   const chainOf = (t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch;
   const ownHot = (list) => [...list].sort((a, b) => (M(b) ? toUsdNum(M(b).vol, b.quote) : 0) - (M(a) ? toUsdNum(M(a).vol, a.quote) : 0)
@@ -1380,12 +1423,14 @@ async function renderHome() {
   const items = () => {
     const own = (listed || []).map((t) => {
       const m = M(t);
+      const was = !m && mk.per.size === 0 && cached?.find((x) => x.own && x.address === t.token); // 24h data not in yet
       return { href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: chainOf(t), address: t.token, created: Number(t.createdAt),
-        mc: toUsdNum(t.marketCap, t.quote), vol: m ? toUsdNum(m.vol, t.quote) : 0, chg: pctOf(t, m), own: true,
+        mc: toUsdNum(t.marketCap, t.quote), vol: m ? toUsdNum(m.vol, t.quote) : was ? was.vol : 0, chg: was ? was.chg : pctOf(t, m), own: true,
         official: t.token.toLowerCase() === CONFIG.pepes.toLowerCase() };
     });
-    const ext = (market || []).map((x) => ({ ...x, href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), own: false }));
-    return [...own, ...ext];
+    const ext = market ? market.map((x) => ({ ...x, href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), own: false }))
+      : (cached || []).filter((x) => !x.own);
+    return [...(listed ? own : (cached || []).filter((x) => x.own)), ...ext];
   };
   const score = { hot: (x) => x.vol, new: (x) => x.created, mc: (x) => x.mc, gain: (x) => x.chg ?? -1e9, pf: (x) => x.vol };
   const ranked = (mode, list) => [...list].sort((a, b) => score[mode](b) - score[mode](a) || b.mc - a.mc);
@@ -1408,7 +1453,7 @@ async function renderHome() {
     if (gen !== routeGen || !$("#list")) return;
     $("#sort").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.s === sortMode); b.setAttribute("aria-selected", b.dataset.s === sortMode); });
     $("#chainf").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.c === chainMode));
-    if (!listed && !market) return;
+    if (!listed && !market && !cached) return;
     const all = ranked(sortMode, inScope());
     const sorted = all.slice(0, shownCount);
     // one row that fails to render (odd creator data) is skipped, never the whole list
@@ -1419,7 +1464,7 @@ async function renderHome() {
     const more = $("#more"); if (more) more.onclick = () => { shownCount += 25; showList(); };
   };
   const showTrend = () => {
-    if (gen !== routeGen || (!listed && !market) || !$("#trend")) return;
+    if (gen !== routeGen || (!listed && !market && !cached) || !$("#trend")) return;
     const skip = new Set(CONFIG.kingExclude.map((a) => a.toLowerCase()));
     const pool = ranked("hot", items().filter((x) => !skip.has(x.address.toLowerCase())));
     const ours = pool.filter((x) => x.own).slice(0, 2);
@@ -1430,19 +1475,7 @@ async function renderHome() {
         <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
       || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
   };
-  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => console.warn("markets", e)).finally(() => { showList(); showTrend(); });
-  const showFinding = () => {
-    if (gen !== routeGen || !listed || !$("#finding")) return;
-    let vol = 0, n = 0;
-    for (const t of listed) { const m = M(t); if (m) { vol += toUsdNum(m.vol, t.quote); n += m.n; } }
-    const lead = ownHot(listed).find((t) => M(t));
-    $("#finding").innerHTML = lead
-      ? `$${esc(lead.symbol)} leads today with ${usd(M(lead).vol, lead.quote)} traded. ${n.toLocaleString("en-US")} trade${n === 1 ? "" : "s"} across ${listed.length} tokens in the last 24 hours.`
-      : `No trades in the last 24 hours yet: the first buy sets the trend.`;
-    $("#k-vol24").textContent = fmtUsd(vol);
-    $("#k-vol24-sub").textContent = `${n.toLocaleString("en-US")} trade${n === 1 ? "" : "s"}`;
-    $("#stamp").textContent = "Updated " + hhmm();
-  };
+  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => console.warn("markets", e)).finally(() => { showList(); showTrend(); saveCache(); });
   // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
   let posSeq = 0;
   const showPositions = window.refreshPositions = async () => {
@@ -1482,13 +1515,11 @@ async function renderHome() {
     try { localStorage.setItem("tokenChain", chainMode); } catch {}
     showList();
   });
-  showList();
+  showList(); showTrend();
   try {
     listed = (await allTokenInfos()).map((x) => x.t).filter(isListed);
     if (gen !== routeGen) return;
-    $("#tot-count").textContent = listed.length.toLocaleString("en-US");
-    $("#tot-count-sub").textContent = chains.map((c) => `${listed.filter((t) => chainOf(t) === c).length} on ${c.short}`).join(" · ");
-    showList(); showTrend();
+    showList(); showTrend(); saveCache();
   } catch (e) {
     if ($("#list")) $("#list").innerHTML = `<div class="empty">Couldn't read the launchpads: ${esc(errMsg(e))}. <button type="button" id="relist">Retry</button></div>`;
     if ($("#relist")) $("#relist").onclick = () => route();
@@ -1496,7 +1527,7 @@ async function renderHome() {
   }
   const refresh = async () => {
     try { mk = await market24h(); } catch (e) { console.warn("market data", e); }
-    showList(); showTrend(); showFinding();
+    showList(); showTrend(); saveCache();
   };
   await refresh();
   const timer = setInterval(() => (gen !== routeGen ? clearInterval(timer) : !document.hidden && refresh()), 20_000);
@@ -3592,7 +3623,12 @@ function drawChart(pts) {
     <div class="card">${`<div style="display:flex;gap:12px;align-items:center;height:72px"><div class="avatar"></div><div style="flex:1">${bar("30%", 14)}<div style="height:6px"></div>${bar("18%", 12)}</div></div>`.repeat(5)}</div>`;
   for (const a of document.querySelectorAll("#nav a, #tabbar a")) a.classList.toggle("on", a.dataset.r === (page === "/tokens" ? "/" : page));
 })();
-Promise.all([loadPads(), loadPrices()]).finally(() => {
+const fromCache = loadPadsCached() && loadPricesCached();
+const booted = fromCache
+  // returning visitor: open now from what the last visit saw, check the chains behind it and redraw only if they changed
+  ? (() => { const before = liveSig(); Promise.all([loadPads(), loadPrices()]).then(() => { if (liveSig() !== before) route(); }); return Promise.resolve(); })()
+  : Promise.all([loadPads(), loadPrices()]);
+booted.finally(() => {
   route();
   // A chain whose RPC failed: its tokens are missing for now, so say so rather than hide them silently.
   const down = [...new Set(PADS.filter((P) => P.readErr).map((P) => P.ch.name))];
