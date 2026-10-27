@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#000000" />
+<meta name="description" content="Discover, launch and trade memecoins on Robinhood Chain and Ethereum. Pay from any chain; every trade pays holders." />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; base-uri 'none'; form-action 'none'; object-src 'none'" />
 <meta name="referrer" content="no-referrer" />
 <title>PepesFamily</title>
@@ -11,372 +13,352 @@
 <link rel="icon" type="image/png" href="/icon-192.png" sizes="192x192" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <script src="/js/ethers-6.13.4.umd.min.js" integrity="sha512-V3xRGsQMQ8CG4l2gVN44TCDmNY5cdlxbSvejrgmWxcLKHft0Q3XQDbeuJ9aot14mpNuRWGtI//WKraedDGNZ+g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script>
-  // theme before first paint: the saved choice (dark unless light was picked)
-  try { const t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch {}
-</script>
 <style>
+/* PepesFamily app. Style: true-black flat (tasteskill app sheet, seed 1669543942).
+   Elevation by lightness alone: #000 ground, #111 card, #2a2a2a nested panel; no borders or shadows on cards.
+   The one data hue is Pepe's green, on data only (prices up, the chart line, a buy); never on buttons, tabs or nav.
+   Primary actions are inverted: a white pill with black text. Grid: 220px sidebar + canvas with 28px gutters,
+   one 14px gap everywhere. */
 :root {
-  --bg: #0a0b0d; --panel: #121418; --panel-2: #1a1d23; --line: #23272f; --strong: #f3f5f7;
-  --text: #f3f5f7; --muted: #8b93a1; --dim: #4b5260; --inv: #0a0b0d;
-  --accent: #3ddc84; --accent-ink: #04140a; --down: #ff5a5f; --warn: #f5c542;
-  --frame: #1c221c; --r: 14px; --r-sm: 10px;
+  --ground: #000000; --surface: #111111; --raised: #1c1c1c; --nested: #2a2a2a;
+  --border: #1a1a1a; --rule: #1a1a1a; --control: #444444;
+  --text: #ffffff; --muted: #b4b4b4; --faint: #949494; --nav: #bbbbbb;
+  --accent: #8fd66a; --positive: #8fd66a; --negative: #ff5c61; --warning: #e5a93b;
+  --pill-positive-bg: #1d2a14; --pill-negative-bg: #2c1a1c; --pill-warning-bg: #2b2414;
+  --radius-card: 20px; --radius-nested: 12px; --radius-control: 999px;
+  --gap: 14px; --pad: 22px; --gutter: 28px; --control-height: 36px; --sidebar: 220px; --topbar: 64px;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
 }
-:root[data-theme="light"] {
-  --bg: #f5f6f8; --panel: #ffffff; --panel-2: #eef0f3; --line: #e1e4e9; --strong: #0b0d10;
-  --text: #0b0d10; --muted: #5f6775; --dim: #a3aab5; --inv: #ffffff;
-  --accent: #0fa958; --accent-ink: #ffffff; --down: #e0383e; --warn: #b8860b;
-  --frame: #e8e8e5;
-  color-scheme: light;
-}
 * { box-sizing: border-box; }
-[hidden] { display: none !important; } /* layout classes like .row must not override the hidden attribute */
-html, body { background: var(--bg); }
-body { margin: 0; color: var(--text); font: 14px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+[hidden] { display: none !important; }
+html, body { background: var(--ground); }
+body { margin: 0; color: var(--text); font: 14px/20px var(--font); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-decoration: none; }
-.mono, code { font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
-.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font); font-variant-numeric: tabular-nums; }
+.num, .v, .r, td, .mc, .amt, .pv { font-variant-numeric: tabular-nums; }
 .muted { color: var(--muted); }
-.wrap { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
-
 .spacer { flex: 1; }
-#connect { white-space: nowrap; }
-button.icon { border: 0; background: none; color: var(--text); font-size: 16px; padding: 6px 8px; cursor: pointer; }
-@media (max-width: 600px) {
-  #connect.addr { text-transform: none; letter-spacing: 0; }
-  h1 { font-size: 28px; }
-  .stats:not(.q) { grid-template-columns: 1fr; }
-}
-@media (max-width: 360px) { #connect .a1 { display: none; } }
-
-/* controls */
-button, .btn {
-  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: var(--r-sm);
-  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); padding: 9px 16px; display: inline-block; text-align: center;
-  transition: background .12s, opacity .12s, transform .06s;
-}
-button:hover, .btn:hover { background: var(--line); }
-button:active, .btn:active { transform: translateY(1px); }
-button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-button.primary:hover, .btn.primary:hover { opacity: .88; background: var(--accent); }
-.btn.lg { padding: 13px 22px; font-size: 15px; border-radius: 12px; }
-.btn.sm, button.sm { padding: 6px 12px; font-size: 12px; }
-button:disabled { opacity: .35; cursor: not-allowed; }
-input, textarea, select {
-  font: inherit; width: 100%; padding: 11px 13px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: var(--r-sm);
-}
-input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
-textarea { min-height: 90px; resize: vertical; }
-label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
-
-/* layout */
-main { padding: 24px 16px 96px; }
-h1 { font-weight: 800; font-size: 34px; letter-spacing: -.025em; line-height: 1.1; margin: 0; }
-h2 { font-weight: 700; font-size: 20px; letter-spacing: -.01em; margin: 0; }
-h3 { font-weight: 600; font-size: 15px; }
-.hero { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin-bottom: 26px; }
-.hero p { margin: 8px 0 0; color: var(--muted); }
-.sec { display: flex; align-items: center; gap: 10px; margin: 28px 0 12px; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
-.sec .n { display: none; }
-.sec .t { font-weight: 600; }
-.sec .rule { flex: 1; }
-.seg { display: inline-flex; gap: 4px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; }
-.seg.wrap { flex-wrap: wrap; }
-#from, #ibfrom { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 8px 10px; font: inherit; font-size: 13px; max-width: 100%; width: auto; }
-.seg button { border: 0; background: transparent; padding: 6px 14px; color: var(--muted); border-radius: 999px; font-size: 13px; }
-.seg button:hover { color: var(--text); background: var(--panel-2); }
-.seg button.on { background: var(--strong); color: var(--inv); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.card { background: var(--panel); border: 1px solid var(--line); padding: 18px; border-radius: var(--r); }
-.tcard { display: flex; gap: 12px; transition: background .12s, border-color .12s; }
-.tcard:hover { background: var(--panel-2); border-color: var(--dim); }
-.avatar { width: 60px; height: 60px; background: var(--panel-2); object-fit: cover; flex: none; border: 1px solid var(--line); border-radius: 12px;
-  display: grid; place-items: center; font-weight: 600; color: var(--muted); overflow: hidden; }
-.avatar.lg { width: 88px; height: 88px; }
-.tcard .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border: 0; background: var(--panel-2); border-radius: 999px; white-space: nowrap; }
-.pill.eth { color: var(--text); } .pill.imd { color: var(--muted); } .pill.chain { color: var(--text); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.stat { font-size: 12px; color: var(--muted); }
+h1 { font-size: 20px; line-height: 28px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: 16px; line-height: 24px; font-weight: 600; margin: 0; }
+h3 { font-size: 14px; font-weight: 600; margin: 0; }
+:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+a, button, input, select, textarea { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+h1, h2 { text-wrap: balance; }
+.skip { position: fixed; left: 12px; top: -48px; z-index: 50; background: #fff; color: #000; padding: 8px 14px; border-radius: 999px; font-weight: 600; }
+.skip:focus { top: 12px; }
+.modal .card { overscroll-behavior: contain; }
+
+/* controls: pills; secondary = outlined, primary = inverted white */
+button, .btn {
+  font: inherit; font-size: 14px; font-weight: 500; line-height: 20px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  min-height: var(--control-height); padding: 7px 16px; border-radius: var(--radius-control);
+  border: 1px solid var(--control); background: transparent; color: var(--text); white-space: nowrap;
+  transition: background .12s, border-color .12s, transform .06s;
+}
+button:hover, .btn:hover { border-color: #6a6a6a; background: var(--raised); }
+button:active, .btn:active { transform: scale(.98); }
+button.primary, .btn.primary { background: #fff; border-color: #fff; color: #000; font-weight: 600; }
+button.primary:hover, .btn.primary:hover { background: #e6e6e6; border-color: #e6e6e6; }
+button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+button.icon { border: 0; min-height: 0; padding: 6px; }
+.full { width: 100%; margin-top: 8px; }
+input, textarea, select {
+  font: inherit; width: 100%; min-height: 40px; padding: 9px 14px; border: 1px solid var(--control); background: var(--ground); color: var(--text); border-radius: var(--radius-nested);
+}
+input::placeholder, textarea::placeholder { color: var(--faint); }
+input:focus, textarea:focus, select:focus { outline: none; border-color: #fff; }
+textarea { min-height: 96px; resize: vertical; }
+label { display: block; font-size: 14px; font-weight: 500; color: var(--text); margin: 16px 0 8px; }
+
+/* shell: ruled T-frame */
+.side { position: fixed; inset: 0 auto 0 0; width: var(--sidebar); border-right: 1px solid var(--rule); display: flex; flex-direction: column; padding: 0 12px 16px; z-index: 10; background: var(--ground); }
+.brand { display: flex; align-items: center; gap: 10px; height: var(--topbar); padding: 0 10px; font-weight: 600; font-size: 16px; }
+.brand svg { width: 28px; height: 28px; flex: none; }
+.navs { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
+.navs a { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; color: var(--nav); border-radius: 8px; }
+.navs a svg { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; }
+.navs a:hover { color: #fff; }
+.navs a.on { color: #fff; font-weight: 500; }
+.side .glabel { font-size: 12px; color: var(--faint); padding: 0 10px; margin: 28px 0 6px; }
+.side .chainrow { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; color: var(--nav); }
+.side .foot { margin-top: auto; display: flex; flex-direction: column; }
+.side .foot a { height: 30px; display: flex; align-items: center; padding: 0 10px; color: var(--faint); font-size: 13px; }
+.side .foot a:hover { color: #fff; }
+.top { position: sticky; top: 0; z-index: 9; margin-left: var(--sidebar); height: var(--topbar); display: flex; align-items: center; gap: 16px; padding: 0 var(--gutter); background: var(--ground); border-bottom: 1px solid var(--rule); }
+.top .mark { display: none; }
+.search { flex: 1; max-width: 520px; position: relative; }
+.search svg { position: absolute; left: 14px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); stroke: var(--faint); fill: none; stroke-width: 1.8; pointer-events: none; }
+.search input { min-height: 36px; padding: 7px 14px 7px 38px; border-radius: var(--radius-control); background: var(--surface); border-color: var(--surface); }
+.search input:focus { border-color: var(--control); }
+.top .acct { margin-left: auto; display: flex; align-items: center; gap: 12px; height: 100%; padding-left: 16px; border-left: 1px solid var(--rule); }
+#connect.addr { font-variant-numeric: tabular-nums; }
+main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-width: calc(var(--sidebar) + 1320px); }
+.tabbar { display: none; }
+@media (max-width: 1000px) {
+  .side { display: none; }
+  .top, main#app { margin-left: 0; }
+  .top { height: 56px; padding: 0 16px; gap: 10px; }
+  .top .mark { display: block; width: 30px; height: 30px; flex: none; }
+  .top .acct { border-left: 0; padding-left: 0; }
+  main#app { padding: 16px 16px 96px; }
+  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--ground);
+    border-top: 1px solid var(--rule); padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; justify-content: center; font-size: 12px; color: var(--nav); }
+  .tabbar a svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.5; }
+  .tabbar a.on { color: #fff; }
+}
+@media (max-width: 420px) { #connect { padding: 7px 12px; } #connect .a1 { display: none; } }
+
+/* title row */
+.hero { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px; margin-bottom: 20px; }
+.hero p { color: var(--muted); margin: 4px 0 0; }
+.trow-title { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.trow-title .sub { color: var(--muted); margin-top: 4px; }
+.stamp { color: var(--faint); font-size: 12px; }
+.hsec { display: flex; align-items: baseline; gap: 12px; margin: 32px 0 10px; }
+.hsec .stat { margin-left: auto; }
+
+/* surfaces */
+.card { background: var(--surface); border-radius: var(--radius-card); padding: var(--pad); border: 0; }
+.card + .card { margin-top: var(--gap); }
+.two > .card + .card { margin-top: 0; }
+.stats + .card, .stats + div > .card:first-child { margin-top: var(--gap); }
+.card.empty, .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+.nested { background: var(--nested); border-radius: var(--radius-nested); padding: 14px 16px; }
+.stat { font-size: 13px; color: var(--muted); }
 .stat b { color: var(--text); font-weight: 500; }
-.two { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
-@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
-/* Phones: the trade panel comes right after the page header, before stats, charts and lists. */
-@media (max-width: 860px) {
+.stat.ok { color: var(--positive); } .stat.warn { color: var(--warning); }
+.h { display: block; font-size: 16px; font-weight: 600; margin-bottom: 10px; }
+.desc { white-space: pre-wrap; word-break: break-word; color: var(--muted); margin: 14px 0 0; }
+.links { display: flex; gap: 14px; margin-top: 8px; }
+.links a, a.lnk { color: var(--text); text-decoration: underline; text-decoration-color: var(--control); text-underline-offset: 3px; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #fff; color: #000; padding: 10px 18px; border-radius: 999px;
+  font-size: 14px; font-weight: 500; max-width: calc(100% - 32px); z-index: 40; display: none; box-shadow: 0 8px 30px rgba(0,0,0,.5); } /* taste-skill-ignore: the toast floats */
+@media (max-width: 1000px) { .toast { bottom: 84px; } }
+.pill { display: inline-flex; align-items: center; flex: none; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--nested); color: var(--text); white-space: nowrap; }
+.pill.pos { background: var(--pill-positive-bg); color: var(--positive); }
+.pill.neg { background: var(--pill-negative-bg); color: var(--negative); }
+.pill.warn { background: var(--pill-warning-bg); color: var(--warning); }
+.up { color: var(--positive); } .dn { color: var(--negative); } .flat { color: var(--faint); }
+.chg { font-weight: 500; font-variant-numeric: tabular-nums; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.skel { background: var(--raised); border-radius: 6px; }
+
+/* avatars: tokens are circles */
+.avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex: none; background: var(--nested); display: grid; place-items: center; font-weight: 600; font-size: 13px; color: var(--muted); overflow: hidden; }
+.avatar.lg { width: 64px; height: 64px; font-size: 18px; }
+
+/* segmented track and underline tabs (selection = brightness, never the hue) */
+.seg { display: inline-flex; gap: 2px; padding: 3px; background: var(--surface); border-radius: 999px; max-width: 100%; overflow-x: auto; scrollbar-width: none; flex: none; }
+.card .seg { background: var(--ground); }
+.seg button { border: 0; min-height: 30px; padding: 5px 14px; color: var(--nav); font-size: 13px; background: transparent; }
+.seg button:hover { color: #fff; background: transparent; }
+.seg button.on { background: var(--nested); color: #fff; }
+.utabs { display: flex; gap: 22px; border-bottom: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none; }
+.utabs::-webkit-scrollbar, .seg::-webkit-scrollbar, .trend::-webkit-scrollbar { display: none; }
+.utabs button { border: 0; border-radius: 0; min-height: 44px; padding: 0; color: var(--nav); background: transparent; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.utabs button:hover { background: transparent; color: #fff; }
+.utabs button.on { color: #fff; border-bottom-color: #fff; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 3px; margin-bottom: 16px; background: var(--ground); border-radius: 999px; }
+.tabs button { border: 0; color: var(--nav); min-height: 34px; }
+.tabs button:hover { background: transparent; color: #fff; }
+.tabs button.on { background: var(--nested); color: #fff; }
+.quick { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.quick button { min-height: 30px; padding: 4px 12px; font-size: 13px; }
+#from, #ibfrom { width: auto; max-width: 100%; min-height: 34px; padding: 6px 12px; border-radius: 999px; font-size: 13px; background: var(--ground); }
+
+/* KPI strip: one container split by dividers */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--surface); border-radius: var(--radius-card); }
+.kpis > div { padding: 18px var(--pad); min-width: 0; }
+.kpis > div + div { border-left: 1px solid var(--border); }
+.kpis .k { font-size: 13px; color: var(--muted); }
+.kpis .v { font-size: 24px; line-height: 32px; font-weight: 600; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpis .s { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 700px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .kpis > div + div { border-left: 0; }
+  .kpis > div:nth-child(even) { border-left: 1px solid var(--border); }
+  .kpis > div:nth-child(n+3) { border-top: 1px solid var(--border); }
+  .kpis .v { font-size: 20px; line-height: 28px; }
+}
+/* generic stats grid (token page, rewards, admin) uses the same divided container */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); background: var(--surface); border-radius: var(--radius-card); margin-top: var(--gap); overflow: hidden; }
+.stats .card { background: transparent; border-radius: 0; padding: 16px var(--pad); margin: 0; border-left: 1px solid var(--border); }
+.stats .card:first-child { border-left: 0; }
+.stats.q { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 700px) { .stats.q { grid-template-columns: 1fr 1fr; } .stats.q .card:nth-child(odd) { border-left: 0; } .stats.q .card:nth-child(n+3) { border-top: 1px solid var(--border); } }
+.stats .k { font-size: 13px; color: var(--muted); }
+.stats .v { font-size: 20px; line-height: 28px; font-weight: 600; margin-top: 2px; }
+
+/* Trending: peer token cards, one row */
+.trend { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); }
+@media (max-width: 1300px) { .trend { grid-template-columns: repeat(3, minmax(0, 1fr)); } .trend > :nth-child(n+4) { display: none; } }
+@media (max-width: 700px) { .trend { grid-template-columns: 1fr 1fr; gap: 10px; } .trend > :nth-child(n+3) { display: none; } .tc { padding: 14px; gap: 10px; } .tc .avatar { width: 36px; height: 36px; } .tc .mc { font-size: 20px; line-height: 28px; } .tc > .meta, .tc .ch { display: none; } }
+.tc { scroll-snap-align: start; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius-card); background: var(--surface); min-width: 0; transition: background .12s; }
+.tc:hover { background: var(--raised); }
+.tc .head { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.tc .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc .meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc .foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 8px; }
+.tc .mc { font-size: 24px; line-height: 32px; font-weight: 600; }
+
+/* Discover: list + live trades rail */
+.dgrid { display: grid; grid-template-columns: minmax(0, 1fr) 384px; gap: var(--gap); align-items: stretch; }
+.dgrid > .listcard { display: flex; flex-direction: column; }
+.dgrid > .listcard #list { flex: 1; }
+.rail { display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+.rail .tapecard { flex: 1 1 0; min-height: 420px; display: flex; flex-direction: column; padding: 0; }
+.rail .tapecard .tape { flex: 1 1 0; min-height: 0; max-height: none; }
+@media (max-width: 1180px) { .dgrid { grid-template-columns: 1fr; } .rail .tapecard { flex: none; } .rail .tapecard .tape { max-height: 460px; flex: none; } }
+.listcard { padding: 4px 0 6px; }
+.listcard .tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 var(--pad); }
+.listcard .tools .utabs { flex: 1; min-width: 0; }
+.thead, .lrow { display: grid; grid-template-columns: 26px 48px minmax(0, 1fr) 112px 104px 76px 72px; gap: 12px; align-items: center; padding: 0 var(--pad); }
+.thead { height: 40px; font-size: 12px; color: var(--faint); }
+.thead span:nth-child(n+4), .lrow .r { text-align: right; }
+.lrow { min-height: 72px; transition: background .1s; }
+.lrow:hover { background: var(--raised); }
+.lrow .rk { color: var(--faint); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.lrow .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lrow .nm b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lrow .sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.lrow .r { font-weight: 500; }
+.lrow .r.dim { color: var(--muted); font-weight: 400; }
+.lrow .act { justify-self: end; min-height: 32px; padding: 5px 16px; border: 1px solid var(--control); border-radius: 999px; font-size: 13px; font-weight: 500; }
+.lrow:hover .act { background: #fff; color: #000; border-color: #fff; }
+.more { display: flex; justify-content: center; padding: 10px; }
+@media (max-width: 700px) {
+  .thead { display: none; }
+  .lrow { grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 2px; min-height: 68px; padding: 10px 16px; }
+  .lrow .rk, .lrow .vol, .lrow .act { display: none; }
+  .lrow .avatar { grid-row: 1 / 3; width: 44px; height: 44px; }
+  .lrow .tn { grid-row: 1 / 3; }
+  .lrow .mcc { grid-column: 3; grid-row: 1; }
+  .lrow .chgc { grid-column: 3; grid-row: 2; font-size: 13px; }
+  .listcard .tools { padding: 0 16px; flex-direction: column; align-items: stretch; gap: 10px; }
+  .listcard .tools .seg { align-self: flex-start; }
+}
+.rail h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.tape { padding: 6px 0; max-height: 820px; overflow-y: auto; scrollbar-width: thin; }
+.fi { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 56px; padding: 0 18px; transition: background .1s; }
+.fi:hover { background: var(--raised); }
+.fi.new { animation: arrive .9s ease-out; }
+@keyframes arrive { from { background: var(--nested); } }
+@media (prefers-reduced-motion: reduce) { .fi.new { animation: none; } }
+.fi .avatar { width: 36px; height: 36px; font-size: 11px; }
+.fi .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fi .w { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fi .amt { text-align: right; font-weight: 500; }
+.fi .amt .w { text-align: right; }
+.livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--positive); }
+.official { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.official .ca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; color: var(--muted); }
+.official .ca code { font-family: var(--font); word-break: break-all; }
+.pfoot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 8px 20px; color: var(--faint); font-size: 13px; }
+.pfoot a:hover { color: #fff; }
+
+/* two-column pages (token, launch, rewards): the side panel sticks */
+.two { display: grid; grid-template-columns: minmax(0, 1fr) 384px; gap: var(--gap); align-items: start; }
+.two > .mside, .two > aside { position: sticky; top: calc(var(--topbar) + 16px); }
+@media (max-width: 1000px) {
+  .two { grid-template-columns: 1fr; }
+  .two > .mside, .two > aside { position: static; }
   .mfirst { display: flex; flex-direction: column; gap: 0; }
   .mfirst .mflat { display: contents; }
   .mfirst .mflat > *, .mfirst > .mrest { order: 3; }
   .mfirst .mflat > .mlead { order: 1; }
-  .mfirst .mside { order: 2; margin: 14px 0; }
-  .mfirst .mside > .card:first-child { margin-top: 0 !important; }
+  .mfirst .mside { order: 2; margin: var(--gap) 0; }
 }
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 16px; }
-.stats .card { padding: 14px 16px; }
-.stats.q { grid-template-columns: repeat(2, 1fr); }
-.stats .k { font-size: 12px; color: var(--muted); }
-.stats .v { font-weight: 700; font-size: 20px; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 14px; background: var(--panel-2); border-radius: 12px; }
-.tabs button { border: 0; color: var(--muted); background: transparent; }
-.tabs button.on.buy { background: var(--accent); color: #000; }
-.tabs button.on.sell { background: var(--down); color: #fff; }
-.quick { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.quick button { padding: 5px 11px; font-size: 12px; border-radius: 999px; }
-.preview { margin: 12px 0; font-size: 12px; color: var(--muted); }
-.full { width: 100%; margin-top: 6px; }
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 500; font-size: 12px; }
-.b { color: var(--accent); } .s { color: var(--down); }
-.chart { width: 100%; height: 200px; display: block; }
-.toast { position: fixed; bottom: 84px; border-radius: 12px; font-weight: 500; left: 50%; transform: translateX(-50%); background: var(--strong); color: var(--inv);
-  padding: 10px 16px; font-size: 12px; max-width: calc(100% - 32px); z-index: 20; display: none; }
-.empty { text-align: center; padding: 60px 16px; color: var(--muted); }
-.fees { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
-.desc { white-space: pre-wrap; word-break: break-word; color: var(--muted); }
-.links a { text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
-.ext .btn { padding: 4px 10px; font-size: 11px; }
+.thead-token { display: flex; gap: 16px; align-items: center; }
+.price-big { font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -.01em; }
+.chart { width: 100%; height: 240px; display: block; margin-top: 8px; }
+.preview { margin: 14px 0 4px; font-size: 14px; }
+.fees { font-size: 13px; color: var(--muted); margin-top: 16px; }
+.ext { gap: 8px; }
+.ext .btn { min-height: 30px; padding: 4px 12px; font-size: 13px; }
+
+/* tables: rules and alignment */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+th { color: var(--faint); font-weight: 400; font-size: 12px; border-bottom-color: #262626; padding-top: 8px; padding-bottom: 8px; }
+tr:last-child td { border-bottom: 0; }
+td.n, th.n { text-align: right; }
+.b { color: var(--positive); } .s { color: var(--negative); }
 .scroll-x { overflow-x: auto; }
-.sharebtn { margin-top: 4px; padding: 2px 8px; font-size: 11px; }
-/* Pepes Family mint */
-.mint-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px; align-items: start; }
-.mint-pics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.mint-pics img, .mint-mine img { width: 100%; aspect-ratio: 1; display: block; border: 1px solid var(--line); background: var(--panel-2); border-radius: 12px; }
-.mint-bar { height: 8px; background: var(--panel-2); border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
-.mint-bar i { display: block; height: 100%; background: var(--accent); }
-.mint-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
-.mint-mine figure { margin: 0; font-size: 12px; }
-@media (max-width: 760px) { .mint-top { grid-template-columns: 1fr; } }
-.share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border: 1px solid var(--line); background: #000; border-radius: 12px; }
-#rf input { flex: 1; min-width: 0; }
-.modal .card.big { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
-.warn-box { margin-top: 8px; padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--warn); color: var(--text); font-size: 12px; }
-.koth { border: 1px solid var(--line); background: var(--panel); border-radius: var(--r); margin: 6px 0 14px; overflow: hidden; }
-.koth-main { display: flex; gap: 16px; align-items: center; padding: 16px; transition: background .12s; }
-.koth-main:hover { background: var(--panel-2); }
-.koth .crown { display: inline-block; font-size: 12px; font-weight: 700; background: var(--accent); color: var(--accent-ink); padding: 2px 10px; border-radius: 999px; }
-.koth .name { font-weight: 600; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.koth-stats { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 4px; font-size: 12px; color: var(--muted); }
-.koth-stats b { color: var(--text); font-weight: 500; }
-.koth-rest { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; border-top: 1px solid var(--line); padding: 8px 16px; font-size: 12px; }
-.koth-rest a:hover { text-decoration: underline; }
-@media (max-width: 600px) { .koth-main { flex-wrap: wrap; } .koth-main .btn { width: 100%; text-align: center; } }
-.official .crown { background: var(--strong); color: var(--inv); }
-.official .ca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; }
-.official .ca code { font-family: inherit; color: var(--muted); word-break: break-all; }
-.official .ca button { padding: 2px 8px; font-size: 11px; }
-.sortbar { display: flex; align-items: center; gap: 10px; margin: -4px 0 12px; }
-.imgrow { display: flex; gap: 12px; align-items: flex-start; }
-.imgprev { width: 60px; height: 60px; flex: none; border: 1px dashed var(--line); border-radius: 12px; display: grid; place-items: center; color: var(--dim); overflow: hidden; }
-.imgprev img { width: 100%; height: 100%; object-fit: cover; }
-.imgrow.drag .imgprev { border-color: var(--accent); }
-.stat.ok { color: var(--accent); } .stat.warn { color: var(--warn); }
-.card.warnbox { border-color: var(--warn); }
-.presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.presets button { text-align: left; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 12px 14px; font: inherit; cursor: pointer; border-radius: 12px; }
-.presets button.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* grids of cards on other pages */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--gap); }
+.tcard { display: flex; gap: 12px; transition: background .12s; }
+.tcard:hover { background: var(--raised); }
+.tcard .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; font-size: 12px; font-weight: 500; padding: 0 9px 0 8px; border-radius: 999px; background: var(--nested); white-space: nowrap; flex: none; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+/* launch form */
+.presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.presets button { display: block; text-align: left; white-space: normal; border: 1px solid transparent; background: var(--nested); color: var(--text); padding: 12px 14px; border-radius: var(--radius-nested); min-height: 0; }
+.presets button:hover { background: #333; }
+.presets button.on { border-color: #fff; }
 .splitrow { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .splitrow > div { flex: 1; min-width: 100px; }
+.imgrow { display: flex; gap: 12px; align-items: flex-start; }
+.imgprev { width: 64px; height: 64px; flex: none; border-radius: 50%; background: var(--nested); display: grid; place-items: center; color: var(--faint); overflow: hidden; }
+.imgprev img { width: 100%; height: 100%; object-fit: cover; }
+.imgrow.drag .imgprev { outline: 2px dashed #fff; }
+.warn-box { margin-top: 8px; padding: 10px 14px; border-radius: var(--radius-nested); background: var(--pill-warning-bg); color: var(--warning); font-size: 13px; }
+.card.warnbox { background: var(--pill-warning-bg); }
+
+/* rewards, share cards */
 .sharegrid { grid-template-columns: minmax(0, 600px) 1fr; }
-@media (max-width: 860px) { .sharegrid { grid-template-columns: 1fr; } }
-.h { display: block; font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+@media (max-width: 1000px) { .sharegrid { grid-template-columns: 1fr; } }
+.share-img { width: 100%; aspect-ratio: 1200 / 675; display: block; border-radius: var(--radius-nested); background: #000; }
+.sharebtn { margin-top: 6px; min-height: 28px; padding: 3px 10px; font-size: 12px; }
+#rf input { flex: 1; min-width: 0; }
 
-/* bottom status bar */
-.modal { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .6); display: grid; place-items: center; }
-.modal .card { width: min(340px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 8px; }
-.wopt { display: flex; align-items: center; gap: 10px; text-align: left; text-transform: none; letter-spacing: 0; font-size: 13px; }
-.wopt img { width: 22px; height: 22px; }
-.status { position: fixed; left: 0; right: 0; bottom: 0; height: 40px; z-index: 6; background: var(--bg); border-top: 1px solid var(--line);
-  display: flex; align-items: center; font-size: 12px; color: var(--muted); overflow-x: auto; white-space: nowrap; }
-.status > span { padding: 0 16px; border-right: 1px solid var(--line); height: 100%; display: flex; align-items: center; gap: 6px; }
-.status > span:last-child { border-right: 0; border-left: 1px solid var(--line); margin-left: auto; }
-.status b { color: var(--text); font-weight: 500; }
-.status .dot { width: 7px; height: 7px; background: var(--accent); display: inline-block; }
-/* app shell: top bar, the page, a tab bar on phones; the Hall is one of the pages (#/hall) */
-.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px; height: 64px; padding: 0 20px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 17px; letter-spacing: -.02em; white-space: nowrap; }
-.brand img { width: 30px; height: 30px; border-radius: 9px; }
-.nav { display: flex; gap: 2px; }
-.nav a { padding: 8px 12px; border-radius: 999px; color: var(--muted); font-weight: 600; font-size: 14px; }
-.nav a:hover { color: var(--text); background: var(--panel-2); }
-.nav a.on { color: var(--text); background: var(--panel-2); }
-.search { flex: 1; max-width: 420px; margin-left: auto; position: relative; }
-.search input { padding: 9px 14px 9px 36px; border-radius: 999px; background: var(--panel); font-size: 14px; }
-.search::before { content: ""; position: absolute; left: 14px; top: 50%; width: 11px; height: 11px; border: 2px solid var(--muted); border-radius: 50%; transform: translateY(-62%); }
-.search::after { content: ""; position: absolute; left: 25px; top: 58%; width: 6px; height: 2px; background: var(--muted); transform: rotate(45deg); }
-#connect { border-radius: 999px; }
-#connect:not(.addr) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.tabbar { display: none; }
-@media (max-width: 960px) { .nav { display: none; } }
-@media (max-width: 960px) {
-  .top { gap: 10px; padding: 0 12px; height: 58px; }
-  .brand span { display: none; }
-  .search { max-width: none; }
-  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-    background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
-  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--muted); padding: 4px 0; }
-  .tabbar a i { font-style: normal; font-size: 18px; line-height: 1.2; }
-  .tabbar a.on { color: var(--accent); }
-  #theme { display: none; }
-}
-#world { position: fixed; top: 64px; left: 0; right: 0; bottom: 0; background: #0b0b0b; }
-@media (max-width: 960px) { #world { top: 58px; bottom: 62px; } }
-#world .hall { height: 100%; }
-body.in-hall { overflow: hidden; }
-body.in-hall #app { display: none; }
-.hall-off { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; color: #e6ede6; }
-.hall-off .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; max-width: 640px; width: 100%; }
-.hall-off a { border: 1.5px solid #3ddc84; color: #3ddc84; padding: 14px; text-align: center; border-radius: 12px; }
+/* mint */
+.mint-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--gap); align-items: start; }
+.mint-pics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.mint-pics img, .mint-mine img { width: 100%; aspect-ratio: 1; display: block; background: var(--nested); border-radius: var(--radius-nested); }
+.mint-bar { height: 8px; background: var(--nested); border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
+.mint-bar i { display: block; height: 100%; background: var(--accent); }
+.mint-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.mint-mine figure { margin: 0; font-size: 13px; }
+@media (max-width: 760px) { .mint-top { grid-template-columns: 1fr; } }
 
-/* Discover */
-.dhero { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: center;
-  padding: 36px; border-radius: 22px; border: 1px solid var(--line);
-  background: radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 55%),
-              radial-gradient(90% 120% at 100% 100%, color-mix(in srgb, #7c5cff 20%, transparent) 0%, transparent 60%), var(--panel); }
-.dhero h1 { font-size: 46px; }
-.dhero p { color: var(--muted); font-size: 16px; margin: 14px 0 22px; max-width: 560px; }
-.eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 14px;
-  padding: 5px 12px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; flex: none; }
-.dot.pulse { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); animation: pulse 1.8s infinite; }
-@keyframes pulse { 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-@media (prefers-reduced-motion: reduce) { .dot.pulse { animation: none; } }
-.dstats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.dstat { background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; min-width: 0; }
-.dstat.wide { grid-column: 1 / -1; }
-.dstat .k { font-size: 12px; color: var(--muted); }
-.dstat .v { font-size: 24px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.dstat .s { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chains { display: flex; flex-wrap: wrap; gap: 6px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px 4px 8px; border-radius: 999px; background: var(--panel-2); color: var(--text); white-space: nowrap; }
-.chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-@media (max-width: 860px) { .dhero { grid-template-columns: 1fr; padding: 22px; gap: 18px; } .dhero h1 { font-size: 30px; } }
-@media (max-width: 600px) {
-  main { padding-top: 14px; }
-  .dhero { padding: 18px; border-radius: 18px; }
-  .dhero p { font-size: 14px; margin: 10px 0 16px; }
-  .dhero .btn.lg { padding: 11px 16px; font-size: 14px; }
-  .dstats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .dstat, .dstat.wide { grid-column: auto; padding: 10px 12px; border-radius: 12px; }
-  .dstat .v { font-size: 17px; }
-  .dstat .s { display: none; }
-  .eyebrow { margin-bottom: 10px; font-size: 12px; }
-}
-.dsec { display: flex; align-items: center; gap: 10px; margin: 30px 0 12px; }
-.dsec h2 { display: flex; align-items: center; gap: 8px; }
-.trend { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
-.tc { scroll-snap-align: start; display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); transition: border-color .12s, transform .12s; min-width: 0; }
-.tc:hover { border-color: var(--dim); transform: translateY(-2px); }
-.tc .head { display: flex; gap: 12px; align-items: center; min-width: 0; }
-.tc .avatar { width: 52px; height: 52px; border-radius: 14px; }
-.tc .nm { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tc .rank { margin-left: auto; align-self: flex-start; font-size: 12px; font-weight: 700; color: var(--muted); }
-.tc .foot { display: flex; justify-content: space-between; align-items: end; gap: 8px; }
-.tc .mc { font-size: 20px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
-.up { color: var(--accent); } .dn { color: var(--down); } .flat { color: var(--muted); }
-.chg { font-weight: 700; font-variant-numeric: tabular-nums; }
-.dgrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; margin-top: 30px; }
-@media (max-width: 1060px) { .dgrid { grid-template-columns: 1fr; } }
-.dtools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
-.dtools .seg { overflow-x: auto; max-width: 100%; }
-.tlist { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); overflow: hidden; }
-.thead, .trow { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) 110px 100px 84px 72px; gap: 12px; align-items: center; padding: 12px 16px; }
-.thead { font-size: 12px; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); padding-top: 10px; padding-bottom: 10px; }
-.thead span:nth-child(n+4), .trow > .r { text-align: right; }
-.trow { border-bottom: 1px solid var(--line); transition: background .1s; }
-.trow:last-child { border-bottom: 0; }
-.trow:hover { background: var(--panel-2); }
-.trow .rk { color: var(--muted); font-weight: 600; font-size: 13px; text-align: center; }
-.trow .avatar { width: 44px; height: 44px; border-radius: 12px; font-size: 13px; }
-.trow .nm { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.trow .nm b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trow .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.trow .r { font-variant-numeric: tabular-nums; font-weight: 600; }
-.trow .buy { padding: 7px 0; width: 100%; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border: 0; font-size: 13px; font-weight: 700; text-align: center; }
-.trow:hover .buy { background: var(--accent); color: var(--accent-ink); }
-@media (max-width: 700px) {
-  .thead { display: none; }
-  .trow { grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "a n m" "a s c"; row-gap: 0; padding: 12px 14px; }
-  .trow .rk, .trow .vol, .trow .buy { display: none; }
-  .trow .avatar { grid-area: a; width: 40px; height: 40px; }
-  .trow .tn { grid-area: n / n / s / s; }
-  .trow .mcc { grid-area: m; } .trow .chg { grid-area: c; font-size: 13px; }
-}
-.skel { background: linear-gradient(90deg, var(--panel-2), var(--line), var(--panel-2)); background-size: 200% 100%; animation: sk 1.2s infinite linear; border-radius: 8px; }
-@keyframes sk { to { background-position: -200% 0; } }
-.live { position: sticky; top: 80px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); padding: 4px 0; max-height: calc(100vh - 100px); display: flex; flex-direction: column; }
-.live .dsec { margin: 12px 16px 6px; }
-.live h2 { font-size: 16px; }
-#feed { overflow-y: auto; }
-.fi { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 16px; transition: background .1s; }
-.fi:hover { background: var(--panel-2); }
-.fi.new { animation: flash 1.2s ease-out; }
-@keyframes flash { from { background: color-mix(in srgb, var(--accent) 22%, transparent); } }
-.fi .avatar { width: 34px; height: 34px; border-radius: 10px; font-size: 11px; }
-.fi .t { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fi .w { font-size: 12px; color: var(--muted); }
-.fi .amt { text-align: right; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
-@media (max-width: 1060px) { .live { position: static; max-height: 460px; } }
-.pfoot { margin-top: 44px; padding-top: 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 22px; color: var(--muted); font-size: 13px; }
-.pfoot a:hover { color: var(--text); }
-.audits-sm { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
-.audits-sm a { display: block; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
-.audits-sm a:hover { border-color: var(--dim); }
-.hall { position: relative; width: 100%; overflow: hidden; background: #0b0b0b; touch-action: none; }
-.hall [hidden] { display: none !important; }
-.hall-c { display: block; width: 100%; height: 100%; cursor: grab; }
-.hall-top { position: absolute; left: 12px; top: 10px; display: flex; gap: 12px; align-items: center; color: #e6ede6; font-size: 12px; pointer-events: none; }
-.hall-top b { background: #fff; color: #000; padding: 3px 8px; letter-spacing: .08em; }
-.hall-live { color: #3ddc84; background: rgba(0,0,0,.6); padding: 3px 8px; }
-.hall-prompt { position: absolute; left: 50%; bottom: 84px; transform: translateX(-50%); background: #050605; color: #3ddc84; border: 1.5px solid #3ddc84; padding: 10px 16px; font-size: 14px; cursor: pointer; white-space: nowrap; }
-.hall-help { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); color: #9aa79a; background: rgba(0,0,0,.6); padding: 4px 10px; font-size: 12px; text-align: center; max-width: calc(100% - 24px); }
-.hall-btns { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 8px; }
-.hall-btns button { background: #050605; color: #e6ede6; border: 1px solid #3a4a3a; }
-.hall-joy { position: absolute; left: 22px; bottom: 54px; width: 110px; height: 110px; border-radius: 50% !important; border: 2px solid rgba(255,255,255,.35); background: rgba(0,0,0,.25); touch-action: none; }
-.hall-knob { position: absolute; left: 33px; top: 33px; width: 44px; height: 44px; border-radius: 50% !important; background: rgba(61,220,132,.75); }
-.hall-modal { position: absolute; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 2; }
-.hall-card { background: var(--bg); border: 1.5px solid var(--strong); padding: 14px; max-width: 760px; width: 100%; }
-.hall-card img { width: 100%; display: block; border: 1px solid var(--line); }
-.hall-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
-.hall-online { color: #3ddc84; background: rgba(0,0,0,.6); padding: 3px 8px; }
-.hall-wear { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 10px; max-height: 52vh; overflow: auto; }
-.hall-wear button { display: flex; flex-direction: column; gap: 4px; padding: 4px; text-transform: none; letter-spacing: 0; }
-.hall-wear button.on { border: 2px solid var(--accent); }
-.hall-wear img, .hall-wear .hw-img { width: 100%; aspect-ratio: 1; display: block; background: var(--panel-2); }
-.hall-wear .hw-def { background: #e9e9e6 url(/img/imd-pepe.webp) 77.778% 0 / 1900% 100% no-repeat; }
-@media (max-width: 600px) { .hall-top .hall-live { display: none; } .hall-prompt { bottom: 180px; } .hall-help { top: 48px; bottom: auto; } }
-
+/* wallet picker */
+.modal { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .7); display: grid; place-items: center; }
+.modal .card { width: min(360px, calc(100% - 32px)); display: flex; flex-direction: column; gap: 8px; background: var(--raised); box-shadow: 0 20px 60px rgba(0,0,0,.6); } /* taste-skill-ignore: a dialog floats */
+.modal .card.big { width: min(480px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; }
+.wopt { justify-content: flex-start; gap: 12px; width: 100%; min-height: 48px; border-radius: var(--radius-nested); }
+.wopt img { width: 24px; height: 24px; }
 </style>
 </head>
 <body>
-<!-- An app shell like a trading app: a top bar (pages, search, wallet), the page, and a tab bar on phones.
-     Discover (#/) is the home page; the 3D Hall is one of the pages (#/hall). -->
+<!-- App shell (ruled T-frame): a sidebar with the mark and the pages, a top bar with search and the wallet, the page.
+     On phones the sidebar folds into a bottom bar of the four pages. -->
+<a class="skip" href="#app">Skip to content</a>
+<aside class="side" aria-label="PepesFamily">
+  <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span>PepesFamily</span></a>
+  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
+  <div class="glabel">Networks</div>
+  <div id="netlist"></div>
+  <div class="foot">
+    <a href="https://x.com/pepesdotfamily" target="_blank" rel="noopener noreferrer">X · @pepesdotfamily</a>
+    <a href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source</a>
+  </div>
+</aside>
 <header class="top">
-  <a class="brand" href="#/"><img src="/icon-192.png" alt="" width="30" height="30"><span>PepesFamily</span></a>
-  <nav class="nav" id="nav" aria-label="Pages">
-    <a href="#/" data-r="/">Discover</a><a href="#/create" data-r="/create">Launch</a><a href="#/rewards" data-r="/rewards">Rewards</a><a href="#/mint" data-r="/mint">Mint</a><a href="#/hall" data-r="/hall">Hall</a>
-  </nav>
-  <form class="search" id="search" role="search"><input id="q" type="search" placeholder="Search tokens or paste a contract" autocomplete="off" spellcheck="false" aria-label="Search tokens"></form>
-  <button class="icon" id="theme" type="button" title="Light / dark">◐</button>
-  <button id="connect" type="button">Connect</button>
+  <a class="mark" href="#/" aria-label="PepesFamily"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></a>
+  <form class="search" id="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search tokens or paste a contract…" autocomplete="off" spellcheck="false" aria-label="Search tokens"></form>
+  <div class="acct"><button id="connect" type="button">Connect wallet</button></div>
 </header>
-<main class="wrap" id="app"></main>
-<div id="world" hidden></div>
-<nav class="tabbar" id="tabbar" aria-label="Pages">
-  <a href="#/" data-r="/"><i>⌂</i>Discover</a><a href="#/create" data-r="/create"><i>＋</i>Launch</a><a href="#/rewards" data-r="/rewards"><i>◎</i>Rewards</a><a href="#/mint" data-r="/mint"><i>◆</i>Mint</a><a href="#/hall" data-r="/hall"><i>▣</i>Hall</a>
-</nav>
-<div class="toast" id="toast"></div>
-<footer class="status" hidden><!-- not shown: the Hall reads its numbers -->
-  <span><b id="sb-vol">…</b> volume</span>
-  <span><b id="sb-hold">…</b> paid to holders</span>
-  <span>ETH <b id="sb-eth">…</b></span>
-  <span>IMD <b id="sb-imd">…</b></span>
-  <span><i class="dot"></i> Robinhood · Ethereum</span>
-</footer>
+<main id="app" tabindex="-1"></main>
+<nav class="tabbar" id="tabbar" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a></nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 // ---------------------------------------------------------------- Config
@@ -423,10 +405,8 @@ const CONFIG = {
     ethRouter: "0xB5f81908d652332850dFFCcd898d7e0e0d70467F",
   },
   // Pepes Family: 3,333 on-chain Pepes drawn from IMD's own Pepe (github.com/0xtenang/PepesFamilyNFT,
-  // deployments/chain-4663.json), minted at the Hall's MINT kiosk (#/mint).
+  // deployments/chain-4663.json), minted on the Mint page (#/mint).
   pepesNft: "0xC105792e11A60Bd8F461E6e5094E18594574AABe",
-  // The multiplayer Hall's server (hall-server/, a Cloudflare Worker): wss://…/hall. Empty: the Hall is single player.
-  hallServer: "wss://pepesfamily.arief-kurniawan-id.workers.dev/hall",
   pepesArt: "0xc084E16c5a3FcBd75F34f010a012c44Dc5Fe8a06",
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
@@ -588,15 +568,15 @@ async function splitOf(P, token) {
   return SPLITS.get(k);
 }
 const SPLIT_PRESETS = [
-  { id: "diamond", icon: "💎", name: "Diamond hands", c: 0, h: 300, b: 0, note: "All 3% to holders" },
-  { id: "creator", icon: "🧑‍🎨", name: "Creator-backed", c: 200, h: 100, b: 0, note: "2% to the creator, 1% to holders" },
-  { id: "burn", icon: "🔥", name: "Deflationary", c: 0, h: 0, b: 300, note: "3% of every trade burned" },
+  { id: "diamond", name: "Diamond hands", c: 0, h: 300, b: 0, note: "All 3% to holders" },
+  { id: "creator", name: "Creator-backed", c: 200, h: 100, b: 0, note: "2% to the creator, 1% to holders" },
+  { id: "burn", name: "Deflationary", c: 0, h: 0, b: 300, note: "3% of every trade burned" },
 ];
 const pct = (bps) => `${bps / 100}%`;
-/// Short label of a split: the preset's icon and name, or ⚙️ with the three shares.
+/// Short label of a split: the preset's name, or the three shares.
 function splitLabel(sp) {
   const p = SPLIT_PRESETS.find((x) => x.c === sp.c && x.h === sp.h && x.b === sp.b);
-  return p ? `${p.icon} ${p.name}` : `⚙️ ${pct(sp.c)} creator · ${pct(sp.h)} holders · ${pct(sp.b)} burn`;
+  return p ? p.name : `Custom: ${pct(sp.c)} creator · ${pct(sp.h)} holders · ${pct(sp.b)} burn`;
 }
 const splitBadge = (sp) => (sp ? `<span class="pill" title="${esc(splitLabel(sp))}">${esc(splitLabel(sp).split(" ")[0])}</span>` : "");
 /// "1% protocol · 2% creator · 1% holders" for a split (v1-v4 tokens: 3% holders).
@@ -887,8 +867,6 @@ async function loadPrices() {
     const r1 = Number(a[0]) / 2 ** 96, r2 = Number(b[0]) / 2 ** 96;
     prices.ethUsd = r1 * r1 * 1e12; // USDG (6 dec) per ETH (18 dec)
     prices.imdEth = 1 / (r2 * r2);   // ETH per IMD
-    $("#sb-eth").textContent = fmtUsd(prices.ethUsd);
-    $("#sb-imd").textContent = fmtUsd(prices.imdEth * prices.ethUsd);
   } catch (e) { console.warn("price load failed", e); }
   // PEPE from the PEPE/ETH v4 pool on Ethereum, CASHCAT from the CASHCAT/ETH v4 pool on Robinhood Chain
   await Promise.all([
@@ -986,7 +964,7 @@ function avatar(info, cls = "") {
   const ipfs = typeof raw === "string" ? ipfsPath(raw.trim()) : "";
   const img = own || (ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw));
   const letter = esc((info.symbol || "?").slice(0, 2));
-  return img ? `<img class="avatar ${cls}" src="${esc(img)}" alt="${letter}" loading="lazy" referrerpolicy="no-referrer"${ipfs ? ` data-ipfs="${esc(ipfs)}" data-gw="0"` : ""}>`
+  return img ? `<img class="avatar ${cls}" width="${cls === "lg" ? 64 : 48}" height="${cls === "lg" ? 64 : 48}" src="${esc(img)}" alt="${letter}" loading="lazy" referrerpolicy="no-referrer"${ipfs ? ` data-ipfs="${esc(ipfs)}" data-gw="0"` : ""}>`
              : `<div class="avatar ${cls}">${letter}</div>`;
 }
 // Broken images try the next IPFS gateway, then fall back to the ticker letters (no inline handlers: names and
@@ -1072,8 +1050,8 @@ function listen(eth) {
   if (listening === eth) return;
   listening = eth;
   eth.on?.("accountsChanged", (accs) => {
-    signer = null; account = null; $("#connect").textContent = "Connect"; $("#connect").classList.remove("addr");
-    IS_ADMIN = false; window.Hall?.setAdmin(false); window.Hall?.walletChanged();
+    signer = null; account = null; $("#connect").textContent = "Connect wallet"; $("#connect").classList.remove("addr"); $("#adminlink").hidden = true;
+    IS_ADMIN = false; 
     if (accs?.length) connect().catch(() => {});
   });
   // Switching network inside the wallet: the signer is rebuilt for the new network before the next action.
@@ -1128,7 +1106,6 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
   $("#connect").innerHTML = `<span class="a1">${account.slice(0, 6)}</span>…${account.slice(-4)}`;
   $("#connect").classList.add("addr");
   showAdminLink().catch(() => {});
-  window.Hall?.walletChanged(); // its Pepes Family NFTs, to walk the Hall as one
   if (!quiet) route();
 }
 /// Makes sure a wallet is connected on `ch` (switching networks if needed) before an action there. Quiet: the page
@@ -1161,23 +1138,17 @@ async function ensureImdAllowance(amount, spender, imdAddr = CONFIG.imd) {
 
 // ---------------------------------------------------------------- Routing
 window.addEventListener("hashchange", route);
-/// Numbered section header: "01  TITLE ──────── [extra]".
-const sec = (n, title, extra = "") =>
-  `<div class="sec"><span class="n">${String(n).padStart(2, "0")}</span><span class="t">${esc(title)}</span><span class="rule"></span>${extra}</div>`;
+/// A section heading with optional extras on its right (the number is kept for the callers, not shown).
+const sec = (n, title, extra = "") => `<div class="hsec"><h2>${esc(title)}</h2>${extra}</div>`;
 
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
-const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint Pepes Family", "/hall": "The Hall", "/admin": "Admin" };
+const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint Pepes Family", "/admin": "Admin" };
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
   const page = h.startsWith("/t/") ? "/t" : h.startsWith("/rewards") ? "/rewards" : h;
   for (const a of document.querySelectorAll("#nav a, #tabbar a")) a.classList.toggle("on", a.dataset.r === (page === "/tokens" ? "/" : page));
   document.title = (TITLES[page] && page !== "/" ? TITLES[page] + " · " : "") + "PepesFamily";
-  const hall = h === "/hall";
-  document.body.classList.toggle("in-hall", hall);
-  $("#world").hidden = !hall;
-  window.Hall?.pause(!hall);
-  if (hall) { $("#app").innerHTML = ""; renderHall(); return; } // mounted once, on the first visit
   window.scrollTo(0, 0);
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
@@ -1202,11 +1173,6 @@ $("#search").addEventListener("submit", (e) => {
   if (/^0x[0-9a-fA-F]{40}$/.test(v)) { $("#q").value = ""; SEARCH = ""; location.hash = "#/t/" + ethers.getAddress(v.toLowerCase()); }
   else document.getElementById("list")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
-$("#theme").onclick = () => {
-  const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-  document.documentElement.dataset.theme = t;
-  try { localStorage.setItem("theme", t); } catch {}
-};
 
 function renderSetup() {
   // A failed read means the chain's RPC is down or unreachable, which is not the same as no launchpad.
@@ -1225,75 +1191,6 @@ function renderSetup() {
     <p>No launchpad contract found on-chain. Check <span class="mono">CONFIG.pads</span> and <span class="mono">CONFIG.rpc</span> at the top of this file.</p></div>`;
 }
 
-// ---------------------------------------------------------------- Hall
-/// Loads a same-origin script once (the Hall's three.js and its code are only fetched when someone opens it).
-const scriptOnce = (() => {
-  const loaded = new Map();
-  return (src, integrity) => {
-    if (!loaded.has(src)) {
-      loaded.set(src, new Promise((res, rej) => {
-        const el = document.createElement("script");
-        el.src = src; if (integrity) { el.integrity = integrity; el.crossOrigin = "anonymous"; }
-        el.onload = res; el.onerror = () => { loaded.delete(src); rej(new Error("Couldn't load " + src)); };
-        document.head.appendChild(el);
-      }));
-    }
-    return loaded.get(src);
-  };
-})();
-/// A token's logo URL (the site's own image, else its IPFS image through the first gateway, else its https link).
-function imageOf(info) {
-  const own = CONFIG.images[String(info.token || "").toLowerCase()];
-  if (own) return own;
-  const raw = meta(info.metadata).image || "";
-  const ipfs = ipfsPath(raw.trim());
-  return ipfs ? IPFS_GATEWAYS[0] + ipfs : safeUrl(raw) || "";
-}
-let hallMounted = false;
-async function renderHall() {
-  if (hallMounted) return;
-  hallMounted = true;
-  const world = $("#world");
-  world.innerHTML = `<div class="hall-off">Opening the Hall…</div>`;
-  const fallback = (why) => {
-    // no 3D here (no WebGL, or the scripts didn't load): the same places, as plain links
-    world.innerHTML = `<div class="hall-off"><div><p>${esc(why)}</p><div class="grid">
-      <a href="#/mint">MINT</a><a href="#/create">LAUNCH</a><a href="#/tokens">TOKENS</a><a href="#/rewards">REWARDS</a></div></div></div>`;
-  };
-  try {
-    if (!document.createElement("canvas").getContext("webgl2") && !document.createElement("canvas").getContext("webgl")) throw new Error("This browser can't show the 3D Hall.");
-    await scriptOnce("/js/three-0.160.0.min.js", "sha512-vnmn/Qqn6aG0POAc9mIGzjq0IybrvxJXYDafNvp9JSnDGxeF3pbkSqLvf+YGd5ku63pT7sa/jxHn7/d0mU8+tA==");
-    await scriptOnce("/js/hall.js");
-    world.innerHTML = "";
-    Hall.mount(world, {
-      go(to) { if (to.startsWith("#")) location.hash = to; else location.href = to; },
-      async data() {
-        if (!LAUNCH) return { top: [], events: [], stats: "launchpad not reachable" };
-        const all = (await allTokenInfos()).filter(({ t }) => isListed(t));
-        const top = [...all].sort((a, b) => toUsdNum(b.t.marketCap, b.t.quote) - toUsdNum(a.t.marketCap, a.t.quote))
-          .slice(0, 6).map(({ t }) => ({ token: t.token, symbol: t.symbol, mc: usd(t.marketCap, t.quote), image: imageOf(t) }));
-        const bySym = new Map(all.map(({ t }) => [t.token.toLowerCase(), t]));
-        const hhmm = (sec) => new Date(sec * 1000).toTimeString().slice(0, 5);
-        const trades = await Feed.recentTrades().catch(() => []);
-        const events = [
-          ...all.map(({ t }) => ({ ts: Number(t.createdAt), kind: "launch", t, detail: `${qsym(t.quote)} pair · MC ${usd(t.marketCap, t.quote)}` })),
-          ...trades.map((e) => ({ ts: e.ts, kind: e.kind, t: bySym.get(e.token.toLowerCase()), detail: `${fmt(e.a.tokenAmount)} · ${usd(e.a.quoteAmount, bySym.get(e.token.toLowerCase())?.quote ?? ZERO)}` })),
-        ].filter((e) => e.t).sort((a, b) => a.ts - b.ts).slice(-12)
-          .map((e) => ({ time: hhmm(e.ts), kind: e.kind, sym: "$" + e.t.symbol, detail: e.detail }));
-        const vol = $("#sb-vol")?.textContent;
-        return { top, events, stats: `${all.length} tokens${vol && vol !== "…" ? ` · ${vol} volume` : ""} · Robinhood + Ethereum` };
-      },
-      useAsLaunchImage(dataUrl) { HALL_SHOT = dataUrl; location.hash = "#/create"; },
-      myPepes: holderPepes,
-      server: CONFIG.hallServer,
-      async pepeImage(id) { return nftImage(await new ethers.Contract(CONFIG.pepesNft, NFT_ABI, CHAINS.robinhood.reader).tokenURI(id)); },
-    });
-    Hall.setAdmin(IS_ADMIN);
-    Hall.pause(location.hash !== "#/hall");
-  } catch (e) { fallback(errMsg(e)); }
-}
-let HALL_SHOT = null; // a picture taken in the Hall, waiting to become the next launch's image
-
 // ---------------------------------------------------------------- Token list
 // One frog seen from behind (original drawing): big lumpy green head with two eye bumps, blue shirt, tan shorts.
 const FROG_SVG = `<svg viewBox="0 0 100 122" aria-hidden="true">
@@ -1309,81 +1206,67 @@ const FROG_SVG = `<svg viewBox="0 0 100 122" aria-hidden="true">
   <path d="M30 50 Q50 56 70 50" stroke="#4a8a37" stroke-width="2" fill="none" stroke-linecap="round"/>
 </svg>`;
 
-/// Recent trades across every launchpad version (the Hall's big screen shows them with the launches).
-const Feed = (() => {
-  async function recentTrades() {
-    const out = [];
-    await Promise.all(livePads().map(async (P) => {
-      const topic = P.c.interface.getEvent("Trade").topicHash;
-      if (!P.ch.blockscoutApi) return; // no trade history on this chain's explorer
-      try {
-        const r = await fetch(`${P.ch.blockscoutApi}/addresses/${P.pad}/logs?topic=${topic}`, { signal: AbortSignal.timeout(8000) });
-        if (!r.ok) return;
-        for (const i of (await r.json()).items) {
-          if (i.topics[0] !== topic) continue;
-          const a = P.c.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args;
-          out.push({ key: i.transaction_hash + ":" + i.index, ts: Date.parse(i.block_timestamp) / 1000, kind: a.isBuy ? "buy" : "sell", token: a.token, a });
-        }
-      } catch {}
-    }));
-    return out;
-  }
-  return { recentTrades };
-})();
-
-const CHAIN_COLORS = { robinhood: "#c8f31d", ethereum: "#7b8cff", base: "#2f6bff", hyperevm: "#7ef2d8", elysium: "#a78bfa" };
-const chainChip = (P) => (P ? `<span class="chip"><i style="background:${CHAIN_COLORS[P.ch.key] || "var(--muted)"}"></i>${esc(P.ch.short)}</span>` : "");
-const chgPill = (x) => (x == null ? `<span class="chg flat">—</span>` : `<span class="chg ${x > 0.0005 ? "up" : x < -0.0005 ? "dn" : "flat"}">${x > 0 ? "+" : ""}${(x * 100).toFixed(Math.abs(x) >= 10 ? 0 : 1)}%</span>`);
+/// A 24 h change as text: sign, one decimal (none from ±1000%), the good direction in the data hue, a fall in red,
+/// no change or no trades in grey.
+const chgText = (x) => (x == null ? `<span class="chg flat">—</span>`
+  : `<span class="chg ${x > 0.0005 ? "up" : x < -0.0005 ? "dn" : "flat"}">${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x * 100).toLocaleString("en-US", { maximumFractionDigits: Math.abs(x) >= 10 ? 0 : 1, minimumFractionDigits: Math.abs(x) >= 10 ? 0 : 1 })}%</span>`);
+/// Change since the earliest trade in the last 24 h (its average price), from the price now. No trades: null.
 const pctOf = (t, m) => {
   if (!m?.first) return null;
   const now = priceOf(t.sqrtPriceX96, t.quoteIsCurrency0);
   const then = Number(ethers.formatUnits(m.first.quoteAmount, 18)) / Number(ethers.formatUnits(m.first.tokenAmount, 18));
   return then > 0 && Number.isFinite(now) ? now / then - 1 : null;
 };
+const hhmm = (d = new Date()) => d.toTimeString().slice(0, 5);
 
-/// Discover, the home page: trending tokens, every token ranked by trending / new / market cap / gainers on any
-/// chain, and live trades from every launchpad.
+const DISCOVER_THEAD = `<div class="thead"><span class="n">#</span><span></span><span>Token</span><span>Market cap</span><span>24h volume</span><span>24h</span><span></span></div>`;
+/// Discover's frame: every block in place, with grey bars where the figures go (painted before the chains answer).
+function discoverFrame(chains) {
+  const skelRow = `<div class="lrow"><span></span><div class="avatar"></div><div><div class="skel" style="height:14px;width:38%"></div><div class="skel" style="height:12px;width:24%;margin-top:6px"></div></div></div>`;
+  const THEAD = DISCOVER_THEAD;
+  return `
+    <div class="trow-title">
+      <div><h1>Discover</h1><div class="sub" id="finding">Reading today's trades…</div></div>
+      <span class="spacer"></span><span class="stamp" id="stamp"></span>
+      <a class="btn primary" href="#/create">Launch a token</a>
+    </div>
+    <div class="kpis">
+      <div><div class="k">Traded, all time</div><div class="v" id="tot-volume"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-volume-sub">&nbsp;</div></div>
+      <div><div class="k">Paid to holders</div><div class="v" id="tot-holders"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-holders-sub">&nbsp;</div></div>
+      <div><div class="k">Traded, last 24h</div><div class="v" id="k-vol24"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="k-vol24-sub">&nbsp;</div></div>
+      <div><div class="k">Tokens</div><div class="v" id="tot-count"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-count-sub">&nbsp;</div></div>
+    </div>
+    <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours</span></div>
+    <div class="trend" id="trend">${Array.from({ length: 5 }, () => `<div class="tc"><div class="head"><div class="avatar"></div><div class="skel" style="height:14px;width:50%"></div></div><div class="skel" style="height:24px;width:60%"></div></div>`).join("")}</div>
+    <div class="hsec"><h2>All tokens</h2></div>
+    <div class="dgrid">
+      <section class="card listcard" aria-label="All tokens">
+        <div class="tools">
+          <div class="utabs" id="sort" role="tablist"><button type="button" data-s="hot">Trending</button><button type="button" data-s="new">New</button><button type="button" data-s="mc">Market cap</button><button type="button" data-s="gain">Gainers</button></div>
+          <div class="seg" id="chainf"><button type="button" data-c="all">All chains</button>${chains.map((c) => `<button type="button" data-c="${c.key}">${esc(c.short)}</button>`).join("")}</div>
+        </div>
+        <div id="list">${THEAD}${skelRow.repeat(8)}</div>
+      </section>
+      <div class="rail">
+        <div class="card tapecard"><div style="display:flex;align-items:center;gap:8px;padding:18px 18px 4px"><h2>Live trades</h2><i class="livedot" aria-hidden="true"></i><span class="spacer"></span><span class="stat" id="tapecount"></span></div>
+          <div class="tape" id="feed">${`<div class="fi"><div class="avatar"></div><div><div class="skel" style="height:14px;width:55%"></div><div class="skel" style="height:12px;width:35%;margin-top:6px"></div></div><div class="skel" style="height:14px;width:56px"></div></div>`.repeat(10)}</div></div>
+        <div class="card" id="official"></div>
+      </div>
+    </div>
+    <footer class="pfoot">
+      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens)].map((a) => `<a href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit: ${esc(a.title)}</a>`).join("")}
+      <a href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source</a>
+      <span class="spacer"></span><span>Liquidity locked forever · 1B supply per token</span>
+    </footer>`;
+}
+
+/// Discover, the home page. Its question: what is moving right now that I could buy? Trending tokens by 24 h volume,
+/// every token ranked (trending, new, top, gainers) on every chain, and the live tape of buys and sells.
 async function renderHome() {
   const gen = routeGen;
   const chains = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
-  const skelRows = Array.from({ length: 8 }, () => `<div class="trow"><span></span><div class="skel" style="width:44px;height:44px"></div><div><div class="skel" style="height:14px;width:40%"></div><div class="skel" style="height:11px;width:25%;margin-top:6px"></div></div></div>`).join("");
-  $("#app").innerHTML = `
-    <section class="dhero">
-      <div>
-        <span class="eyebrow"><i class="dot pulse"></i> Live on ${chains.map((c) => esc(c.short)).join(" · ") || "Robinhood Chain"}</span>
-        <h1>Catch the next Pepe before everyone else.</h1>
-        <p>Launch a memecoin in a minute or buy one in a click. Pay with ETH from Base, Ethereum, Robinhood or HYPE from HyperEVM: no bridging. Every trade pays its holders.</p>
-        <div class="row"><a class="btn primary lg" href="#/create">Launch a token</a><a class="btn lg" href="#list" id="totrade">Start trading</a></div>
-      </div>
-      <div class="dstats">
-        <div class="dstat wide"><div class="k">Trading volume</div><div class="v" id="tot-volume">…</div><div class="s" id="tot-volume-sub">all time</div></div>
-        <div class="dstat"><div class="k">Paid to holders</div><div class="v" id="tot-holders">…</div><div class="s" id="tot-holders-sub"></div></div>
-        <div class="dstat"><div class="k">Tokens</div><div class="v" id="tot-count">…</div><div class="s">${chains.length} chain${chains.length === 1 ? "" : "s"} · locked liquidity</div></div>
-        <span id="tot-protocol" hidden></span><span id="tot-protocol-sub" hidden></span>
-      </div>
-    </section>
-    <div class="dsec"><h2>🔥 Trending</h2><span class="spacer"></span><span class="stat">by 24h volume</span></div>
-    <div class="trend" id="trend">${Array.from({ length: 5 }, () => `<div class="tc"><div class="skel" style="height:52px"></div><div class="skel" style="height:22px;width:60%"></div></div>`).join("")}</div>
-    <div class="dgrid">
-      <section>
-        <div class="dtools">
-          <div class="seg" id="sort"><button type="button" data-s="hot">🔥 Trending</button><button type="button" data-s="new">✨ New</button><button type="button" data-s="mc">🏆 Top</button><button type="button" data-s="gain">📈 Gainers</button></div>
-          <div class="seg" id="chainf"><button type="button" data-c="all">All chains</button>${chains.map((c) => `<button type="button" data-c="${c.key}">${esc(c.short)}</button>`).join("")}</div>
-        </div>
-        <div class="tlist" id="list"><div class="thead"><span>#</span><span></span><span>Token</span><span>Market cap</span><span>24h vol</span><span>24h</span><span></span></div>${skelRows}</div>
-      </section>
-      <aside class="live"><div class="dsec"><h2><i class="dot pulse"></i> Live trades</h2></div><div id="feed"><div class="stat" style="padding:12px 16px">Loading trades…</div></div></aside>
-    </div>
-    <div class="dsec"><h2>Official token</h2></div>
-    <div id="official"></div>
-    <footer class="pfoot">
-      <span>© PepesFamily</span>
-      <a href="https://github.com/0xtenang/PepesFamily" target="_blank" rel="noopener noreferrer">Verified source ↗</a>
-      ${[CONFIG.audits.launchpad, ...Object.values(CONFIG.audits.tokens)].map((a) => `<a href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit: ${esc(a.title)} ↗</a>`).join("")}
-      <a href="https://x.com/pepesdotfamily" target="_blank" rel="noopener noreferrer">X ↗</a>
-      <span class="spacer"></span><a href="#/hall">Visit the Hall →</a>
-    </footer>`;
-  $("#totrade").onclick = (e) => { e.preventDefault(); $("#list").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  $("#app").innerHTML = discoverFrame(chains); // the same frame the first paint showed, now with the live chains
+  const THEAD = DISCOVER_THEAD;
   loadTotals().catch((e) => console.warn("totals", e));
   loadOfficial().catch((e) => console.warn("official token", e));
 
@@ -1391,18 +1274,19 @@ async function renderHome() {
   try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain"].includes(v)) sortMode = v; } catch {}
   let chainMode = "all";
   try { const c = localStorage.getItem("tokenChain"); if (c && (c === "all" || chains.some((x) => x.key === c))) chainMode = c; } catch {}
-  let listed = null, mk = { per: new Map(), recent: [] };
+  let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15;
   const M = (t) => mk.per.get(t.token.toLowerCase());
+  const chainOf = (t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch;
   const row = (t, n) => {
-    const m = M(t), P = TOKEN_PAD.get(t.token.toLowerCase());
-    return `<a class="trow" href="#/t/${t.token}">
+    const m = M(t);
+    return `<a class="lrow" href="#/t/${t.token}">
       <span class="rk">${n}</span>${avatar(t)}
-      <div class="tn"><div class="nm"><b>${esc(t.name)}</b>${t.token.toLowerCase() === CONFIG.pepes.toLowerCase() ? `<span class="pill">✓ Official</span>` : ""}</div>
-        <div class="sub">$${esc(t.symbol)} · ${esc(P?.ch.short || "")} · ${qsym(t.quote)} pair · ${ago(t.createdAt)}</div></div>
+      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(t.name)}</b>${t.token.toLowerCase() === CONFIG.pepes.toLowerCase() ? `<span class="pill">Official</span>` : ""}</div>
+        <div class="sub">$${esc(t.symbol)} · ${esc(chainOf(t)?.short || "")} · ${ago(t.createdAt)}</div></div>
       <span class="r mcc">${usd(t.marketCap, t.quote)}</span>
-      <span class="r vol">${m ? usd(m.vol, t.quote) : `<span class="muted">—</span>`}</span>
-      <span class="r">${chgPill(pctOf(t, m))}</span>
-      <span class="buy">Buy</span></a>`;
+      <span class="r vol${m ? "" : " dim"}">${m ? usd(m.vol, t.quote) : "—"}</span>
+      <span class="r chgc">${chgText(pctOf(t, m))}</span>
+      <span class="act">Buy</span></a>`;
   };
   const score = {
     hot: (t) => [M(t) ? toUsdNum(M(t).vol, t.quote) : 0, toUsdNum(t.marketCap, t.quote)],
@@ -1411,101 +1295,114 @@ async function renderHome() {
     gain: (t) => [pctOf(t, M(t)) ?? -1e9, toUsdNum(t.marketCap, t.quote)],
   };
   const ranked = (mode, list) => list.map((t) => ({ t, k: score[mode](t) })).sort((a, b) => b.k[0] - a.k[0] || b.k[1] - a.k[1]).map((x) => x.t);
+  const inScope = () => {
+    const q = SEARCH.toLowerCase().replace(/^\$/, "");
+    let shown = chainMode === "all" ? listed : listed.filter((t) => chainOf(t)?.key === chainMode);
+    if (q) shown = shown.filter((t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q) || t.token.toLowerCase().startsWith(q));
+    return shown;
+  };
   const showList = window.showDiscoverList = () => {
-    if (gen !== routeGen) return;
-    $("#sort")?.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.s === sortMode));
-    $("#chainf")?.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.c === chainMode));
-    if (!listed || !$("#list")) return;
-    const q = SEARCH.toLowerCase();
-    let shown = chainMode === "all" ? listed : listed.filter((t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch.key === chainMode);
-    if (q) shown = shown.filter((t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q.replace(/^\$/, "")) || t.token.toLowerCase().startsWith(q));
-    const sorted = ranked(sortMode, shown).slice(0, 100);
+    if (gen !== routeGen || !$("#list")) return;
+    $("#sort").querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b.dataset.s === sortMode); b.setAttribute("aria-selected", b.dataset.s === sortMode); });
+    $("#chainf").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.c === chainMode));
+    if (!listed) return;
+    const all = ranked(sortMode, inScope());
+    const sorted = all.slice(0, shownCount);
     // one row that fails to render (odd creator data) is skipped, never the whole list
     const safe = (t, i) => { try { return row(t, i + 1); } catch (e) { console.warn("token row", t.token, e); return ""; } };
-    $("#list").innerHTML = `<div class="thead"><span>#</span><span></span><span>Token</span><span>Market cap</span><span>24h vol</span><span>24h</span><span></span></div>` + (sorted.length ? sorted.map(safe).join("")
-      : `<div class="empty">${q ? `Nothing matches “${esc(SEARCH)}”.` : `No tokens${chainMode === "all" ? "" : ` on ${esc(CHAINS[chainMode].name)}`} yet.`} <a href="#/create" style="color:var(--accent)">Launch one →</a></div>`);
+    $("#list").innerHTML = THEAD + (sorted.length ? sorted.map(safe).join("")
+      : `<div class="empty">${SEARCH ? `No token matches “${esc(SEARCH)}”.` : `No tokens on ${esc(CHAINS[chainMode]?.name || "this chain")} yet.`} <a class="lnk" href="#/create">Launch one</a></div>`)
+      + (all.length > shownCount ? `<div class="more"><button type="button" id="more">Show ${Math.min(25, all.length - shownCount)} more · ${shownCount} of ${all.length}</button></div>` : "");
+    const more = $("#more"); if (more) more.onclick = () => { shownCount += 25; showList(); };
   };
   const showTrend = () => {
     if (gen !== routeGen || !listed || !$("#trend")) return;
     const skip = new Set(CONFIG.kingExclude.map((a) => a.toLowerCase()));
-    const top = ranked("hot", listed.filter((t) => !skip.has(t.token.toLowerCase()))).slice(0, 10);
-    $("#trend").innerHTML = top.map((t, i) => {
+    const top = ranked("hot", listed.filter((t) => !skip.has(t.token.toLowerCase()))).slice(0, 5);
+    $("#trend").innerHTML = top.map((t) => {
       const m = M(t);
       return `<a class="tc" href="#/t/${t.token}">
-        <div class="head">${avatar(t)}<div style="min-width:0"><div class="nm">${esc(t.name)}</div><div class="stat">$${esc(t.symbol)}</div></div><span class="rank">#${i + 1}</span></div>
-        <div class="row">${chainChip(TOKEN_PAD.get(t.token.toLowerCase()))}<span class="chip">${m ? `${m.n} trade${m.n === 1 ? "" : "s"} 24h` : ago(t.createdAt)}</span></div>
-        <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${usd(t.marketCap, t.quote)}</div></div>${chgPill(pctOf(t, m))}</div></a>`;
-    }).join("") || `<div class="card empty">No tokens yet.</div>`;
+        <div class="head">${avatar(t)}<div style="min-width:0"><div class="nm">${esc(t.name)}</div><div class="meta">$${esc(t.symbol)}<span class="ch"> · ${esc(chainOf(t)?.short || "")}</span></div></div></div>
+        <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${usd(t.marketCap, t.quote)}</div></div>${chgText(pctOf(t, m))}</div>
+        <div class="meta">${m ? `${usd(m.vol, t.quote)} in ${m.n} trade${m.n === 1 ? "" : "s"}` : "No trades in 24h"}</div></a>`;
+    }).join("") || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
+  };
+  const showFinding = () => {
+    if (gen !== routeGen || !listed || !$("#finding")) return;
+    let vol = 0, n = 0;
+    for (const t of listed) { const m = M(t); if (m) { vol += toUsdNum(m.vol, t.quote); n += m.n; } }
+    const lead = ranked("hot", listed).find((t) => M(t));
+    $("#finding").innerHTML = lead
+      ? `$${esc(lead.symbol)} leads today with ${usd(M(lead).vol, lead.quote)} traded. ${n.toLocaleString("en-US")} trade${n === 1 ? "" : "s"} across ${listed.length} tokens in the last 24 hours.`
+      : `No trades in the last 24 hours yet: the first buy sets the trend.`;
+    $("#k-vol24").textContent = fmtUsd(vol);
+    $("#k-vol24-sub").textContent = `${n.toLocaleString("en-US")} trade${n === 1 ? "" : "s"}`;
+    $("#stamp").textContent = "Updated " + hhmm();
   };
   let seen = new Set();
   const showFeed = () => {
     if (gen !== routeGen || !$("#feed")) return;
     const byTok = new Map((listed || []).map((t) => [t.token.toLowerCase(), t]));
-    const items = mk.recent.filter((e) => byTok.has(e.a.token.toLowerCase())).slice(0, 40);
+    const items = mk.recent.filter((e) => byTok.has(e.a.token.toLowerCase())).slice(0, 30);
     const first = !seen.size;
     $("#feed").innerHTML = items.length ? items.map((e) => {
       const t = byTok.get(e.a.token.toLowerCase());
-      const fresh = !first && !seen.has(e.key);
-      return `<a class="fi${fresh ? " new" : ""}" href="#/t/${t.token}">${avatar(t)}
-        <div style="min-width:0"><div class="t"><span class="${e.a.isBuy ? "up" : "dn"}" style="font-weight:700">${e.a.isBuy ? "Bought" : "Sold"}</span> $${esc(t.symbol)}</div>
-        <div class="w mono">${short(e.a.trader)} · ${ago(e.ts)}</div></div>
-        <div class="amt ${e.a.isBuy ? "up" : "dn"}">${usd(e.a.quoteAmount, t.quote)}</div></a>`;
-    }).join("") : `<div class="stat" style="padding:12px 16px">No trades yet. Be the first.</div>`;
+      return `<a class="fi${!first && !seen.has(e.key) ? " new" : ""}" href="#/t/${t.token}">${avatar(t)}
+        <div style="min-width:0"><div class="t">${e.a.isBuy ? "Bought" : "Sold"} <b>$${esc(t.symbol)}</b></div><div class="w">${short(e.a.trader)} · ${ago(e.ts)}</div></div>
+        <div class="amt ${e.a.isBuy ? "up" : ""}">${e.a.isBuy ? "+" : "−"}${usd(e.a.quoteAmount, t.quote)}</div></a>`;
+    }).join("") : `<div class="stat" style="padding:12px 18px">No trades yet. The first buy shows up here.</div>`;
+    $("#tapecount").textContent = items.length ? `last ${items.length}` : "";
     seen = new Set(items.map((e) => e.key));
   };
   $("#sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    sortMode = b.dataset.s;
+    sortMode = b.dataset.s; shownCount = 15;
     try { localStorage.setItem("tokenSort", sortMode); } catch {}
     showList();
   });
   $("#chainf").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    chainMode = b.dataset.c;
+    chainMode = b.dataset.c; shownCount = 15;
     try { localStorage.setItem("tokenChain", chainMode); } catch {}
     showList();
   });
   showList();
   try {
-    const all = await allTokenInfos();
-    listed = all.map((x) => x.t).filter(isListed);
-    if ($("#tot-count")) $("#tot-count").textContent = listed.length.toLocaleString("en-US");
+    listed = (await allTokenInfos()).map((x) => x.t).filter(isListed);
+    if (gen !== routeGen) return;
+    $("#tot-count").textContent = listed.length.toLocaleString("en-US");
+    $("#tot-count-sub").textContent = chains.map((c) => `${listed.filter((t) => chainOf(t) === c).length} on ${c.short}`).join(" · ");
     showList(); showTrend();
   } catch (e) {
-    if ($("#list")) $("#list").innerHTML = `<div class="empty">Couldn't load tokens: ${esc(errMsg(e))}</div>`;
+    if ($("#list")) $("#list").innerHTML = `<div class="empty">Couldn't read the launchpads: ${esc(errMsg(e))}. <button type="button" id="relist">Retry</button></div>`;
+    if ($("#relist")) $("#relist").onclick = () => route();
     return;
   }
   const refresh = async () => {
     try { mk = await market24h(); } catch (e) { console.warn("market data", e); }
-    showList(); showTrend(); showFeed();
+    showList(); showTrend(); showFeed(); showFinding();
   };
   await refresh();
-  const timer = setInterval(() => (gen === routeGen && !document.hidden ? refresh() : gen !== routeGen && clearInterval(timer)), 20_000);
+  const timer = setInterval(() => (gen !== routeGen ? clearInterval(timer) : !document.hidden && refresh()), 20_000);
 }
 
-// ---------------------------------------------------------------- Official token
-/// $PEPES, the official PepesFamily token, pinned at the top of the home page.
+/// $PEPES, the official PepesFamily token, in the rail under the live trades.
 async function loadOfficial() {
   const P = PADS.find((p) => p.version === 1 && p.live);
   if (!P || !$("#official")) return;
   const t = await P.v.getTokenInfo(CONFIG.pepes);
   const el = $("#official");
   if (!el) return;
-  const q = t.quote;
-  el.className = "koth official";
   el.innerHTML = `
-    <div class="koth-main">
-      <a href="#/t/${t.token}">${avatar(t, "lg")}</a>
-      <div style="min-width:0;flex:1">
-        <span class="crown">✓ Official PepesFamily token</span>
-        <div class="row" style="margin-top:6px"><a class="name" href="#/t/${t.token}">${esc(t.name)}</a><span class="mono muted">$${esc(t.symbol)}</span></div>
-        <div class="koth-stats">
-          <span>MC <b>${usd(t.marketCap, q)}</b></span>
-          <span>Paid to holders <b>${usd(t.totalDividendsDistributed + t.pendingHolderFees, q)}</b></span>
-          <span>Protocol fees buy it back</span>
-        </div>
-        <div class="ca"><span class="muted">CA</span><code class="mono">${t.token}</code><button type="button" id="offcopy">Copy</button></div>
-      </div>
-      <a class="btn primary" href="#/t/${t.token}">Trade $${esc(t.symbol)}</a>
-    </div>`;
+    <div class="official">
+      <a href="#/t/${t.token}">${avatar(t)}</a>
+      <div style="min-width:0;flex:1"><h2>${esc(t.name)} <span class="stat">$${esc(t.symbol)}</span></h2>
+        <div class="stat">The official token. Protocol fees buy it back.</div></div>
+    </div>
+    <div class="row" style="margin-top:14px;gap:24px">
+      <div><div class="stat">Market cap</div><div style="font-size:16px;font-weight:600">${usd(t.marketCap, t.quote)}</div></div>
+      <div><div class="stat">Paid to holders</div><div style="font-size:16px;font-weight:600">${usd(t.totalDividendsDistributed + t.pendingHolderFees, t.quote)}</div></div>
+    </div>
+    <div class="official"><div class="ca"><code>${short(t.token)}</code><button type="button" class="sharebtn" id="offcopy">Copy address</button></div></div>
+    <a class="btn full" href="#/t/${t.token}" style="margin-top:14px">Trade $${esc(t.symbol)}</a>`;
   $("#offcopy").onclick = async () => {
     try { await navigator.clipboard.writeText(t.token); toast("Contract address copied"); }
     catch { toast(t.token, 8000); }
@@ -1604,22 +1501,21 @@ async function loadTotals() {
   }));
 
   const toUsd = (m) => Object.entries(m).reduce((s, [q, wei]) => s + Number(ethers.formatUnits(wei, 18)) * quoteUsd(q), 0);
-  const parts = (m) => Object.entries(m).filter(([, w]) => w > 0n).map(([q, w]) => `${fmt(w)} ${qsym(q)}`).join(" + ") || "nothing yet";
+  // per asset symbol (IMD on Robinhood and IMD on Ethereum are one line)
+  const parts = (m) => {
+    const bySym = {};
+    for (const [q, w] of Object.entries(m)) if (w > 0n) bySym[qsym(q)] = (bySym[qsym(q)] ?? 0n) + w;
+    return Object.entries(bySym).map(([sym, w]) => `${fmt(w)} ${sym}`).join(" + ") || "nothing yet";
+  };
   // The protocol fee is exactly 1% of each trade's quote amount, so volume = protocol fees × 100.
   const volume = Object.fromEntries(Object.entries(proto).map(([q, w]) => [q, w * 100n]));
   const approx = protocolExact ? "" : "≈ ";
 
-  // the hidden status bar, which the Hall reads
-  $("#sb-vol").textContent = approx + fmtUsd(toUsd(volume));
-  $("#sb-hold").textContent = fmtUsd(toUsd(holders));
-
   if (!$("#tot-holders")) return; // not on the home page
   $("#tot-holders").textContent = fmtUsd(toUsd(holders));
-  $("#tot-holders-sub").textContent = `holders' share of every trade · ${parts(holders)}`;
-  $("#tot-protocol").textContent = approx + fmtUsd(toUsd(proto));
-  $("#tot-protocol-sub").textContent = `1% of every trade · ${parts(proto)}`;
+  $("#tot-holders-sub").textContent = parts(holders);
   $("#tot-volume").textContent = approx + fmtUsd(toUsd(volume));
-  $("#tot-volume-sub").textContent = `all time · ${parts(volume)}`;
+  $("#tot-volume-sub").textContent = parts(volume);
 }
 
 /// All logs a launchpad emitted with `topic0`, via Blockscout's API (paginated).
@@ -1640,12 +1536,12 @@ async function fetchPadLogs(P, topic0) {
 }
 
 // ---------------------------------------------------------------- Admin
-let IS_ADMIN = false; // the connected wallet is the launchpad's owner or fee recipient: the Hall shows the admin terminal
+let IS_ADMIN = false; // the connected wallet is the launchpad's owner or fee recipient: the sidebar shows Admin
 async function showAdminLink() {
   const [owner, feeTo] = await Promise.all([padR.owner(), padR.feeRecipient()]);
   const me = account?.toLowerCase();
   IS_ADMIN = !!me && (me === owner.toLowerCase() || me === feeTo.toLowerCase());
-  window.Hall?.setAdmin(IS_ADMIN);
+  $("#adminlink").hidden = !IS_ADMIN;
 }
 
 /// Protocol fees accrue in each launchpad contract (as Uniswap v4 claims) until collected. Anyone may trigger a
@@ -1865,8 +1761,11 @@ async function renderRewards(who) {
       <button type="submit">View</button>
     </form>
     <div id="rw">${addr ? `<div class="muted" style="margin-top:16px">Loading…</div>`
-      : `<div class="card empty" style="margin-top:16px">Connect your wallet, or paste any address to see its rewards.
-           <div style="margin-top:14px"><button class="primary" id="rconn">Connect wallet</button></div></div>`}</div>`;
+      : `<div class="card" style="margin-top:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2>See what you've earned</h2>
+           <div class="stat">Connect your wallet, or paste any address above. Rewards are paid in each token's pair asset and wait for you to claim.</div></div>
+           <button class="primary" id="rconn">Connect wallet</button></div>
+         <div class="hsec"><h2>Paying holders the most</h2><span class="stat">all time, every chain</span></div>
+         <div class="card listcard" id="toppay">${`<div class="lrow"><span></span><div class="avatar"></div><div><div class="skel" style="height:14px;width:38%"></div></div></div>`.repeat(6)}</div>`}</div>`;
   $("#rf").onsubmit = (e) => {
     e.preventDefault();
     const v = $("#ra").value.trim();
@@ -1874,7 +1773,18 @@ async function renderRewards(who) {
     location.hash = "#/rewards/" + ethers.getAddress(v);
   };
   $("#rconn")?.addEventListener("click", () => connect().catch((e) => toast(errMsg(e), 7000)));
-  if (!addr) return;
+  if (!addr) {
+    // no wallet yet: the tokens whose holders have been paid the most, as a place to start
+    const all = (await allTokenInfos().catch(() => [])).map((x) => x.t).filter(isListed);
+    if (seq !== rewardsSeq || !$("#toppay")) return;
+    const paid = (t) => toUsdNum(t.totalDividendsDistributed + t.pendingHolderFees, t.quote);
+    const top = all.sort((a, b) => paid(b) - paid(a)).slice(0, 6);
+    $("#toppay").innerHTML = `<div class="thead" style="grid-template-columns:26px 48px minmax(0,1fr) 140px 112px"><span class="n">#</span><span></span><span>Token</span><span>Paid to holders</span><span>Market cap</span></div>`
+      + top.map((t, i) => `<a class="lrow" href="#/t/${t.token}" style="grid-template-columns:26px 48px minmax(0,1fr) 140px 112px"><span class="rk">${i + 1}</span>${avatar(t)}
+        <div class="tn" style="min-width:0"><div class="nm"><b>${esc(t.name)}</b></div><div class="sub">$${esc(t.symbol)} · paid in ${qsym(t.quote)}</div></div>
+        <span class="r mcc">${usd(t.totalDividendsDistributed + t.pendingHolderFees, t.quote)}</span><span class="r chgc dim">${usd(t.marketCap, t.quote)}</span></a>`).join("");
+    return;
+  }
 
   let rows, creatorRows = [];
   try {
@@ -2016,14 +1926,14 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT or HYPE.\n\n${tags}\nhttps://pepesimd.fun`;
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT or HYPE.\n\n${tags}\nhttps://pepesimd.fun`; // taste-skill-ignore: tweet copy, not UI
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);
       const holderPct = sp ? sp.h / 100 : 3;
       const amt = priced ? usdLong(toUsdNum(r.earned, r.t.quote)) : `${fmt(r.earned)} ${qsym(r.t.quote)}`;
       url = await tokenShareCard(r, amt, holderPct);
-      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesimd.fun/#/t/${r.t.token}`;
+      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesimd.fun/#/t/${r.t.token}`; // taste-skill-ignore: tweet copy, not UI
       file = `pepesfamily-${r.t.symbol.replace(/[^a-z0-9]/gi, "").toLowerCase() || "token"}.png`;
     }
     if (mySeq !== cardSeq || seq !== rewardsSeq || !$("#card")) return;
@@ -2086,8 +1996,8 @@ async function cardBase() {
   const W = 1200, H = 675, c = document.createElement("canvas");
   c.width = W; c.height = H;
   const g = c.getContext("2d");
-  try { await Promise.all([400, 500, 600].map((w) => document.fonts.load(`${w} 24px "IBM Plex Mono"`))); } catch {}
-  const F = (w, s) => `${w} ${s}px "IBM Plex Mono", ui-monospace, Menlo, monospace`;
+  try { await Promise.all([400, 500, 600].map((w) => document.fonts.load(`${w} 24px "Inter"`))); } catch {}
+  const F = (w, s) => `${w} ${s}px "Inter", system-ui, sans-serif`;
   const fit = (txt, w, size, max) => { g.font = F(w, size); while (g.measureText(txt).width > max && size > 14) g.font = F(w, (size -= 2)); };
   g.fillStyle = "#000"; g.fillRect(0, 0, W, H);
   g.strokeStyle = "#0d170d"; g.lineWidth = 1;
@@ -2189,18 +2099,6 @@ const NFT_ABI = [
   "function traitSetOf(uint256) view returns (uint256)",
 ];
 const NFT_ART_ABI = ["function render(uint256) view returns (string)", "function sealedSvg() view returns (string)", "function specOf(uint256) view returns (uint256)"];
-/// The connected wallet's Pepes Family NFTs, for the Hall: { account, revealed, list: [{ id, spec }] } (spec, the
-/// 32-bit trait set, only once revealed). The Hall dresses your Pepe as the one you pick.
-async function holderPepes() {
-  if (!account) return { account: "", revealed: false, list: [] };
-  const who = account, ch = CHAINS.robinhood;
-  const nft = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, ch.reader), art = new ethers.Contract(CONFIG.pepesArt, NFT_ART_ABI, ch.reader);
-  const ids = (await nft.tokensOfOwner(who)).map(Number);
-  if (!ids.length) return { account: who, revealed: false, list: [] };
-  if ((await nft.seed()) === 0n) return { account: who, revealed: false, list: ids.map((id) => ({ id })) };
-  const list = await Promise.all(ids.slice(0, 120).map(async (id) => ({ id, spec: Number(await art.specOf(await nft.traitSetOf(id))) })));
-  return { account: who, revealed: true, list };
-}
 const svgUrl = (svg) => "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
 /// The image of a token from its on-chain tokenURI (a data: JSON with a data: SVG image).
 function nftImage(uri) {
@@ -2216,7 +2114,9 @@ async function renderMint() {
   const ch = CHAINS.robinhood;
   const nftR = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, ch.reader);
   const artR = new ethers.Contract(CONFIG.pepesArt, NFT_ART_ABI, ch.reader);
-  app.innerHTML = `<div class="muted">Reading the collection…</div>`;
+  app.innerHTML = `<div class="mint-top"><div class="mint-pics">${`<div class="skel" style="aspect-ratio:1"></div>`.repeat(4)}</div>
+    <div><h1>Pepes Family</h1><div class="stat" style="margin-top:4px">Reading the collection…</div><div class="card" style="margin-top:16px"><div class="skel" style="height:60px"></div></div>
+    <div class="card"><div class="skel" style="height:90px"></div></div></div></div>`;
   let st;
   try {
     const [price, open, minted, limit, max, perTx, seed, mine] = await Promise.all([
@@ -2278,8 +2178,7 @@ async function renderMint() {
       const tx = await nft.mint(qty, { value: price * BigInt(qty) });
       toast("Minting…", 30000);
       await tx.wait();
-      toast(`Minted ${qty} Pepe${qty > 1 ? "s" : ""} 🐸`, 6000);
-      window.Hall?.walletChanged();
+      toast(`Minted ${qty} Pepe${qty > 1 ? "s" : ""}`, 6000);
       if (gen === routeGen) renderMint();
     } catch (e) { toast(errMsg(e), 8000); btn.disabled = false; }
   };
@@ -2379,7 +2278,7 @@ function setupImageField() {
       if (st.link !== link) return;
       st = { link, ok: !!src, busy: null };
       show(src);
-      if (src) say("✓ Image found", "ok");
+      if (src) say("Image found", "ok");
       else say("This link isn't an image, it's probably a web page. " + HINT, "warn");
     });
     st = { link, ok: false, busy };
@@ -2404,7 +2303,7 @@ function setupImageField() {
         if (!r.ok || typeof j.url !== "string" || !ipfsPath(j.url)) throw new Error(j.error || "Upload failed, please try again");
         inp.value = j.url;
         st = { link: j.url, ok: true, busy: null };
-        say("✓ Uploaded to IPFS", "ok");
+        say("Uploaded to IPFS", "ok");
       } catch (e) {
         st = { link: "", ok: true, busy: null }; // whatever link is left in the field gets checked again on launch
         show(""); say(errMsg(e), "warn");
@@ -2413,21 +2312,11 @@ function setupImageField() {
     st = { ...st, busy: job };
     return job;
   }
-  // A picture taken in the Hall: upload it as this launch's image (or explain why it can't be).
-  const shot = HALL_SHOT; HALL_SHOT = null;
-  const useShot = () => {
-    if (!shot) return;
-    const [head, b64] = shot.split(","), bin = atob(b64), bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    upload(new File([bytes], "pepesfamily-hall.png", { type: head.slice(5, head.indexOf(";")) }));
-  };
   fetch("/api/upload", { signal: AbortSignal.timeout(8000) }).then((r) => r.json()).then((j) => {
     if (!j?.enabled || !$("#imgupbox")) {
-      if (shot) say("Uploading isn't available on this copy of the site: download your Hall picture, post it anywhere, and paste its image link here.", "warn");
       return;
     }
     canUpload = true;
-    useShot();
     $("#imgupbox").hidden = false;
     $("#imgup").onclick = () => $("#imgfile").click();
     $("#imgfile").onchange = () => { const f = $("#imgfile").files[0]; if (f) upload(f); $("#imgfile").value = ""; };
@@ -2435,9 +2324,7 @@ function setupImageField() {
     row.ondragover = (e) => { e.preventDefault(); row.classList.add("drag"); };
     row.ondragleave = () => row.classList.remove("drag");
     row.ondrop = (e) => { e.preventDefault(); row.classList.remove("drag"); const f = e.dataTransfer?.files?.[0]; if (f) upload(f); };
-  }).catch(() => {
-    if (shot) say("Uploading isn't available on this copy of the site: download your Hall picture, post it anywhere, and paste its image link here.", "warn");
-  });
+  }).catch(() => {});
   // Pasting a copied image (not a link) anywhere in the form uploads it.
   $("#cf").addEventListener("paste", (e) => {
     const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/"));
@@ -2505,7 +2392,7 @@ async function renderCreate() {
           <div style="flex:1;min-width:140px"><label for="tg">Telegram</label><input id="tg" placeholder="https://t.me/…" /></div>
         </div>
         ${LAUNCH?.split ? `${sec(3, "Where the 3% goes")}
-        <div class="presets" id="presets">${SPLIT_PRESETS.map((p) => `<button type="button" data-p="${p.id}"><b>${p.icon} ${p.name}</b><div class="stat">${p.note}</div></button>`).join("")}<button type="button" data-p="custom"><b>⚙️ Custom</b><div class="stat">Your own mix, in 0.5% steps</div></button></div>
+        <div class="presets" id="presets">${SPLIT_PRESETS.map((p) => `<button type="button" data-p="${p.id}"><b>${p.name}</b><div class="stat">${p.note}</div></button>`).join("")}<button type="button" data-p="custom"><b>Custom</b><div class="stat">Your own mix, in 0.5% steps</div></button></div>
         <div class="splitrow" id="custom" hidden>
           ${[["sc", "Creator", 200], ["sh", "Holders", 300], ["sb", "Burn", 300]].map(([id, l, max]) => `<div><label for="${id}">${l}</label><select id="${id}">${Array.from({ length: max / 50 + 1 }, (_, i) => `<option value="${i * 50}">${i * 0.5}%</option>`).join("")}</select></div>`).join("")}
         </div>
@@ -2676,7 +2563,7 @@ async function renderCreate() {
             break;
           }
         }
-        toast(`Token launched on ${ch.short} 🐸`, 8000);
+        toast(`Token launched on ${ch.short}`, 8000);
         location.hash = token ? "#/t/" + token : "#/tokens";
         btn.disabled = false;
         return;
@@ -2730,7 +2617,12 @@ async function renderToken(addr) {
   // Each render (a navigation, or the refresh after a trade) takes a new generation, so older loads can tell they
   // are stale and never write into the page showing now.
   const gen = ++routeGen, stale = () => gen !== routeGen;
-  app.innerHTML = `<div class="muted">Loading…</div>`;
+  if (!$("#tokframe")) app.innerHTML = `<div class="two" id="tokframe"><div>
+      <div class="card"><div class="thead-token"><div class="avatar lg"></div><div style="flex:1"><h1>Token</h1><div class="skel" style="height:12px;width:40%;margin-top:8px"></div></div></div>
+        <div class="skel" style="height:32px;width:30%;margin-top:24px"></div><div class="skel" style="height:240px;margin-top:16px"></div></div>
+      <div class="stats q">${`<div class="card"><div class="k">&nbsp;</div><div class="skel" style="height:24px;width:60%"></div></div>`.repeat(4)}</div>
+      <div class="card"><h2>Trades</h2>${`<div class="skel" style="height:16px;margin-top:18px"></div>`.repeat(5)}</div></div>
+      <div class="card"><div class="skel" style="height:36px"></div><div class="skel" style="height:40px;margin-top:20px"></div><div class="skel" style="height:36px;margin-top:20px"></div></div></div>`;
   // find which launchpad version created this token (getTokenInfo reverts for tokens it doesn't know)
   let info, P;
   const known = TOKEN_PAD.get(addr.toLowerCase()); // try the launchpad we already know first
@@ -2749,38 +2641,38 @@ async function renderToken(addr) {
     <div class="two mfirst">
       <div class="mflat">
         <div class="card mlead">
-          <div class="row" style="gap:14px;align-items:flex-start;flex-wrap:nowrap">
+          <div class="thead-token">
             ${avatar(info, "lg")}
             <div style="min-width:0">
-              <div class="row"><h2 style="margin:0">${esc(info.name)}</h2>${pill(q)}${chainBadge(P)}</div>
-              <div class="mono muted">$${esc(info.symbol)} · <a href="${P.ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)} ↗</a></div>
-              <div class="stat">Created by <a class="mono" href="${P.ch.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> · ${ago(p.createdAt)} · ${P.nft ? `<a href="#/nft" style="text-decoration:underline">Pepes Earn IMD NFT</a>` : `launchpad v${P.version} on ${esc(P.ch.name)}`}</div>
-              ${links ? `<div class="links">${links}</div>` : ""}
-              <div class="row ext" style="margin-top:8px">
-                ${P.ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${P.ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
-                ${P.ch.dex ? `<a class="btn" href="https://dexscreener.com/${P.ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>` : ""}
-                ${((a) => `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>`)(CONFIG.audits.tokens[addr.toLowerCase()] || (P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
-              </div>
+              <div class="row"><h1>${esc(info.name)}</h1><span class="pill">$${esc(info.symbol)}</span><span class="pill">${esc(P.ch.short)}</span><span class="pill">${esc(Q)} pair</span></div>
+              <div class="stat" style="margin-top:4px"><a class="lnk" href="${P.ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)}</a> · created by <a class="lnk" href="${P.ch.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> ${ago(p.createdAt)}${P.nft ? "" : ` · launchpad v${P.version}`}</div>
             </div>
           </div>
+          <div class="row" style="margin-top:20px;align-items:flex-end;gap:16px">
+            <div><div class="stat">Price</div><div class="price-big">${quoteUsd(q) ? fmtUsd(priceOf(info.sqrtPriceX96, info.quoteIsCurrency0) * quoteUsd(q)) : priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4) + " " + Q}</div></div>
+            <span class="spacer"></span>
+            <div class="row ext">
+              ${P.ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${P.ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
+              ${P.ch.dex ? `<a class="btn" href="https://dexscreener.com/${P.ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>` : ""}
+              ${((a) => `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>`)(CONFIG.audits.tokens[addr.toLowerCase()] || (P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
+            </div>
+          </div>
+          <svg class="chart skel" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="Price after each trade"></svg>
+          <div class="row" style="justify-content:space-between"><span class="stat">Price after each trade, in USD</span>${links ? `<div class="links" style="margin:0">${links}</div>` : ""}</div>
           ${m.description ? `<p class="desc">${esc(m.description)}</p>` : ""}
         </div>
         <div class="stats q">
           <div class="card"><div class="k">Market cap</div><div class="v">${usd(info.marketCap, q)}</div>${quoteUsd(q) ? `<div class="stat">${fmt(info.marketCap)} ${Q}</div>` : ""}</div>
-          <div class="card"><div class="k">Price</div><div class="v">${quoteUsd(q) ? fmtUsd(priceOf(info.sqrtPriceX96, info.quoteIsCurrency0) * quoteUsd(q)) : priceOf(info.sqrtPriceX96, info.quoteIsCurrency0).toPrecision(4) + " " + Q}</div></div>
-          <div class="card"><div class="k">Liquidity</div><div class="v">Locked forever</div></div>
           <div class="card"><div class="k">Earned by holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">paid in ${Q}</div></div>
+          <div class="card"><div class="k">Supply</div><div class="v">1B</div><div class="stat">fixed, no mint</div></div>
+          <div class="card"><div class="k">Liquidity</div><div class="v">Locked</div><div class="stat">forever, in the pool</div></div>
         </div>
         ${sp ? `<div class="card" style="margin-top:14px" id="v5box"><span class="h">Fee split · ${esc(splitLabel(sp))}</span>
           <div class="stat">Every trade pays 4%: ${esc(feeText(sp))}. Chosen at launch, fixed forever.</div><div id="v5detail" class="stat" style="margin-top:8px">Loading…</div></div>` : ""}
         <div class="card" style="margin-top:14px">
-          <div class="row"><span class="h" style="margin:0">Price</span><span class="spacer"></span><span class="stat">USD per token</span></div>
-          <svg class="chart" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
-        </div>
-        <div class="card" style="margin-top:14px">
-          <span class="h">Trades</span>
-          <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th>Value</th><th>Tokens</th><th>Tx</th></tr></thead>
-          <tbody id="trades"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
+          <h2 style="margin-bottom:6px">Trades</h2>
+          <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th class="n">Value</th><th class="n">Tokens</th><th class="n">Tx</th></tr></thead>
+          <tbody id="trades">${`<tr><td colspan="5"><div class="skel" style="height:16px"></div></td></tr>`.repeat(5)}</tbody></table></div>
         </div>
       </div>
 
@@ -2800,7 +2692,7 @@ async function renderToken(addr) {
           <div class="fees">4% fee: ${sp ? esc(feeText(sp)) : `1% protocol, 3% to holders of $${esc(info.symbol)}`}.${P.expiry && (!sp || sp.h) ? " Claim at least weekly: rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}${sp?.b ? " Buyers receive, and sellers pay, the burn share in tokens." : ""}</div>
         </div>
         <div class="card" style="margin-top:14px">
-          <span class="h">Your holder rewards</span>
+          <h2 style="margin-bottom:4px">Your holder rewards</h2>
           <div id="pos" class="stat" style="margin-top:6px">Connect a wallet to see your balance and rewards.</div>
           <button class="full" id="claim" disabled>Claim</button>
           <a class="stat" href="#/rewards" style="display:block;margin-top:10px;text-decoration:underline;text-underline-offset:3px">All my rewards →</a>
@@ -2819,8 +2711,8 @@ async function renderToken(addr) {
     const me = account?.toLowerCase();
     const isPayout = me && payout.toLowerCase() === me, isProposed = me && proposed.toLowerCase() === me;
     $("#v5detail").innerHTML = `
-      ${sp.b ? `🔥 Burned: <b>${fmt(burned + pendBurn)}</b> $${esc(info.symbol)} (${(Number(((burned + pendBurn) * 100000n) / SUPPLY) / 1000).toLocaleString("en-US")}% of supply)${pendBurn > 0n ? ` · ${fmt(pendBurn)} waiting to be burned <button type="button" id="v5burn">Burn now</button>` : ""}<br/>` : ""}
-      ${sp.c ? `🧑‍🎨 Creator earnings waiting: <b>${fmt(pend, 6)} ${Q}</b> (${usd(pend, q)}) · paid to <a class="mono" href="${P.ch.explorer}/address/${payout}" target="_blank" rel="noopener">${short(payout)}</a>
+      ${sp.b ? `Burned: <b>${fmt(burned + pendBurn)}</b> $${esc(info.symbol)} (${(Number(((burned + pendBurn) * 100000n) / SUPPLY) / 1000).toLocaleString("en-US")}% of supply)${pendBurn > 0n ? ` · ${fmt(pendBurn)} waiting to be burned <button type="button" id="v5burn">Burn now</button>` : ""}<br/>` : ""}
+      ${sp.c ? `Creator earnings waiting: <b>${fmt(pend, 6)} ${Q}</b> (${usd(pend, q)}) · paid to <a class="mono" href="${P.ch.explorer}/address/${payout}" target="_blank" rel="noopener">${short(payout)}</a>
         ${pend > 0n ? `<button type="button" id="v5collect">Send to creator</button>` : ""}
         ${isPayout ? `<div class="row" style="margin-top:8px"><input id="v5to" placeholder="New payout address 0x…" spellcheck="false" style="flex:1;min-width:180px" /><button type="button" id="v5set">Propose</button></div>
           <div class="stat">Two steps: the new address must then accept here. Proposing 0x0000000000000000000000000000000000000000 cancels.</div>` : ""}
@@ -2945,7 +2837,7 @@ async function renderToken(addr) {
         const qt = await xcQuote(o, P.ch, amt + drop, data);
         $("#pvcost").innerHTML = xcSummary(qt);
         await xcExecute(qt, o, (m2) => toast(m2, 30000));
-        toast(`Bought $${info.symbol} on ${P.ch.short} 🐸`, 8000);
+        toast(`Bought $${info.symbol} on ${P.ch.short}`, 8000);
         $("#amt").value = "";
         await loadPosition().catch(() => {});
         btn.disabled = false;
@@ -3011,7 +2903,7 @@ async function renderToken(addr) {
 
 /// Trade logs for `addr`, oldest first. Blockscout's API has full history and CORS; the RPC is a fallback
 /// because free RPCs cap eth_getLogs ranges (a few minutes of blocks on this fast chain).
-async function fetchTradeLogs(P, addr, createdBlock) {
+async function fetchTradeLogs(P, addr, createdBlock, pages = 6) {
   const padC = P.c;
   const tradeTopic = padC.interface.getEvent("Trade").topicHash;
   try {
@@ -3019,7 +2911,7 @@ async function fetchTradeLogs(P, addr, createdBlock) {
     const url = `${P.ch.blockscoutApi}/addresses/${P.pad}/logs?topic=${ethers.zeroPadValue(addr, 32)}`;
     const items = [];
     let next = null;
-    for (let page = 0; page < 6; page++) {
+    for (let page = 0; page < pages; page++) {
       const q = next ? "&" + new URLSearchParams(next).toString() : "";
       const r = await fetch(url + q, { signal: AbortSignal.timeout(8000) });
       if (!r.ok) throw new Error("blockscout " + r.status);
@@ -3046,14 +2938,16 @@ async function fetchTradeLogs(P, addr, createdBlock) {
 }
 
 /// `stale` says the visitor has left this token's page: then nothing is written.
-async function loadTrades(P, addr, info, stale = () => false) {
-  const trades = await fetchTradeLogs(P, addr, info.createdBlock);
+async function loadTrades(P, addr, info, stale = () => false, pages = 6) {
+  // the newest page first, so the list and chart appear in a second or two; then the full history
+  if (pages > 1 && P.ch.blockscoutApi) await loadTrades(P, addr, info, stale, 1).catch(() => {});
+  const trades = await fetchTradeLogs(P, addr, info.createdBlock, pages);
   if (stale()) return;
   $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
-    <tr><td class="${t.isBuy ? "b" : "s"}">${t.isBuy ? "Buy" : "Sell"}</td>
+    <tr><td class="${t.isBuy ? "b" : ""}">${t.isBuy ? "Buy" : "Sell"}</td>
     <td class="mono"><a href="${P.ch.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
-    <td title="${fmt(t.quoteAmount, 6)} ${qsym(info.quote)}">${usd(t.quoteAmount, info.quote)}</td><td>${fmt(t.tokenAmount)}</td>
-    <td><a href="${P.ch.explorer}/tx/${t.hash}" target="_blank" rel="noopener">↗</a></td></tr>`).join("")
+    <td class="n" title="${fmt(t.quoteAmount, 6)} ${qsym(info.quote)}">${usd(t.quoteAmount, info.quote)}</td><td class="n">${fmt(t.tokenAmount)}</td>
+    <td class="n"><a href="${P.ch.explorer}/tx/${t.hash}" target="_blank" rel="noopener">↗</a></td></tr>`).join("")
     : `<tr><td colspan="5" class="muted">No trades yet</td></tr>`;
 
   // price series: launch price, then price after each trade
@@ -3064,6 +2958,7 @@ async function loadTrades(P, addr, info, stale = () => false) {
 
 function drawChart(pts) {
   const svg = $("#chart"); if (!svg) return;
+  svg.classList.remove("skel");
   if (pts.length < 2) pts = [pts[0], pts[0]];
   const W = 600, H = 200, pad = 10;
   const min = Math.min(...pts), max = Math.max(...pts), span = max - min || max || 1;
@@ -3075,13 +2970,29 @@ function drawChart(pts) {
     <path d="${d}" fill="none" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
 }
 
+// The screen's frame paints at once (its title and grey bars where the figures will go); the chains fill it in.
+(() => {
+  const h = location.hash.slice(1) || "/";
+  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/rewards") ? "/rewards" : h;
+  const bar = (w, ht) => `<div class="skel" style="height:${ht}px;width:${w}"></div>`;
+  const chains = Object.values(CHAINS).filter((c) => PADS.some((P) => P.ch === c && !c.testnet));
+  if (page === "/" || page === "/tokens") $("#app").innerHTML = discoverFrame(chains);
+  else $("#app").innerHTML = `<div class="trow-title"><div><h1>${esc(TITLES[page] || "Token")}</h1><div class="sub">Loading…</div></div></div>
+    <div class="kpis">${`<div>${bar("40%", 13)}<div style="height:8px"></div>${bar("60%", 24)}</div>`.repeat(4)}</div>
+    <div class="hsec"><h2>${page === "/" || page === "/tokens" ? "Trending now" : "&nbsp;"}</h2></div>
+    <div class="card">${`<div style="display:flex;gap:12px;align-items:center;height:72px"><div class="avatar"></div><div style="flex:1">${bar("30%", 14)}<div style="height:6px"></div>${bar("18%", 12)}</div></div>`.repeat(5)}</div>`;
+  for (const a of document.querySelectorAll("#nav a, #tabbar a")) a.classList.toggle("on", a.dataset.r === (page === "/tokens" ? "/" : page));
+})();
 Promise.all([loadPads(), loadPrices()]).finally(() => {
   route();
   // A chain whose RPC failed: its tokens are missing for now, so say so rather than hide them silently.
   const down = [...new Set(PADS.filter((P) => P.readErr).map((P) => P.ch.name))];
   if (LAUNCH && down.length) toast(`${down.join(" and ")} couldn't be reached: its tokens are missing until you reload.`, 9000);
-  // the totals the Hall shows (the token list loads them again for its cards)
-  if (LAUNCH && location.hash.slice(1) !== "/tokens") loadTotals().catch(() => {});
+  // the sidebar's networks: where tokens launch, and where else people can pay from
+  const launchOn = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
+  const payFrom = Object.values(CHAINS).filter((c) => !launchOn.includes(c) && !c.testnet && c.remote);
+  $("#netlist").innerHTML = launchOn.map((c) => `<div class="chainrow"><i class="livedot" aria-hidden="true"></i>${esc(c.name)}</div>`).join("")
+    + (payFrom.length ? `<div class="chainrow" style="color:var(--faint);font-size:13px">Pay from ${payFrom.map((c) => esc(c.short)).join(", ")}</div>` : "");
 });
 setInterval(loadPrices, 60_000);
 </script>

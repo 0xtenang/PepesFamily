@@ -1,0 +1,26 @@
+TASTESKILL · INSPECT   http://127.0.0.1:5300/?v=11#/rewards
+
+MEASURED (first viewport listed)
+  hero headline   "My rewards"  2 words · 1 line(s) · 20px (1.4vw) · Inter 600 · tracking -0.01em · leading 1.4
+  @768px          1 line(s) · 20px
+  @390px          1 line(s) · 20px
+  typefaces       Inter 100%
+  sizes in use    12 / 13 / 14 / 16 / 20 px   body 14px / 1.43
+  colour          page #000000 · sections #111111 · button #ffffff
+  page            1 screens · 148 words · 6 images · hero media none
+  headings        0 · longest 0 line(s) · median - words
+
+WARN — fix, or be able to defend
+  [hero-void] @1440px  28% of the first screen is one empty block (600×600px at 540,300).
+      → Place the void on purpose or fill it: move the picture, the film or one fact into it, grow the headline to meet it, or shrink the screen to its content. A void reads as placed only when something closes it on the far side and it is the screen's one rest.
+
+LOOK AT THE RENDER — open these with your image viewer / Read tool before saying anything about quality:
+  desktop 1440px  .taste-skill/after-rewards/desktop-fold.jpg
+                  .taste-skill/after-rewards/desktop-page-01.jpg
+  tablet 768px    .taste-skill/after-rewards/tablet-fold.jpg
+                  .taste-skill/after-rewards/tablet-page-01.jpg
+  mobile 390px    .taste-skill/after-rewards/mobile-fold.jpg
+                  .taste-skill/after-rewards/mobile-page-01.jpg
+
+report: .taste-skill/after-rewards/report.json
+RESULT: 0 FAIL, 1 WARN — measurements pass. Passing the meter is the floor, not the grade: score the screenshots with references/critique.md.

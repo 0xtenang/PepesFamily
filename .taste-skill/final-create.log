@@ -1,0 +1,26 @@
+TASTESKILL · INSPECT   http://127.0.0.1:5300/?v=16#/create
+
+MEASURED (first viewport listed)
+  hero headline   "Launch a token"  3 words · 1 line(s) · 20px (1.4vw) · Inter 600 · tracking -0.01em · leading 1.4
+  @768px          1 line(s) · 20px
+  @390px          1 line(s) · 20px
+  typefaces       Inter 100%
+  sizes in use    12 / 13 / 14 / 16 / 20 px   body 13px / 1.54
+  colour          page #000000 · button #ffffff
+  page            1.8 screens · 366 words · 0 images · hero media none
+  headings        0 · longest 0 line(s) · median - words
+
+WARN — fix, or be able to defend
+  [below-fold] @1440px  Only 1 of 5 blocks start on the first 1440px screen.
+      → Every block the brief names shows its header and first rows on the first desktop screen: size the headline block to its question, cap long lists with "View all", and put time-sensitive blocks before long tables.
+
+LOOK AT THE RENDER — open these with your image viewer / Read tool before saying anything about quality:
+  desktop 1440px  .taste-skill/final-create/desktop-fold.jpg
+                  .taste-skill/final-create/desktop-page-01.jpg
+  tablet 768px    .taste-skill/final-create/tablet-fold.jpg
+                  .taste-skill/final-create/tablet-page-01.jpg
+  mobile 390px    .taste-skill/final-create/mobile-fold.jpg
+                  .taste-skill/final-create/mobile-page-01.jpg
+
+report: .taste-skill/final-create/report.json
+RESULT: 0 FAIL, 1 WARN — measurements pass. Passing the meter is the floor, not the grade: score the screenshots with references/critique.md.

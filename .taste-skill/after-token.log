@@ -1,0 +1,28 @@
+TASTESKILL · INSPECT   http://127.0.0.1:5300/?v=12#/t/0xe2c46c7068566740a33a4c93f5445b07bcfe5644
+
+MEASURED (first viewport listed)
+  hero headline   "Token"  1 words · 1 line(s) · 20px (1.4vw) · Inter 600 · tracking -0.01em · leading 1.4
+  @768px          1 line(s) · 20px
+  @390px          1 line(s) · 20px
+  typefaces       Inter 100%
+  sizes in use    12 / 13 / 14 / 16 / 20 px
+  colour          page #000000
+  page            1 screens · 22 words · 0 images · hero media none
+  headings        0 · longest 0 line(s) · median - words
+
+WARN — fix, or be able to defend
+  [hero-void] @1440px  61% of the first screen is one empty block (1020×780px at 420,120).
+      → Place the void on purpose or fill it: move the picture, the film or one fact into it, grow the headline to meet it, or shrink the screen to its content. A void reads as placed only when something closes it on the far side and it is the screen's one rest.
+  [tabular] @768px (+390)  Only 38% of the figures use tabular numerals.
+      → Set font-variant-numeric: tabular-nums on tables, KPIs and anything that updates, so digits keep their width.
+
+LOOK AT THE RENDER — open these with your image viewer / Read tool before saying anything about quality:
+  desktop 1440px  .taste-skill/after-token/desktop-fold.jpg
+                  .taste-skill/after-token/desktop-page-01.jpg
+  tablet 768px    .taste-skill/after-token/tablet-fold.jpg
+                  .taste-skill/after-token/tablet-page-01.jpg
+  mobile 390px    .taste-skill/after-token/mobile-fold.jpg
+                  .taste-skill/after-token/mobile-page-01.jpg
+
+report: .taste-skill/after-token/report.json
+RESULT: 0 FAIL, 2 WARN — measurements pass. Passing the meter is the floor, not the grade: score the screenshots with references/critique.md.

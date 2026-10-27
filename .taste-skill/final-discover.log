@@ -1,0 +1,28 @@
+TASTESKILL · INSPECT   http://127.0.0.1:5300/?v=17#/
+
+MEASURED (first viewport listed)
+  hero headline   "Discover"  1 words · 1 line(s) · 20px (1.4vw) · Inter 600 · tracking -0.01em · leading 1.4
+  @768px          1 line(s) · 20px
+  @390px          1 line(s) · 20px
+  typefaces       Inter 100%
+  sizes in use    12 / 13 / 14 / 16 / 20 / 24 px
+  colour          page #000000 · sections #111111 · button #ffffff
+  page            2.2 screens · 372 words · 19 images · hero media none
+  headings        0 · longest 0 line(s) · median - words
+
+WARN — fix, or be able to defend
+  [ragged-row] @1440px  1 pair(s) of cards in one row end at different heights (by 268px).
+      → Cards that share a row share a bottom edge: balance them by their content (the same number of rows, a block of similar height beside it), or stack them. In testing, ragged rows were marked down every time.
+  [panel-void] @1440px  1 card(s) hold a blank band inside: 350px in "Live trades".
+      → A card stretches to its neighbour only when it has content to fill. Keep a legend or a note directly under its chart (only an action or a total may sit at a stretched card's foot), let a short card keep its own height (align-items: start), and let a filtered block shrink to its rows.
+
+LOOK AT THE RENDER — open these with your image viewer / Read tool before saying anything about quality:
+  desktop 1440px  .taste-skill/final-discover/desktop-fold.jpg
+                  .taste-skill/final-discover/desktop-page-01.jpg
+  tablet 768px    .taste-skill/final-discover/tablet-fold.jpg
+                  .taste-skill/final-discover/tablet-page-01.jpg
+  mobile 390px    .taste-skill/final-discover/mobile-fold.jpg
+                  .taste-skill/final-discover/mobile-page-01.jpg
+
+report: .taste-skill/final-discover/report.json
+RESULT: 0 FAIL, 2 WARN — measurements pass. Passing the meter is the floor, not the grade: score the screenshots with references/critique.md.
