@@ -11,8 +11,9 @@ module.exports = async (req, res) => {
   try {
     const r = await fetch("https://api.geckoterminal.com/api/v2" + path, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(10000) });
     const text = await r.text();
-    // candles and trending change by the minute; token and pool details more slowly
-    const ttl = /ohlcv\/minute|trending_pools/.test(path) ? 30 : /ohlcv/.test(path) ? 120 : 120;
+    // candles by the minute change fast; token lists (40 pages for Discover) are shared for 2 minutes so the
+    // function's own GeckoTerminal allowance (~30 a minute) is never used up; token details change slowly
+    const ttl = /ohlcv\/minute/.test(path) ? 30 : /ohlcv|trending_pools|\/pools\?/.test(path) ? 120 : 300;
     res.setHeader("Cache-Control", r.ok ? `public, s-maxage=${ttl}, stale-while-revalidate=600` : "no-store");
     res.status(r.status).setHeader("content-type", "application/json").send(text);
   } catch {

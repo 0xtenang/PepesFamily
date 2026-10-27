@@ -1718,7 +1718,11 @@ async function renderHome() {
         <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
       || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
   };
-  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => console.warn("markets", e)).finally(() => { showList(); showTrend(); saveCache(); });
+  // the first trending page of every chain at once, then the rest (about 100 tokens a chain) when it comes in
+  const loadMarket = () => marketTokens().then((m) => { if (!market || market.length < m.length) market = m; }).catch((e) => console.warn("markets", e))
+    .finally(() => { showList(); showTrend(); saveCache(); })
+    .then(() => marketTokens(true)).then((m) => { if (gen === routeGen && m.length > (market?.length || 0)) { market = m; showList(); showTrend(); saveCache(); } })
+    .catch((e) => console.warn("more markets", e));
   // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
   let posSeq = 0;
   const showPositions = window.refreshPositions = async () => {
@@ -1986,22 +1990,35 @@ const MAJORS = new Set(["ETH", "WETH", "BNB", "WBNB", "HYPE", "WHYPE", "KHYPE", 
   "USDE", "USDS", "DAI", "FDUSD", "USD1", "USDH", "BTC", "WBTC", "BTCB", "UBTC", "CBBTC", "STETH", "WSTETH", "CBETH", "UETH"]);
 /// Trending tokens on every chain (one entry per token, its busiest pool): { ch, address, name, symbol, image, price,
 /// mc, vol, chg, liq, created, pool }. Our own launches are left out (they have their own list).
-async function marketTokens() {
-  const lists = await Promise.all(gtChains().map(async (ch) => {
-    const j = await gtGet(`/networks/${ch.gt}/trending_pools?page=1&include=base_token`).catch(() => null);
+/// `deep`: also trending pages 2-5 and the 3 pages of busiest pools (by 24 h volume) per chain, about 100 tokens a
+/// chain like DexScreener's first page; otherwise only trending page 1 (20 pools), the quick first paint.
+async function marketTokens(deep = false) {
+  const paths = (ch) => [`/networks/${ch.gt}/trending_pools?page=1&include=base_token`,
+    ...(deep ? [2, 3, 4, 5].map((n) => `/networks/${ch.gt}/trending_pools?page=${n}&include=base_token`) : []),
+    ...(deep ? [1, 2, 3].map((n) => `/networks/${ch.gt}/pools?page=${n}&include=base_token&sort=h24_volume_usd_desc`) : [])];
+  // four at a time, so a visitor without the shared cache doesn't hit GeckoTerminal's limit all at once
+  const all = gtChains().flatMap((ch) => paths(ch).map((path) => ({ ch, path })));
+  let next = 0;
+  const lists = new Array(all.length);
+  await Promise.all(Array.from({ length: deep ? 4 : all.length }, async () => {
+    while (next < all.length) { const i = next++; lists[i] = await one(all[i]); }
+  }));
+  async function one({ ch, path }) {
+    const j = await gtGet(path, deep ? 300_000 : 120_000).catch(() => null);
     if (!j?.data) return [];
     const toks = new Map((j.included || []).map((t) => [t.id, t.attributes]));
     return j.data.map((p) => {
       const a = p.attributes, t = toks.get(p.relationships?.base_token?.data?.id);
+      if (!t) return null;
       const sym = String(t.symbol).toUpperCase(), px = Number(a.base_token_price_usd) || 0;
       // stablecoins: anything named like a dollar or trading flat at $1 (RLUSD, PYUSD, USDe…), as well as the majors
-      if (!t || MAJORS.has(sym) || sym.includes("USD") || (px > 0.97 && px < 1.03) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
+      if (MAJORS.has(sym) || sym.includes("USD") || (px > 0.97 && px < 1.03) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
       return { ch, address: ethers.getAddress(t.address), name: t.name, symbol: t.symbol, decimals: Number(t.decimals) || 18, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "",
         price: Number(a.base_token_price_usd) || 0, mc: Number(a.market_cap_usd || a.fdv_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
         chg: a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null, liq: Number(a.reserve_in_usd) || 0,
         created: a.pool_created_at ? Date.parse(a.pool_created_at) / 1000 : 0, pool: a.address };
     }).filter(Boolean);
-  }));
+  }
   const best = new Map();
   for (const x of lists.flat()) { const k = x.ch.key + x.address.toLowerCase(), o = best.get(k); if (!o || x.vol > o.vol) best.set(k, x); }
   if (!best.size && lists.every((l) => !l.length)) throw new Error("no chain answered");
