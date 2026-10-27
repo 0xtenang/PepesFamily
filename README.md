@@ -134,7 +134,7 @@ Deployment data: `PADS=… forge script script/RemoteDeployData.s.sol`. The webs
 
 | Chain | PepesFamilyRemote | Launchpads it works with |
 | --- | --- | --- |
-| ethereum | `0xD287bE6528775DD00749977dE2BDeBdEaF66cb2e` | `0xa89083083119B70c06b372dC85Dc6155a8F568CC`, `0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC`, `0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC` |
+| ethereum | `0x7323D7c8da32c7c36ac9E9084dc1233daBE78d1F` | `0xa89083083119B70c06b372dC85Dc6155a8F568CC`, `0x4130878d0f1efEfB84e424829bd35Aa83201A8cC`, `0x5095D9b943F951769a528212f50a41FB7CF568CC` |
 | robinhood | `0x54AAf9060067E43c92164894232dFd59C90F0178` | `0xC26003787503b978033427F77047fAF5551Ca8CC`, `0xf41b697c584F0dD38b9E65D72D49F768388d28CC`, `0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC` |
 | base | `0x4889969aE82f44375320c61ad647AAc820155A10` | `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc` |
 | hyperevm | `0xf268298cCeF5c2906667E1861B0316e06f9137e4` | `0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC` |
@@ -169,8 +169,8 @@ once its contract exists.
 
 | Key | Chain | Pair asset | Buying with the chain's coin | Start | Launchpad |
 | --- | --- | --- | --- | --- | --- |
-| `ethereum-pepe` | Ethereum | $PEPE `0x6982…1933` | ETH router through the PEPE/ETH v4 pool (1%, spacing 200) | 950M PEPE | `0xBCAE6877Bd854195b556987bB13c721c4BB9e8CC` |
-| `ethereum-weth` | Ethereum | WETH (ETH) | native router: wraps and unwraps | 1.5 ETH | `0xa9EA060642D6eCE241Ba20E66efe6b9B94E8e8cC` |
+| `ethereum-pepe` | Ethereum | $PEPE `0x6982…1933` | ETH router through the PEPE/ETH v4 pool (1%, spacing 200) | 950M PEPE | `0x4130878d0f1efEfB84e424829bd35Aa83201A8cC` |
+| `ethereum-weth` | Ethereum | WETH (ETH) | native router: wraps and unwraps | 1.5 ETH | `0x5095D9b943F951769a528212f50a41FB7CF568CC` |
 | `robinhood-weth` | Robinhood Chain | WETH (ETH; Arbitrum aeWETH `0x0Bd7…AD73`) | native router: wraps and unwraps | 1.5 ETH | `0xf41b697c584F0dD38b9E65D72D49F768388d28CC` |
 | `robinhood-cashcat` | Robinhood Chain | $CASHCAT `0x020b…18b4` | ETH router through the CASHCAT/ETH v4 pool (2%, spacing 400) | 35K CASHCAT | `0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC` |
 

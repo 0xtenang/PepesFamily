@@ -571,9 +571,11 @@ contract PepesFamily is IHooks, IUnlockCallback {
     }
 
     /// @dev On Arbitrum chains (Robinhood Chain) `block.number` is the L1 block; ArbSys gives the L2 block that
-    ///      logs are indexed by. Falls back to `block.number` elsewhere.
+    ///      logs are indexed by. Falls back to `block.number` elsewhere. The call gets a small, fixed amount of gas:
+    ///      on some chains 0x64 is a different precompile that fails by burning all the gas it is given (BSC's
+    ///      system precompile there did, and every launch ran out of gas), so a failure here must stay cheap.
     function _l2BlockNumber() internal view returns (uint64) {
-        (bool ok, bytes memory data) = address(100).staticcall(abi.encodeWithSignature("arbBlockNumber()"));
+        (bool ok, bytes memory data) = address(100).staticcall{gas: 50_000}(abi.encodeWithSignature("arbBlockNumber()"));
         return ok && data.length == 32 ? uint64(abi.decode(data, (uint256))) : uint64(block.number);
     }
 
