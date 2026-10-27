@@ -1313,7 +1313,8 @@ function guardPrivy(p) {
     const value = BigInt(tx.value || 0);
     const [bal, fee] = await Promise.all([ch.reader.getBalance(account), ch.reader.getFeeData()]);
     const price = ((fee.maxFeePerGas || fee.gasPrice || 0n) * 12n) / 10n;
-    const short = (need) => fail(`Not enough ${sym} on ${ch.name} for this trade and its network fee: it needs about ${fmt(need, 6)} ${sym}, your PepesFamily wallet has ${fmt(bal, 6)} ${sym}. Add ${sym} on ${ch.name} or trade a smaller amount.`);
+    const amt = (w) => `${Number(ethers.formatEther(w)).toLocaleString("en-US", { maximumSignificantDigits: 3 })} ${sym}`;
+    const short = (need) => fail(`Not enough ${sym} on ${ch.name} for this trade and its network fee: it needs about ${amt(need)}, your PepesFamily wallet has ${amt(bal)}. Add ${sym} on ${ch.name} or trade a smaller amount.`);
     if (bal < value + 21000n * price) short(value + 21000n * price);
     const gas = tx.gas ? BigInt(tx.gas) : await estimate(ch, tx);
     if (bal < value + gas * price) short(value + gas * price);
@@ -1964,19 +1965,47 @@ async function marketToken(ch, addr) {
     chart: pool ? `https://www.geckoterminal.com/${ch.gt}/pools/${pool.address}?embed=1&info=0&swaps=0&light_chart=0&chart_type=price&resolution=15m` : "" };
 }
 /// A Relay quote for a swap at `swapBps`: `amount` of `from` (on `fromCh`) into `to` (on `toCh`), exact in.
-function swapQuote(fromCh, from, toCh, to, amount) {
+/// A buy paid from another chain also leaves a little of `toCh`'s coin (GAS_TOPUP_USD) when the wallet has none
+/// there, so the token can be sold later without topping up first.
+async function swapQuote(fromCh, from, toCh, to, amount) {
+  let topup = false;
+  if (account && fromCh !== toCh && to !== ZERO_ADDR) {
+    topup = await toCh.reader.getBalance(account).then((b) => b < ethers.parseEther(GAS_DROP[toCh.key] || "0.0001")).catch(() => false);
+  }
   return relayApi("quote/v2", {
     user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
     originChainId: fromCh.chainId, destinationChainId: toCh.chainId, originCurrency: from, destinationCurrency: to,
     amount: amount.toString(), tradeType: "EXACT_INPUT", appFees: appFees(FEES.swapBps),
+    ...(topup ? { topupGas: true, topupGasAmount: String(Math.round((GAS_TOPUP_USD[toCh.key] || 0.3) * 1e6)) } : {}),
   });
 }
+const GAS_TOPUP_USD = { ethereum: 2, robinhood: 0.3, base: 0.3, hyperevm: 0.3, bsc: 0.3 };
 const swapSummary = (q) => {
-  const o = q.details?.currencyOut, f = q.fees || {};
-  const fee = ["gas", "relayer", "app"].reduce((t, k) => t + Number(f[k]?.amountUsd || 0), 0);
-  return `You get ≈ ${Number(o?.amountFormatted || 0).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${esc(o?.currency?.symbol || "")}`
-    + ` · fees ≈ ${fmtUsd(fee)} (incl. ${FEES.swapBps / 100}% PepesFamily fee)${q.details?.timeEstimate ? ` · ~${q.details.timeEstimate} s` : ""}`;
+  const o = q.details?.currencyOut;
+  return `You get ≈ ${Number(o?.amountFormatted || 0).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${esc(o?.currency?.symbol || "")}`;
 };
+/// Before a sell on `ch`: no coin there for the network fee (a token bought from another chain), so a little is
+/// brought over from the chain holding the most, through Relay (a few seconds), then the sell goes on.
+async function ensureGas(ch, onStatus) {
+  const [bal, fee] = await Promise.all([ch.reader.getBalance(account), ch.reader.getFeeData()]);
+  const need = 400_000n * (((fee.maxFeePerGas || fee.gasPrice || 0n) * 15n) / 10n); // a sell with an approval, with room
+  if (bal >= need) return;
+  const px = nativeUsd(ch);
+  const usdV = GAS_TOPUP_USD[ch.key] || 0.3;
+  let want = px ? ethers.parseEther((usdV / px).toFixed(12)) : ethers.parseEther(GAS_DROP[ch.key] || "0.0001");
+  if (want < need * 2n) want = need * 2n;
+  await loadCash();
+  const src = (CASH?.list || []).find((x) => x.ch !== ch && x.usd >= usdV * 3 + (x.ch.key === "ethereum" ? 3 : 0.2));
+  const sym = ch.native?.symbol || "ETH";
+  if (!src) throw new Error(`You need a little ${sym} on ${ch.name} for the network fee (about ${fmtUsd(Number(ethers.formatEther(need)) * px || 0.01)}). Add ${sym} on ${ch.name}.`);
+  onStatus?.(`Getting a little ${sym} on ${ch.short} for the network fee…`);
+  const o = { ch: src.ch, sym: src.sym, addr: ZERO_ADDR, dec: 18 };
+  await requireWallet(o.ch);
+  const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: o.ch.chainId, destinationChainId: ch.chainId,
+    originCurrency: ZERO_ADDR, destinationCurrency: ZERO_ADDR, amount: want.toString(), tradeType: "EXACT_OUTPUT" });
+  await xcExecute(q, o, () => {}); // one message for the whole top-up (above)
+  onStatus?.("Selling…");
+}
 
 /// GoPlus token security for `addr` on `ch` (Ethereum, BSC, Base and Robinhood Chain; not HyperEVM yet).
 /// { supported, danger: [..], warn: [..], ok: [..], honeypot } as plain sentences; danger blocks nothing by itself.
@@ -2183,8 +2212,9 @@ async function renderMarketToken(chKey, addrIn) {
         if (!amt) throw new Error("Enter an amount");
         o = { ch, sym: t.symbol, addr, dec };
       }
-      await requireWallet(o.ch); // the paying chain
       if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
+      if (side === "sell") await ensureGas(ch, (m2) => toast(m2, 30000));
+      await requireWallet(o.ch); // the paying chain
       const fresh = lastQ && lastQ.key === qKey(o, amt) && lastQ.who === account && Date.now() - lastQ.at < 25_000;
       if (!fresh) toast("Getting the price…", 6000);
       const q = fresh ? lastQ.q : side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
@@ -3730,6 +3760,7 @@ async function renderToken(addr) {
         btn.disabled = false;
         return;
       }
+      if (tradeSide === "sell") await ensureGas(P.ch, (m2) => toast(m2, 30000));
       await requireWallet(P.ch);
       const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
       if (!amt) throw new Error("Enter an amount");
