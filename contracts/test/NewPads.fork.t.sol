@@ -28,6 +28,7 @@ contract NewPadsForkTest is Test {
     function test_ethereumWeth() public { _run("ethereum-weth", "FORK_RPC_ETH"); }
     function test_robinhoodWeth() public { _run("robinhood-weth", "FORK_RPC"); }
     function test_robinhoodCashcat() public { _run("robinhood-cashcat", "FORK_RPC"); }
+    function test_bscWbnb() public { _run("bsc-wbnb", "FORK_RPC_BSC"); }
 
     function _run(string memory key, string memory rpcEnv) internal {
         string memory rpc = vm.envOr(rpcEnv, string(""));

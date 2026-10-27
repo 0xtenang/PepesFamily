@@ -381,6 +381,7 @@ const CONFIG = {
     // (CREATE2); each lights up here once its contract exists on its chain.
     { version: 5, chain: "base", quote: "0x4200000000000000000000000000000000000006", pad: "0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc", router: "0xB34C8016EA506E257b47640e52fC9329daF9C847", ethRouter: "0x5d3105EcE7b5459cf6313f5925F78325a0C4A1aE", lens: "0x1b44F02c09eaef9Eed8289e7a218f5402a966d77", permit: true, expiry: true, split: true },
     { version: 5, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC", router: "0x5df991A1c82fBd56eA0b8Cdc3b9749f2286615D4", ethRouter: "0x4927CfFA45cf2Aaa568f73aE9c8d988acaECF7Bb", lens: "0x9F2333517B84e83e59d9a0166752978AF2b7a694", permit: true, expiry: true, split: true },
+    { version: 5, chain: "bsc", quote: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", pad: "0xbeCc01b1Ec3D78E34953432255e7FcfDe47Ea8cC", router: "0xa34A348b57b0099C5533c272442452f60c3E135e", ethRouter: "0x2E5F4Ea419875DcDf0c2bea89B7352f2C7CBD835", lens: "0x85E706d2F4942DBE8964D5b5ba4500128d69bD6f", permit: true, expiry: true, split: true },
     { version: 5, chain: "elysium", quote: "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", pad: "0x417fbe5588666647dCB8575c583dAd0CA11B68cc", router: "0xfE2D51a10eA1E3Cf739e19A54b99946913feA4CA", ethRouter: "0x7F702bB6CFe8A4394071BD8a832Dc73A80ED1043", lens: "0xB43a190ae80781FBBC7A40aAE1c25557D6AE8c11", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", pad: "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", router: "0x8d617D6c1776cA90e99c5FAb7c632D3c3159E6c1", ethRouter: "0x7399E141677519f0d4eB493b4546e87bd5B5e67c", lens: "0xd458bCa018677D3869eB23f02433b9DFFE1f9615", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", pad: "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC", router: "0x7C0e35703aC820A613A8b820B08B5F5C3f52B0e6", ethRouter: "0x3f08F91457Be1bcA3f24147D694964f5dEdb98f2", lens: "0xD858C0aE063A8A4e9C3ddcb02dEC6d96B2586873", permit: true, expiry: true, split: true },
@@ -480,6 +481,13 @@ const CHAINS = {
     explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
     gmgn: "hyperevm", dex: "" /* DexScreener does not index Uniswap v4 on HyperEVM yet */, native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
     remote: "0xf268298cCeF5c2906667E1861B0316e06f9137e4", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
+  },
+  // BNB Smart Chain: Uniswap v4 (PoolManager 0x28e2…e9dF). No Blockscout there, so trade history comes from the RPC.
+  bsc: {
+    key: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
+    explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
+    gmgn: "bsc", dex: "" /* DexScreener does not list Uniswap v4 pools on BSC yet */, native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
+    remote: "0x0B93D5F2CB2fdFb957e3f436678CB83F33401220", remotePads: ["0xbeCc01b1Ec3D78E34953432255e7FcfDe47Ea8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
   // own PoolManager and quoter (contracts/script/ElysiumAddrs.s.sol). Test tokens: no USD values shown.
@@ -649,6 +657,7 @@ addQuote("robinhood", "0x020bfC650A365f8BB26819deAAbF3E21291018b4", "CASHCAT", {
   quick: ["100", "500", "1000", "5000"] });
 addQuote("base", "0x4200000000000000000000000000000000000006", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 addQuote("hyperevm", "0x5555555555555555555555555555555555555555", "WHYPE", { wrapped: true, usd: () => prices.hypeUsd, quick: ["0.5", "1", "5", "10"] });
+addQuote("bsc", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", { wrapped: true, usd: () => prices.bnbUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 addQuote("elysium", "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", "WHYPE", { wrapped: true, usd: () => 0, quick: ["0.5", "1", "5", "10"] }); // testnet: no value
 addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "5", "10"] };
@@ -776,7 +785,7 @@ const REMOTE_IFACE = new ethers.Interface([
   "function creatorOf(address token) view returns (address)",
 ]);
 /// Gas left on the destination chain when the user has (almost) none there: enough to claim and sell a few times.
-const GAS_DROP = { ethereum: "0.0004", robinhood: "0.00005", base: "0.00005", hyperevm: "0.02" };
+const GAS_DROP = { ethereum: "0.0004", robinhood: "0.00005", base: "0.00005", hyperevm: "0.02", bsc: "0.0003" };
 /// Can launchpad P be used from another chain? (Its chain's PepesFamilyRemote exists and works with it.)
 const xcReady = (P) => !!(P?.ch.remoteLive && P.ch.remotePads?.some((a) => a.toLowerCase() === P.pad.toLowerCase()));
 /// Where a user can pay from for chain `dest`: every currency on every chain Relay serves for us, except paying
@@ -853,7 +862,7 @@ async function gasDropFor(dest) {
 
 // ---------------------------------------------------------------- USD prices
 const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
-const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, cashcatEth: 0, hypeUsd: 0 };
+const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, cashcatEth: 0, hypeUsd: 0, bnbUsd: 0 };
 /// ETH per token, from a Uniswap v4 ETH/token pool's price (both 18 decimals), read on its chain.
 async function ethPerToken(ch, poolId) {
   const [sq] = await new ethers.Contract(ch.stateView, STATEVIEW_ABI, ch.reader).getSlot0(poolId);
@@ -872,8 +881,8 @@ async function loadPrices() {
   await Promise.all([
     ethPerToken(CHAINS.ethereum, "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd").then((v) => (prices.pepeEth = v)).catch(() => {}),
     ethPerToken(CHAINS.robinhood, "0xf7dc0af99fce7169eb76854c0b39beb9915526894d42229946e5cb469cab50b1").then((v) => (prices.cashcatEth = v)).catch(() => {}),
-    fetch("https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid&vs_currencies=usd", { signal: AbortSignal.timeout(8000) })
-      .then((r) => r.json()).then((j) => { prices.hypeUsd = j?.hyperliquid?.usd || 0; }).catch(() => {}),
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid,binancecoin&vs_currencies=usd", { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json()).then((j) => { prices.hypeUsd = j?.hyperliquid?.usd || 0; prices.bnbUsd = j?.binancecoin?.usd || 0; }).catch(() => {}),
   ]);
 }
 const quoteUsd = (q) => {
@@ -1926,7 +1935,7 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT or HYPE.\n\n${tags}\nhttps://pepesimd.fun`; // taste-skill-ignore: tweet copy, not UI
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT, HYPE or BNB.\n\n${tags}\nhttps://pepesimd.fun`; // taste-skill-ignore: tweet copy, not UI
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);

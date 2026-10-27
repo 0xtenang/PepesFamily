@@ -104,6 +104,11 @@ library Chains {
             return Pad(key, 999, IPoolManager(0x12D4Fd9C5DeDd00ab8a0bCe2CF0167bbf94b6B1F), 0x5555555555555555555555555555555555555555,
                 0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e, wrappedNative, 47e18);
         }
+        if (k == keccak256("bsc-wbnb")) {
+            // BNB Smart Chain, WBNB: launches pair with BNB itself (5 BNB, about $3,700 on 2026-10-27)
+            return Pad(key, 56, IPoolManager(0x28e2Ea090877bF75740558f6BFB36A5ffeE9e9dF), 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c,
+                0x9F75dD27D6664c475B90e105573E550ff69437B0, wrappedNative, 5e18);
+        }
         revert("Chains: unknown launchpad");
     }
 }

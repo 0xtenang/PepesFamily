@@ -9,9 +9,9 @@ import {DeployLib} from "../script/DeployLib.sol";
 import {Chains} from "../script/Chains.sol";
 
 /// @notice PepesFamilyRemote on forks: Robinhood Chain's live IMD launchpad (paying with ETH swaps to IMD through the
-///         ETH/IMD pool), and the new ETH launchpad on Base and HYPE launchpad on HyperEVM (wrapping).
+///         ETH/IMD pool), and the new ETH launchpad on Base, HYPE launchpad on HyperEVM and BNB launchpad on BSC (wrapping).
 ///   FORK_RPC=https://robinhood.drpc.org FORK_RPC_BASE=https://base-rpc.publicnode.com \
-///   FORK_RPC_HYPER=https://rpc.hyperliquid.xyz/evm forge test --mc RemoteForkTest -vv
+///   FORK_RPC_HYPER=https://rpc.hyperliquid.xyz/evm FORK_RPC_BSC=https://bsc-rpc.publicnode.com forge test --mc RemoteForkTest -vv
 contract RemoteForkTest is Test {
     // unique addresses: common test names can be real accounts (with code) on a forked chain
     address alice = makeAddr("pepesfamily-remote-alice");
@@ -27,6 +27,7 @@ contract RemoteForkTest is Test {
 
     function test_baseWeth() public { _newPad("base-weth", "FORK_RPC_BASE"); }
     function test_hyperevmWhype() public { _newPad("hyperevm-whype", "FORK_RPC_HYPER"); }
+    function test_bscWbnb() public { _newPad("bsc-wbnb", "FORK_RPC_BSC"); }
 
     function _newPad(string memory key, string memory env) internal {
         string memory rpc = vm.envOr(env, string(""));
