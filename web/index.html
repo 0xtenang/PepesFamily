@@ -1083,7 +1083,12 @@ function toast(msg, ms = 4000) {
   const t = $("#toast"); t.textContent = msg; t.style.display = "block";
   clearTimeout(toast.h); toast.h = setTimeout(() => (t.style.display = "none"), ms);
 }
-function errMsg(e) { return e?.shortMessage || e?.info?.error?.message || e?.reason || e?.message || String(e); }
+function errMsg(e) {
+  if (PRIVY_ERR && Date.now() - PRIVY_ERR.at < 10000) { const m = PRIVY_ERR.msg; PRIVY_ERR = null; return m; }
+  // ethers' "could not coalesce error" wraps a wallet error it didn't recognize: show the wallet's own words
+  const inner = e?.error?.message || e?.info?.error?.message;
+  if (/could not coalesce/i.test(e?.shortMessage || e?.message || "") && inner) return inner;
+  return e?.shortMessage || e?.info?.error?.message || e?.reason || e?.message || String(e); }
 const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
 const withSlippage = (x, bps) => (x * (10000n - BigInt(bps))) / 10000n;
 
@@ -1097,7 +1102,7 @@ window.addEventListener("eip6963:announceProvider", (e) => {
 });
 window.dispatchEvent(new Event("eip6963:requestProvider"));
 
-let WALLET = null, walletName = "Your wallet", listening = null, WALLET_KIND = "";
+let WALLET = null, walletName = "Your wallet", listening = null, WALLET_KIND = "", PRIVY_ERR = null;
 
 /// Name of an injected (pre-EIP-6963) provider from its flags.
 function legacyName(p) {
@@ -1265,9 +1270,37 @@ function guardPrivy(p) {
       throw Object.assign(new Error("Cancelled"), { code: 4001 });
     }
   };
+  const chainNow = async () => { const id = Number(await p.request({ method: "eth_chainId" })); return Object.values(CHAINS).find((c) => c.chainId === id); };
+  // ethers wraps whatever a wallet throws in its own generic words, so the plain reason is also kept in PRIVY_ERR,
+  // which errMsg shows instead.
+  const fail = (msg) => { PRIVY_ERR = { msg, at: Date.now() }; throw Object.assign(new Error(msg), { code: -32000 }); };
+  // Gas from our own connection to the chain, so a trade that would fail says so before anything is sent.
+  const estimate = async (ch, tx) => {
+    try { return await ch.reader.estimateGas({ from: tx.from || account, to: tx.to, data: tx.data || "0x", value: BigInt(tx.value || 0) }); }
+    catch { return fail(`This trade won't go through on ${ch.name} right now. Try a smaller amount or another token.`); }
+  };
+  // Before estimating or sending: enough of the chain's coin for the amount and the network fee? Returns the gas.
+  const funds = async (tx, ch) => {
+    const sym = ch.native?.symbol || "ETH";
+    const value = BigInt(tx.value || 0);
+    const [bal, fee] = await Promise.all([ch.reader.getBalance(account), ch.reader.getFeeData()]);
+    const price = ((fee.maxFeePerGas || fee.gasPrice || 0n) * 12n) / 10n;
+    const short = (need) => fail(`Not enough ${sym} on ${ch.name} for this trade and its network fee: it needs about ${fmt(need, 6)} ${sym}, your PepesFamily wallet has ${fmt(bal, 6)} ${sym}. Add ${sym} on ${ch.name} or trade a smaller amount.`);
+    if (bal < value + 21000n * price) short(value + 21000n * price);
+    const gas = tx.gas ? BigInt(tx.gas) : await estimate(ch, tx);
+    if (bal < value + gas * price) short(value + gas * price);
+    return gas;
+  };
   return {
     request: async (a) => {
-      if (a.method === "eth_sendTransaction") await big(BigInt(a.params?.[0]?.value || 0));
+      if (a.method === "eth_estimateGas" || a.method === "eth_sendTransaction") {
+        const ch = await chainNow(), tx = a.params?.[0] || {};
+        if (a.method === "eth_sendTransaction") await big(BigInt(tx.value || 0));
+        if (ch) {
+          const gas = await funds(a.method === "eth_estimateGas" ? { ...tx, gas: undefined } : tx, ch);
+          if (a.method === "eth_estimateGas") return ethers.toQuantity(gas);
+        }
+      }
       if (a.method === "wallet_sendCalls") await big((a.params?.[0]?.calls || []).reduce((t, c) => t + BigInt(c.value || 0), 0n));
       return p.request(a);
     },
@@ -1958,7 +1991,6 @@ async function renderMarketToken(chKey, addrIn) {
         <div class="preview" id="mpv">&nbsp;</div>
         <div class="warn-box neg" id="mrisk" hidden></div>
         <button class="primary full" id="mgo" style="margin-top:6px"></button>
-        <div class="fees">Trades go through Relay. Every buy and sell includes a ${FEES.swapBps / 100}% PepesFamily fee; network and Relay fees are shown before you confirm.</div>
       </div>
     </div></div>`;
   $("#mcopy").onclick = async () => { try { await navigator.clipboard.writeText(addr); toast("Contract address copied"); } catch { toast(addr, 8000); } };
