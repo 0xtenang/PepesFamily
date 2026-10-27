@@ -479,14 +479,14 @@ const CHAINS = {
   hyperevm: {
     key: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
     explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
-    gmgn: "hyperevm", dex: "" /* DexScreener does not index Uniswap v4 on HyperEVM yet */, native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
+    gmgn: "hyperevm", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
     remote: "0xf268298cCeF5c2906667E1861B0316e06f9137e4", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
   },
   // BNB Smart Chain: Uniswap v4 (PoolManager 0x28e2…e9dF). No Blockscout there, so trade history comes from the RPC.
   bsc: {
     key: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
-    gmgn: "bsc", dex: "" /* DexScreener does not list Uniswap v4 pools on BSC yet */, native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
+    gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
     remote: "0x0B93D5F2CB2fdFb957e3f436678CB83F33401220", remotePads: ["0xbeCc01b1Ec3D78E34953432255e7FcfDe47Ea8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
