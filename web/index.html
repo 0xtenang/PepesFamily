@@ -96,6 +96,9 @@ label { display: block; font-size: 14px; font-weight: 500; color: var(--text); m
 .search input:focus { border-color: var(--control); }
 .top .acct { margin-left: auto; display: flex; align-items: center; gap: 12px; height: 100%; padding-left: 16px; border-left: 1px solid var(--rule); }
 #connect.addr { font-variant-numeric: tabular-nums; }
+.cashpill { font-size: 14px; white-space: nowrap; cursor: help; }
+.cashpill b { font-weight: 600; }
+@media (max-width: 520px) { .cashpill .muted { display: none; } }
 main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-width: calc(var(--sidebar) + 1320px); }
 .tabbar { display: none; }
 @media (max-width: 1000px) {
@@ -363,7 +366,7 @@ td.n, th.n { text-align: right; }
 <header class="top">
   <a class="mark" href="#/" aria-label="PepesFamily"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></a>
   <form class="search" id="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search tokens or paste a contract…" autocomplete="off" spellcheck="false" aria-label="Search tokens"></form>
-  <div class="acct"><button id="connect" type="button">Connect wallet</button></div>
+  <div class="acct"><span class="cashpill" id="cash" hidden></span><button id="connect" type="button">Connect wallet</button></div>
 </header>
 <main id="app" tabindex="-1"></main>
 <nav class="tabbar" id="tabbar" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a></nav>
@@ -1096,7 +1099,7 @@ function listen(eth) {
   if (listening === eth) return;
   listening = eth;
   eth.on?.("accountsChanged", (accs) => {
-    signer = null; account = null; $("#connect").textContent = "Connect wallet"; $("#connect").classList.remove("addr"); $("#adminlink").hidden = true;
+    signer = null; account = null; $("#connect").textContent = "Connect wallet"; $("#connect").classList.remove("addr"); $("#adminlink").hidden = true; walletChanged();
     IS_ADMIN = false; 
     if (accs?.length) connect().catch(() => {});
   });
@@ -1152,6 +1155,7 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
   $("#connect").innerHTML = `<span class="a1">${account.slice(0, 6)}</span>…${account.slice(-4)}`;
   $("#connect").classList.add("addr");
   showAdminLink().catch(() => {});
+  walletChanged();
   if (!quiet) route();
 }
 /// Makes sure a wallet is connected on `ch` (switching networks if needed) before an action there. Quiet: the page
@@ -1273,15 +1277,8 @@ function discoverFrame(chains) {
   const THEAD = DISCOVER_THEAD;
   return `
     <div class="trow-title">
-      <div><h1>Discover</h1><div class="sub" id="finding">Reading today's trades…</div></div>
-      <span class="spacer"></span><span class="stamp" id="stamp"></span>
+      <h1>Discover</h1><span class="spacer"></span>
       <a class="btn primary" href="#/create">Launch a token</a>
-    </div>
-    <div class="kpis">
-      <div><div class="k">Traded, all time</div><div class="v" id="tot-volume"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-volume-sub">&nbsp;</div></div>
-      <div><div class="k">Paid to holders</div><div class="v" id="tot-holders"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-holders-sub">&nbsp;</div></div>
-      <div><div class="k">Traded, last 24h</div><div class="v" id="k-vol24"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="k-vol24-sub">&nbsp;</div></div>
-      <div><div class="k">Tokens</div><div class="v" id="tot-count"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-count-sub">&nbsp;</div></div>
     </div>
     <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours, and the top PepesFamily launches</span></div>
     <div class="trend" id="trend">${Array.from({ length: 5 }, () => `<div class="tc"><div class="head"><div class="avatar"></div><div class="skel" style="height:14px;width:50%"></div></div><div class="skel" style="height:24px;width:60%"></div></div>`).join("")}</div>
@@ -1295,8 +1292,8 @@ function discoverFrame(chains) {
         <div id="list">${THEAD}${skelRow.repeat(8)}</div>
       </section>
       <div class="rail">
-        <div class="card tapecard"><div style="display:flex;align-items:center;gap:8px;padding:18px 18px 4px"><h2>Live trades</h2><i class="livedot" aria-hidden="true"></i><span class="spacer"></span><span class="stat" id="tapecount"></span></div>
-          <div class="tape" id="feed">${`<div class="fi"><div class="avatar"></div><div><div class="skel" style="height:14px;width:55%"></div><div class="skel" style="height:12px;width:35%;margin-top:6px"></div></div><div class="skel" style="height:14px;width:56px"></div></div>`.repeat(10)}</div></div>
+        <div class="card tapecard"><div style="display:flex;align-items:center;gap:8px;padding:18px 18px 4px"><h2>Your positions</h2><span class="spacer"></span><span class="stat" id="postotal"></span></div>
+          <div class="tape" id="positions"></div></div>
         <div class="card" id="official"></div>
       </div>
     </div>
@@ -1395,20 +1392,31 @@ async function renderHome() {
     $("#k-vol24-sub").textContent = `${n.toLocaleString("en-US")} trade${n === 1 ? "" : "s"}`;
     $("#stamp").textContent = "Updated " + hhmm();
   };
-  let seen = new Set();
-  const showFeed = () => {
-    if (gen !== routeGen || !$("#feed")) return;
-    const byTok = new Map((listed || []).map((t) => [t.token.toLowerCase(), t]));
-    const items = mk.recent.filter((e) => byTok.has(e.a.token.toLowerCase())).slice(0, 30);
-    const first = !seen.size;
-    $("#feed").innerHTML = items.length ? items.map((e) => {
-      const t = byTok.get(e.a.token.toLowerCase());
-      return `<a class="fi${!first && !seen.has(e.key) ? " new" : ""}" href="#/t/${t.token}">${avatar(t)}
-        <div style="min-width:0"><div class="t">${e.a.isBuy ? "Bought" : "Sold"} <b>$${esc(t.symbol)}</b></div><div class="w">${short(e.a.trader)} · ${ago(e.ts)}</div></div>
-        <div class="amt ${e.a.isBuy ? "up" : ""}">${e.a.isBuy ? "+" : "−"}${usd(e.a.quoteAmount, t.quote)}</div></a>`;
-    }).join("") : `<div class="stat" style="padding:12px 18px">No trades yet. The first buy shows up here.</div>`;
-    $("#tapecount").textContent = items.length ? `last ${items.length}` : "";
-    seen = new Set(items.map((e) => e.key));
+  // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
+  let posSeq = 0;
+  const showPositions = window.refreshPositions = async () => {
+    if (gen !== routeGen || !$("#positions")) return;
+    if (!account) {
+      $("#postotal").textContent = "";
+      $("#positions").innerHTML = `<div style="padding:12px 18px 18px"><div class="stat">Connect your wallet to see your tokens and your cash on every chain in one place.</div>
+        <button class="primary" type="button" id="posconnect" style="margin-top:12px">Connect wallet</button></div>`;
+      $("#posconnect").onclick = () => connect().catch((e) => toast(errMsg(e), 7000));
+      return;
+    }
+    const my = ++posSeq;
+    if (!$("#positions").querySelector(".fi")) $("#positions").innerHTML = `<div class="fi"><div class="avatar"></div><div><div class="skel" style="height:14px;width:55%"></div></div><div class="skel" style="height:14px;width:56px"></div></div>`.repeat(4);
+    const [cash, pos] = await Promise.all([loadCash().catch(() => null), loadPositions().catch(() => null)]);
+    if (my !== posSeq || gen !== routeGen || !$("#positions")) return;
+    const held = (pos || []).reduce((t, r) => t + r.usd, 0);
+    $("#postotal").textContent = cash || pos ? fmtUsd((cash?.total || 0) + held) : "";
+    const cashRow = cash ? `<div class="fi" title="${esc(cash.list.filter((x) => x.usd >= 0.01).map((x) => `${fmt(x.wei, 6)} ${x.sym} on ${x.ch.short}`).join("\n"))}">
+        <div class="avatar" style="font-size:16px">$</div>
+        <div style="min-width:0"><div class="t"><b>Cash</b></div><div class="w">${cash.list.filter((x) => x.usd >= 0.01).map((x) => `${x.sym} on ${x.ch.short}`).join(" · ") || "no ETH, BNB or HYPE yet"}</div></div>
+        <div class="amt">${fmtUsd(cash.total)}</div></div>` : "";
+    const rows = (pos || []).map((r) => `<a class="fi" href="${r.href}">${r.av}
+        <div style="min-width:0"><div class="t"><b>$${esc(r.symbol)}</b>${r.own ? FROG : ""}</div><div class="w">${r.amount.toLocaleString("en-US", { maximumSignificantDigits: 4 })} · ${esc(r.ch.short)}</div></div>
+        <div class="amt">${fmtUsd(r.usd)}${r.chg != null ? `<div class="w">${chgText(r.chg)}</div>` : ""}</div></a>`).join("");
+    $("#positions").innerHTML = cashRow + (rows || `<div class="stat" style="padding:12px 18px">No tokens yet. Your buys show up here.</div>`);
   };
   $("#sort").querySelectorAll("button").forEach((b) => b.onclick = () => {
     sortMode = b.dataset.s; shownCount = 15;
@@ -1416,6 +1424,8 @@ async function renderHome() {
     showList();
   });
   loadMarket();
+  showPositions();
+  const posTimer = setInterval(() => (gen !== routeGen ? clearInterval(posTimer) : !document.hidden && account && showPositions()), 45_000);
   $("#chainf").querySelectorAll("button").forEach((b) => b.onclick = () => {
     chainMode = b.dataset.c; shownCount = 15;
     try { localStorage.setItem("tokenChain", chainMode); } catch {}
@@ -1435,7 +1445,7 @@ async function renderHome() {
   }
   const refresh = async () => {
     try { mk = await market24h(); } catch (e) { console.warn("market data", e); }
-    showList(); showTrend(); showFeed(); showFinding();
+    showList(); showTrend(); showFinding();
   };
   await refresh();
   const timer = setInterval(() => (gen !== routeGen ? clearInterval(timer) : !document.hidden && refresh()), 20_000);
@@ -1464,6 +1474,122 @@ async function loadOfficial() {
     try { await navigator.clipboard.writeText(t.token); toast("Contract address copied"); }
     catch { toast(t.token, 8000); }
   };
+}
+
+// ---------------------------------------------------------------- Wallet: cash and positions
+// Like a trading app: the connected wallet's coins on every chain add up to one cash balance, and a buy pays from
+// whichever chain holds enough (the token's own chain first, so most buys need no bridge). Positions are the
+// wallet's PepesFamily tokens, the trending tokens on Discover and anything bought here, read with one Multicall3
+// request per chain.
+const MC3 = "0xcA11bde05977b3631167028862bE2a173976CA11";
+const MC3_ABI = ["function aggregate3((address target, bool allowFailure, bytes callData)[] calls) view returns ((bool success, bytes returnData)[])"];
+const BAL_IFACE = new ethers.Interface(["function balanceOf(address) view returns (uint256)"]);
+/// Token balances of `who` on `ch`: Map(lowercase address -> bigint), zero balances left out.
+async function balancesOn(ch, tokens, who) {
+  const out = new Map(), mc = new ethers.Contract(MC3, MC3_ABI, ch.reader);
+  for (let i = 0; i < tokens.length; i += 300) {
+    const part = tokens.slice(i, i + 300);
+    const res = await mc.aggregate3(part.map((t) => ({ target: t, allowFailure: true, callData: BAL_IFACE.encodeFunctionData("balanceOf", [who]) })));
+    res.forEach((r, j) => { if (r.success && r.returnData.length >= 66) { const b = BigInt(r.returnData.slice(0, 66)); if (b > 0n) out.set(part[j].toLowerCase(), b); } });
+  }
+  return out;
+}
+const cashChains = () => Object.values(CHAINS).filter((c) => !c.testnet && c.native);
+/// What to keep back on a chain for its gas, in USD (a buy never spends it).
+const gasKeepUsd = (ch) => (ch.key === "ethereum" ? 3 : 0.2);
+let CASH = null; // { who, at, list: [{ ch, sym, wei, usd }], total }
+async function loadCash(force = false) {
+  if (!account) { CASH = null; showCash(); return null; }
+  if (!force && CASH && CASH.who === account && Date.now() - CASH.at < 20_000) return CASH;
+  const who = account;
+  const list = await Promise.all(cashChains().map(async (ch) => {
+    const wei = await ch.reader.getBalance(who).catch(() => 0n);
+    return { ch, sym: ch.native.symbol, wei, usd: Number(ethers.formatEther(wei)) * nativeUsd(ch) };
+  }));
+  if (who !== account) return CASH;
+  CASH = { who, at: Date.now(), list: list.sort((a, b) => b.usd - a.usd), total: list.reduce((t, x) => t + x.usd, 0) };
+  showCash();
+  return CASH;
+}
+function showCash() {
+  const el = $("#cash");
+  if (!el) return;
+  el.hidden = !CASH;
+  if (!CASH) return;
+  el.innerHTML = `<b>${fmtUsd(CASH.total)}</b> <span class="muted">cash</span>`;
+  el.title = CASH.list.filter((x) => x.usd >= 0.01).map((x) => `${fmtUsd(x.usd)} · ${fmt(x.wei, 6)} ${x.sym} on ${x.ch.short}`).join("\n") || "No coins yet";
+}
+/// Where a buy of `usd` on `dest` pays from: `dest`'s own coin if it holds enough, else the chain holding the most
+/// that can cover it (through Relay). { o: a pay option, x: the balance it uses } or { error }.
+function pickSource(dest, usd) {
+  if (!CASH) return { error: "Connect a wallet" };
+  const usable = (x) => x.usd - gasKeepUsd(x.ch);
+  const home = CASH.list.find((x) => x.ch === dest);
+  const pick = home && usable(home) >= usd ? home : CASH.list.filter((x) => x.ch !== dest && x.ch.remote !== undefined).find((x) => usable(x) >= usd * 1.02);
+  if (!pick) {
+    const best = CASH.list[0];
+    return { error: best && best.usd > 0 ? `Not enough on any one chain: your largest balance is ${fmtUsd(Math.max(0, usable(best)))} of ${best.sym} on ${best.ch.short}` : "Your wallet has no ETH, BNB or HYPE yet" };
+  }
+  return { o: { id: "", ch: pick.ch, sym: pick.sym, addr: ZERO_ADDR, dec: 18 }, x: pick };
+}
+// tokens bought through this site, so they show among the positions even when they stop trending
+const heldKey = () => "pf-held:" + (account || "").toLowerCase();
+function rememberHeld(ch, address, dec, symbol) {
+  try {
+    const l = JSON.parse(localStorage.getItem(heldKey()) || "[]").filter((x) => !(x.c === ch.key && x.a.toLowerCase() === address.toLowerCase()));
+    l.unshift({ c: ch.key, a: address, d: dec, s: symbol });
+    localStorage.setItem(heldKey(), JSON.stringify(l.slice(0, 60)));
+  } catch {}
+}
+const heldList = () => { try { return JSON.parse(localStorage.getItem(heldKey()) || "[]"); } catch { return []; } };
+/// The connected wallet's positions, biggest first: { href, av, name, symbol, ch, amount (decimal), usd, chg, own }.
+async function loadPositions() {
+  if (!account) return null;
+  const who = account;
+  const [own, market] = await Promise.all([allTokenInfos().catch(() => []), marketTokens().catch(() => [])]);
+  const want = new Map(); // chain key -> Map(address -> entry)
+  const add = (ch, address, entry) => { if (!want.has(ch.key)) want.set(ch.key, new Map()); const m = want.get(ch.key); if (!m.has(address.toLowerCase())) m.set(address.toLowerCase(), entry); };
+  for (const { t, P } of own) if (isListed(t)) add(P.ch, t.token, { kind: "own", t, ch: P.ch });
+  for (const x of market) add(x.ch, x.address, { kind: "market", x, ch: x.ch });
+  for (const h of heldList()) if (CHAINS[h.c]) add(CHAINS[h.c], h.a, { kind: "held", h, ch: CHAINS[h.c] });
+  const rows = [], unpriced = [];
+  await Promise.all([...want.entries()].map(async ([key, m]) => {
+    const bal = await balancesOn(CHAINS[key], [...m.keys()], who).catch(() => new Map());
+    for (const [a, b] of bal) {
+      const e = m.get(a);
+      if (e.kind === "own") {
+        const amount = Number(ethers.formatUnits(b, 18)), t = e.t;
+        rows.push({ href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: e.ch, amount, own: true,
+          usd: amount * priceOf(t.sqrtPriceX96, t.quoteIsCurrency0) * quoteUsd(t.quote), chg: null });
+      } else if (e.kind === "market") {
+        const x = e.x, amount = Number(ethers.formatUnits(b, x.decimals ?? 18));
+        rows.push({ href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), name: x.name, symbol: x.symbol, ch: x.ch, amount, usd: amount * x.price, chg: x.chg });
+      } else unpriced.push({ e, b });
+    }
+  }));
+  // tokens bought here that aren't trending: priced through DexScreener, a batch per chain
+  const byChain = new Map();
+  for (const u of unpriced) { const k = u.e.ch.key; if (!byChain.has(k)) byChain.set(k, []); byChain.get(k).push(u); }
+  await Promise.all([...byChain.entries()].map(async ([k, list]) => {
+    const ch = CHAINS[k];
+    let pairs = [];
+    try { pairs = await (await fetch(`https://api.dexscreener.com/tokens/v1/${ch.dex}/${list.map((u) => u.e.h.a).join(",")}`, { signal: AbortSignal.timeout(10000) })).json(); } catch {}
+    for (const u of list) {
+      const p = (Array.isArray(pairs) ? pairs : []).filter((x) => x.baseToken?.address?.toLowerCase() === u.e.h.a.toLowerCase()).sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+      const amount = Number(ethers.formatUnits(u.b, u.e.h.d ?? 18));
+      rows.push({ href: `#/x/${k}/${u.e.h.a}`, av: mAvatar({ symbol: u.e.h.s || p?.baseToken?.symbol || "?", image: p?.info?.imageUrl || "" }),
+        name: p?.baseToken?.name || u.e.h.s || short(u.e.h.a), symbol: p?.baseToken?.symbol || u.e.h.s || "?", ch, amount,
+        usd: p ? amount * Number(p.priceUsd || 0) : 0, chg: p?.priceChange?.h24 != null ? Number(p.priceChange.h24) / 100 : null });
+    }
+  }));
+  if (who !== account) return null;
+  return rows.filter((r) => r.usd >= 0.01 || r.own).sort((a, b) => b.usd - a.usd);
+}
+/// Called whenever the wallet connects, switches account or disconnects.
+function walletChanged() {
+  CASH = null;
+  loadCash(true).catch(() => {});
+  window.refreshPositions?.();
 }
 
 // ---------------------------------------------------------------- Every chain
@@ -1499,7 +1625,7 @@ async function marketTokens() {
       const sym = String(t.symbol).toUpperCase(), px = Number(a.base_token_price_usd) || 0;
       // stablecoins: anything named like a dollar or trading flat at $1 (RLUSD, PYUSD, USDe…), as well as the majors
       if (!t || MAJORS.has(sym) || sym.includes("USD") || (px > 0.97 && px < 1.03) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
-      return { ch, address: ethers.getAddress(t.address), name: t.name, symbol: t.symbol, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "",
+      return { ch, address: ethers.getAddress(t.address), name: t.name, symbol: t.symbol, decimals: Number(t.decimals) || 18, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "",
         price: Number(a.base_token_price_usd) || 0, mc: Number(a.market_cap_usd || a.fdv_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
         chg: a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null, liq: Number(a.reserve_in_usd) || 0,
         created: a.pool_created_at ? Date.parse(a.pool_created_at) / 1000 : 0, pool: a.address };
@@ -1643,11 +1769,11 @@ async function renderMarketToken(chKey, addrIn) {
     <div class="mside">
       <div class="card">
         <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
-        <div class="row" id="mfromrow" style="margin-bottom:10px"><span class="stat">Pay with</span><span class="spacer"></span><select id="mfrom" aria-label="Pay with"></select></div>
         <label for="mamt" id="mamtl" style="margin-top:0"></label>
         <input id="mamt" inputmode="decimal" placeholder="0.0" autocomplete="off" />
         <div class="quick" id="mquick"></div>
         <div class="stat" id="mbal" style="margin-top:8px"></div>
+        <div class="stat" id="msrc"></div>
         <div class="preview" id="mpv">&nbsp;</div>
         <div class="warn-box neg" id="mrisk" hidden></div>
         <button class="primary full" id="mgo" style="margin-top:6px"></button>
@@ -1655,73 +1781,95 @@ async function renderMarketToken(chKey, addrIn) {
       </div>
     </div></div>`;
   $("#mcopy").onclick = async () => { try { await navigator.clipboard.writeText(addr); toast("Contract address copied"); } catch { toast(addr, 8000); } };
-  // pay options: the chain's own coin there, then every other chain and stablecoin Relay serves for us
-  const opts = [{ id: "", ch, sym: NAT, addr: ZERO_ADDR, dec: 18 }, ...payOptions(ch)];
-  $("#mfrom").innerHTML = opts.map((o, i) => `<option value="${i}">${esc(o.sym)} on ${esc(o.ch.short)}</option>`).join("");
+  // A buy is an amount in dollars, paid from the wallet's coins wherever they are (pickSource); a sell is an
+  // amount of the token, paid out in this chain's coin.
   let side = "buy", seq = 0, timer = 0, tokBal = 0n;
-  const payOpt = () => opts[Number($("#mfrom").value) || 0];
   const tokR = new ethers.Contract(addr, ["function balanceOf(address) view returns (uint256)"], ch.reader);
+  const usdIn = () => { const v = Number($("#mamt").value.trim().replace(/^\$/, "")); return v > 0 ? v : 0; };
+  /// The pay option and amount (in its coin) for a buy of `usd`: the wallet's best chain, or this chain's coin to
+  /// show a price before a wallet is connected.
+  const buySource = (usd) => {
+    if (!account || !CASH) return { o: { id: "", ch, sym: NAT, addr: ZERO_ADDR, dec: 18 } };
+    return pickSource(ch, usd);
+  };
+  const coinFor = (o, usd) => { const px = nativeUsd(o.ch); if (!px) throw new Error(`No ${o.sym} price right now`); return ethers.parseEther((usd / px).toFixed(12)); };
   const refreshBal = async () => {
     if (!account) return ($("#mbal").textContent = "Connect a wallet to see your balance.");
     try {
-      if (side === "sell") { tokBal = await tokR.balanceOf(account); $("#mbal").textContent = `You hold ${fmt(ethers.parseUnits(ethers.formatUnits(tokBal, dec), 18))} $${t.symbol}`; }
-      else {
-        const o = payOpt();
-        const b = o.addr === ZERO_ADDR ? await o.ch.reader.getBalance(account) : await new ethers.Contract(o.addr, ["function balanceOf(address) view returns (uint256)"], o.ch.reader).balanceOf(account);
-        $("#mbal").textContent = `Balance: ${Number(ethers.formatUnits(b, o.dec)).toLocaleString("en-US", { maximumSignificantDigits: 6 })} ${o.sym} on ${o.ch.short}`;
-      }
+      if (side === "sell") { tokBal = await tokR.balanceOf(account); $("#mbal").textContent = `You hold ${Number(ethers.formatUnits(tokBal, dec)).toLocaleString("en-US", { maximumSignificantDigits: 6 })} $${t.symbol}`; }
+      else { const c = await loadCash(); $("#mbal").textContent = c ? `Cash: ${fmtUsd(c.total)} across your chains` : ""; }
     } catch { $("#mbal").textContent = ""; }
   };
-  const amountWei = () => {
-    const v = $("#mamt").value.trim();
-    try { return v ? ethers.parseUnits(v, side === "sell" ? dec : payOpt().dec) : 0n; } catch { return null; }
-  };
-  const quote = (amt) => side === "buy" ? swapQuote(payOpt().ch, payOpt().addr, ch, addr, amt) : swapQuote(ch, addr, ch, ZERO_ADDR, amt);
   const preview = () => {
     clearTimeout(timer);
-    const amt = amountWei();
-    if (amt === null) return ($("#mpv").textContent = "Enter a valid amount");
-    if (!amt) return ($("#mpv").innerHTML = "&nbsp;");
+    $("#msrc").textContent = "";
+    let amt, o;
+    if (side === "buy") {
+      const usd = usdIn();
+      if (!usd) return ($("#mpv").innerHTML = $("#mamt").value.trim() ? "Enter a valid amount" : "&nbsp;");
+      const src = buySource(usd);
+      if (src.error) return ($("#mpv").textContent = src.error);
+      o = src.o;
+      if (src.x) $("#msrc").textContent = `Paying with ${o.sym} on ${o.ch.short}${o.ch === ch ? "" : " (no bridging needed: one confirmation)"}`;
+      try { amt = coinFor(o, usd); } catch (e) { return ($("#mpv").textContent = errMsg(e)); }
+    } else {
+      try { amt = $("#mamt").value.trim() ? ethers.parseUnits($("#mamt").value.trim(), dec) : 0n; } catch { return ($("#mpv").textContent = "Enter a valid amount"); }
+      if (!amt) return ($("#mpv").innerHTML = "&nbsp;");
+    }
     $("#mpv").textContent = "Getting a price…";
     timer = setTimeout(async () => {
       const my = ++seq;
-      try { const q = await quote(amt); if (my === seq && !stale()) $("#mpv").innerHTML = swapSummary(q); }
-      catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
+      try {
+        const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
+        if (my === seq && !stale()) $("#mpv").innerHTML = swapSummary(q);
+      } catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
     }, 500);
   };
   const setSide = (s2) => {
     side = s2; $("#mamt").value = "";
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
-    $("#mfromrow").hidden = side === "sell";
-    $("#mamtl").textContent = side === "buy" ? "Amount to spend" : `Amount of $${t.symbol} to sell (you receive ${NAT} on ${ch.short})`;
+    $("#mamt").placeholder = side === "buy" ? "$0" : "0.0";
+    $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ${NAT} on ${ch.short})`;
     $("#mgo").textContent = side === "buy" ? `Buy $${t.symbol}` : `Sell $${t.symbol}`;
-    const q = side === "buy" ? (payOpt().dec === 18 && payOpt().sym !== "USDC" ? ["0.01", "0.05", "0.1", "0.5"] : ["5", "20", "50", "100"]) : ["25%", "50%", "100%"];
+    const q = side === "buy" ? ["$5", "$20", "$50", "$100"] : ["25%", "50%", "100%"];
     $("#mquick").innerHTML = q.map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
     $("#mquick").querySelectorAll("button").forEach((b) => b.onclick = () => {
       const v = b.dataset.v;
-      $("#mamt").value = v.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(v))) / 100n, dec) : v;
+      $("#mamt").value = v.endsWith("%") ? ethers.formatUnits((tokBal * BigInt(parseInt(v))) / 100n, dec) : v.slice(1);
       preview();
     });
-    $("#mpv").innerHTML = "&nbsp;"; refreshBal();
+    $("#mpv").innerHTML = "&nbsp;"; $("#msrc").textContent = ""; refreshBal();
   };
   app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => setSide(b.dataset.s));
-  $("#mfrom").onchange = () => setSide("buy");
   $("#mamt").oninput = preview;
   $("#mgo").onclick = async () => {
     const btn = $("#mgo"); btn.disabled = true;
     try {
-      const amt = amountWei();
-      if (!amt) throw new Error("Enter an amount");
-      const o = side === "buy" ? payOpt() : { ch, sym: t.symbol, addr, dec };
       if (side === "buy" && !$("#mrisk").hidden && !confirm(`${$("#mrisk").textContent}\n\nBuy $${t.symbol} anyway?`)) throw new Error("Cancelled");
-      await requireWallet(o.ch); // connects too
+      if (!account) await connect();
+      await loadCash(true);
+      let o, amt;
+      if (side === "buy") {
+        const usd = usdIn();
+        if (!usd) throw new Error("Enter an amount in dollars");
+        const src = pickSource(ch, usd);
+        if (src.error) throw new Error(src.error);
+        o = src.o; amt = coinFor(o, usd);
+      } else {
+        amt = ethers.parseUnits($("#mamt").value.trim() || "0", dec);
+        if (!amt) throw new Error("Enter an amount");
+        o = { ch, sym: t.symbol, addr, dec };
+      }
+      await requireWallet(o.ch); // the paying chain
       if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
       toast("Getting the price…", 6000);
-      const q = await quote(amt);
+      const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
       $("#mpv").innerHTML = swapSummary(q);
       await xcExecute(q, o, (m2) => toast(m2, 30000));
+      if (side === "buy") rememberHeld(ch, addr, dec, t.symbol);
       toast(side === "buy" ? `Bought $${t.symbol}` : `Sold $${t.symbol}`, 8000);
       $("#mamt").value = ""; $("#mpv").innerHTML = "&nbsp;";
+      await loadCash(true).catch(() => {});
       refreshBal();
     } catch (e) { toast(errMsg(e), 8000); }
     btn.disabled = false;
@@ -2736,7 +2884,6 @@ async function renderCreate() {
         </div>
         <div class="stat" id="splitnote" style="margin-top:8px"></div>` : ""}
         ${sec(LAUNCH?.split ? 4 : 3, "Initial buy")}
-        ${xcReady(LAUNCH) ? `<div class="row" style="margin-bottom:8px"><span class="stat">Pay from</span>${payFromSelect("ibfrom", ch)}</div>` : ""}
         <div class="row" style="margin-bottom:4px" id="ibpayrow"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">${esc(NAT)}</button><button type="button" data-p="imd">${esc(QS)}</button></div></div>
         <label for="ib" id="ibl">Amount (optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
@@ -2827,6 +2974,7 @@ async function renderCreate() {
   };
   let pvSeq = 0;
   const updPreview = async () => {
+    autoFromLaunch();
     updCost();
     const seq = ++pvSeq, amt = ibAmount();
     if (!amt) return ($("#ibp").textContent = "");
@@ -2848,16 +2996,19 @@ async function renderCreate() {
   };
   document.querySelectorAll("#ibpay button").forEach((b) => b.onclick = () => setPay(b.dataset.p));
   setPay(pay);
-  if ($("#ibfrom")) $("#ibfrom").onchange = () => {
-    from = payOptionById(ch, $("#ibfrom").value);
-    $("#ibpayrow").hidden = !!from;
-    if (from) {
-      pay = "eth"; // the buy is in the destination chain's coin, delivered by Relay
-      $("#ibl").textContent = `Amount in ${NAT} to buy with (optional)`;
-      $("#ibnote").textContent = `One confirmation on ${from.ch.short}: it pays for the launch on ${ch.short}, your buy in the same transaction (nobody can buy before you) and a little ${NAT} for gas there if you have none. Delivered by Relay in a few seconds; your token, tokens and creator role are yours on ${ch.short}.`;
-      updPreview();
-    } else setPay(LAUNCH.ethLive ? "eth" : "imd");
-  };
+  // Paying with the chain's coin: from this chain when the wallet holds enough here (launch fee and buy), else from
+  // the chain holding the most, through this chain's PepesFamilyRemote and Relay, in one confirmation.
+  function autoFromLaunch() {
+    from = null;
+    if (!xcReady(LAUNCH) || pay !== "eth" || !CASH) return;
+    const usd = Number(ethers.formatEther((ibAmount() || 0n) + launchFeeWei(ch))) * nativeUsd(ch);
+    const src = pickSource(ch, Math.max(usd, 0.01));
+    if (src.error) { $("#ibnote").textContent = src.error; return; }
+    if (src.o.ch !== ch) {
+      from = src.o;
+      $("#ibnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: one confirmation pays the launch, your buy and a little ${NAT} for gas on ${ch.short}. Delivered by Relay in a few seconds.`;
+    } else $("#ibnote").textContent = "";
+  }
   $("#ib").oninput = updPreview;
   updStart();
   { const fee = launchFeeWei(ch); $("#lfee").textContent = fee ? `Launch fee: $${FEES.launchUsd} (≈ ${fmt(fee, 6)} ${NAT}), paid to PepesFamily when you launch.` : ""; }
@@ -2878,6 +3029,9 @@ async function renderCreate() {
       if ($("#ib").value.trim() && !amt) throw new Error("Enter a valid amount for the initial buy, or leave it empty");
       const form = { name: $("#n").value.trim(), symbol: $("#s").value.trim() };
       if (!form.name || !form.symbol) throw new Error("Enter a name and a ticker");
+      if (!account) await connect();
+      await loadCash(true).catch(() => {});
+      autoFromLaunch();
       if (from) {
         // paid from another chain: launchFor on this chain's PepesFamilyRemote, delivered by Relay
         if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
@@ -3033,12 +3187,13 @@ async function renderToken(addr) {
       <div class="mside">
         <div class="card">
           <div class="tabs"><button class="buy" data-s="buy">Buy</button><button class="sell" data-s="sell">Sell</button></div>
-          ${xcReady(P) && q !== ZERO ? `<div class="row" style="margin-bottom:10px" id="fromrow"><span class="stat">Pay from</span><span class="spacer"></span>${payFromSelect("from", P.ch)}</div>` : ""}
+          
           ${q !== ZERO ? `<div class="row" style="margin-bottom:10px" id="viarow"><span class="stat" id="vial">Pay with</span><span class="spacer"></span><div class="seg" id="via"><button type="button" data-v="eth">${esc(P.ch.native?.symbol || "ETH")}</button><button type="button" data-v="imd">${esc(Q)}</button></div></div>` : ""}
           <label for="amt" style="margin-top:0" id="amtl"></label>
           <input id="amt" inputmode="decimal" placeholder="0.0" />
           <div class="quick" id="quick"></div>
           <div class="stat" id="bal" style="margin-top:8px"></div>
+          <div class="stat" id="fromnote"></div>
           <div class="preview" id="pv">&nbsp;</div>
           <div class="stat" id="pvcost"></div>
           <label for="slip">Max slippage (%)</label><input id="slip" value="5" inputmode="decimal" />
@@ -3122,8 +3277,7 @@ async function renderToken(addr) {
     const buying = s === "buy";
     app.querySelectorAll("#via button").forEach((b) => b.classList.toggle("on", (b.dataset.v === "eth") === viaEth));
     if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
-    if ($("#fromrow")) $("#fromrow").hidden = !buying;
-    if ($("#viarow")) $("#viarow").hidden = buying && !!from;
+
     $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
     $("#trade").textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`;
     const payBal = payNative() ? ethBal : quoteBal;
@@ -3158,10 +3312,20 @@ async function renderToken(addr) {
       } catch (e) { if (seq === costSeq && !stale()) $("#pvcost").textContent = "Can't get a price from this chain right now: " + errMsg(e); }
     }, 600);
   }
-  if ($("#from")) $("#from").onchange = () => { from = payOptionById(P.ch, $("#from").value); $("#amt").value = ""; setSide(tradeSide); };
+  /// Paying with the chain's coin: from this chain when the wallet holds enough here, else from the chain holding
+  /// the most (through this chain's PepesFamilyRemote and Relay). Sets `from` and says where the money comes from.
+  function autoFrom(amt) {
+    from = null;
+    if ($("#fromnote")) $("#fromnote").textContent = "";
+    if (!xcReady(P) || q === ZERO || tradeSide !== "buy" || !viaEth || !CASH || !amt) return;
+    const src = pickSource(P.ch, Number(ethers.formatEther(amt)) * nativeUsd(P.ch));
+    if (src.error) { $("#fromnote").textContent = src.error; return; }
+    if (src.o.ch !== P.ch) { from = src.o; $("#fromnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: one confirmation, no bridging needed.`; }
+  }
   async function preview() {
     const seq = ++pvSeq;
     let amt = 0n; try { amt = ethers.parseUnits($("#amt").value.trim() || "0", 18); } catch {}
+    autoFrom(amt);
     updCost(amt);
     if (!amt) return ($("#pv").innerHTML = "&nbsp;");
     try {
@@ -3177,6 +3341,9 @@ async function renderToken(addr) {
   $("#trade").onclick = async () => {
     const btn = $("#trade"); btn.disabled = true;
     try {
+      if (!account) await connect();
+      await loadCash(true).catch(() => {});
+      try { autoFrom(ethers.parseUnits($("#amt").value.trim() || "0", 18)); } catch {}
       if (from && tradeSide === "buy") {
         // paid on another chain: buyFor on this chain's PepesFamilyRemote, delivered by Relay
         const o = from;
