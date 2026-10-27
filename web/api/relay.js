@@ -6,7 +6,7 @@
 // Only those two Relay endpoints are passed on.
 
 const ALLOWED = [/^quote\/v2$/, /^intents\/status\/v3\?requestId=0x[0-9a-fA-F]{64}$/];
-const ORIGINS = ["https://pepesfamily.fun", "https://www.pepesfamily.fun"];
+const ORIGINS = ["https://pepesfamily.fun", "https://www.pepesfamily.fun", "https://pepesimd.fun", "https://www.pepesimd.fun"];
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");

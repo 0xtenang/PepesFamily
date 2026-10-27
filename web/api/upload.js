@@ -13,7 +13,7 @@ const MAGIC = {
 };
 // Browsers always send Origin on a POST; requests from other sites are refused. (A script outside a browser can
 // fake it, so this only keeps other websites from using the endpoint; the size and type limits still apply.)
-const ORIGINS = ["https://pepesfamily.fun", "https://www.pepesfamily.fun"];
+const ORIGINS = ["https://pepesfamily.fun", "https://www.pepesfamily.fun", "https://pepesimd.fun", "https://www.pepesimd.fun"];
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");

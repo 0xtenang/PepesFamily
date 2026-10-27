@@ -16,6 +16,7 @@ const MAX_PLAYERS = 60;
 const CHAT_KEEP = 40;
 const ORIGINS = [
   /^https:\/\/(www\.)?pepesfamily\.fun$/,
+  /^https:\/\/(www\.)?pepesimd\.fun$/,
   /^https:\/\/pepesfamily(-[a-z0-9-]+)?\.vercel\.app$/,
   /^https:\/\/pepesfamily[a-z0-9-]*\.sites\.imd\.fun$/,
   /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/,
