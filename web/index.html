@@ -96,6 +96,13 @@ label { display: block; font-size: 14px; font-weight: 500; color: var(--text); m
 .top .mark { display: none; }
 .search { flex: 1; max-width: 520px; position: relative; }
 .search svg { position: absolute; left: 14px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); stroke: var(--faint); fill: none; stroke-width: 1.8; pointer-events: none; }
+.sres { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 40; background: var(--surface); border: 1px solid var(--nested); border-radius: 14px; padding: 6px; max-height: min(70vh, 520px); overflow-y: auto; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.sres a { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; color: var(--text); text-decoration: none; }
+.sres a:hover, .sres a.on { background: var(--nested); }
+.sres .avatar { width: 36px; height: 36px; font-size: 12px; }
+.sres .nm { font-weight: 600; display: flex; gap: 6px; align-items: center; min-width: 0; } .sres .nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sres .sub, .sres .r .w { font-size: 12px; color: var(--faint); } .sres .r { text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+.sres .msg { padding: 12px; color: var(--faint); font-size: 13px; }
 .search input { min-height: 36px; padding: 7px 14px 7px 38px; border-radius: var(--radius-control); background: var(--surface); border-color: var(--surface); }
 .search input:focus { border-color: var(--control); }
 .top .acct { margin-left: auto; display: flex; align-items: center; gap: 12px; height: 100%; padding-left: 16px; border-left: 1px solid var(--rule); }
@@ -402,7 +409,7 @@ td.n, th.n { text-align: right; }
 </aside>
 <header class="top">
   <a class="mark" href="#/" aria-label="PepesFamily"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></a>
-  <form class="search" id="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search tokens or paste a contract…" autocomplete="off" spellcheck="false" aria-label="Search tokens"></form>
+  <form class="search" id="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search tokens or paste a contract…" autocomplete="off" spellcheck="false" aria-label="Search tokens" aria-controls="sres"><div class="sres" id="sres" role="listbox" hidden></div></form>
   <div class="acct"><span class="cashpill" id="cash" hidden></span><button id="connect" type="button">Connect wallet</button></div>
 </header>
 <main id="app" tabindex="-1"><div class="card" style="height:240px" aria-busy="true"><div class="skel" style="height:18px;width:30%"></div></div></main>
@@ -1540,19 +1547,73 @@ function route() {
   return renderHome();
 }
 
-// Search: a contract address opens its token; anything else filters Discover by name or ticker.
-let SEARCH = "";
+// Search, like FOMO: a pasted contract address opens its token at once (ours, or any token trading on our chains);
+// a name or ticker lists matches from every chain under the box (our launches first, then DexScreener's search),
+// and filters Discover's list too.
+let SEARCH = "", searchSeq = 0, searchT = 0;
+const sres = () => $("#sres");
+const openCA = (v) => { $("#q").value = ""; SEARCH = ""; sres().hidden = true; window.showDiscoverList?.(); location.hash = "#/t/" + ethers.getAddress(v.toLowerCase()); };
+async function searchTokens(q) {
+  const ql = q.toLowerCase().replace(/^\$/, "");
+  const own = (ALL_OWN || []).filter(({ t }) => isListed(t) && (t.name.toLowerCase().includes(ql) || t.symbol.toLowerCase().includes(ql)))
+    .map(({ t, P }) => ({ href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: P.ch, mc: toUsdNum(t.marketCap, t.quote), liq: 0, own: true }))
+    .sort((a, b) => b.mc - a.mc).slice(0, 4);
+  const ids = new Map(gtChains().filter((c) => c.dex).map((c) => [c.dex, c]));
+  let pairs = [];
+  try { pairs = (await (await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(8000) })).json()).pairs || []; } catch {}
+  const best = new Map();
+  for (const p of pairs) {
+    const ch = ids.get(p.chainId), b = p.baseToken;
+    if (!ch || !b?.address || TOKEN_PAD.has(b.address.toLowerCase()) || MAJORS.has(String(b.symbol).toUpperCase())) continue;
+    const k = ch.key + b.address.toLowerCase(), liq = Number(p.liquidity?.usd) || 0;
+    if (!best.has(k) || liq > best.get(k).liq) best.set(k, { href: `#/x/${ch.key}/${ethers.getAddress(b.address)}`, av: mAvatar({ image: p.info?.imageUrl || "", symbol: b.symbol }),
+      name: b.name, symbol: b.symbol, ch, mc: Number(p.marketCap || p.fdv) || 0, liq, own: false });
+  }
+  return [...own, ...[...best.values()].sort((a, b) => b.liq - a.liq).slice(0, 10 - own.length)];
+}
+function showResults(list, q) {
+  const box = sres();
+  box.hidden = false;
+  box.innerHTML = list.length ? list.map((x, i) => `<a href="${x.href}" role="option" class="${i === 0 ? "on" : ""}">${x.av}
+      <div style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? `<span class="pill">PepesFamily</span>` : ""}</div><div class="sub">$${esc(x.symbol)} · ${esc(x.ch.short)}</div></div>
+      <div class="r">${x.mc ? "$" + compact(x.mc) : "—"}<div class="w">${x.liq ? "liq $" + compact(x.liq) : "mcap"}</div></div></a>`).join("")
+    : `<div class="msg">No token matches “${esc(q)}”. Paste its contract address to open it.</div>`;
+}
 $("#q").addEventListener("input", () => {
-  SEARCH = $("#q").value.trim();
-  if (/^0x[0-9a-fA-F]{40}$/.test(SEARCH)) return;
-  if (location.hash.slice(1) !== "/" && location.hash !== "") location.hash = "#/";
-  else window.showDiscoverList?.();
+  const v = $("#q").value.trim();
+  clearTimeout(searchT);
+  if (/^0x[0-9a-fA-F]{40}$/.test(v)) return openCA(v);
+  SEARCH = v;
+  window.showDiscoverList?.();
+  if (v.length < 2) { sres().hidden = true; return; }
+  const my = ++searchSeq;
+  sres().hidden = false;
+  if (!sres().innerHTML) sres().innerHTML = `<div class="msg">Searching…</div>`;
+  searchT = setTimeout(async () => {
+    if (!ALL_OWN) allTokenInfos().catch(() => {});
+    const list = await searchTokens(v);
+    if (my === searchSeq && $("#q").value.trim() === v) showResults(list, v);
+  }, 280);
 });
+$("#q").addEventListener("keydown", (e) => {
+  const items = [...sres().querySelectorAll("a")];
+  if (e.key === "Escape") { sres().hidden = true; return; }
+  if (!items.length || sres().hidden || !["ArrowDown", "ArrowUp"].includes(e.key)) return;
+  e.preventDefault();
+  const i = items.findIndex((a) => a.classList.contains("on"));
+  const n = (i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+  items.forEach((a, k) => a.classList.toggle("on", k === n));
+  items[n].scrollIntoView({ block: "nearest" });
+});
+$("#q").addEventListener("focus", () => { if ($("#q").value.trim().length >= 2 && sres().innerHTML) sres().hidden = false; });
+document.addEventListener("pointerdown", (e) => { if (!e.target.closest("#search")) sres().hidden = true; });
+sres().addEventListener("click", (e) => { if (e.target.closest("a")) { sres().hidden = true; $("#q").blur(); } });
 $("#search").addEventListener("submit", (e) => {
   e.preventDefault();
   const v = $("#q").value.trim();
-  if (/^0x[0-9a-fA-F]{40}$/.test(v)) { $("#q").value = ""; SEARCH = ""; location.hash = "#/t/" + ethers.getAddress(v.toLowerCase()); }
-  else document.getElementById("list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (/^0x[0-9a-fA-F]{40}$/.test(v)) return openCA(v);
+  const pick = sres().querySelector("a.on") || sres().querySelector("a");
+  if (pick && !sres().hidden) { sres().hidden = true; $("#q").blur(); location.hash = pick.getAttribute("href"); }
 });
 
 function renderSetup() {
@@ -1722,10 +1783,7 @@ async function renderHome() {
       || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
   };
   // the first trending page of every chain at once, then the rest (about 100 tokens a chain) when it comes in
-  const loadMarket = () => marketTokens().then((m) => { if (!market || market.length < m.length) market = m; }).catch((e) => console.warn("markets", e))
-    .finally(() => { showList(); showTrend(); saveCache(); })
-    .then(() => marketTokens(true, () => gen !== routeGen)).then((m) => { if (gen === routeGen && m.length > (market?.length || 0)) { market = m; showList(); showTrend(); saveCache(); } })
-    .catch((e) => console.warn("more markets", e));
+  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => console.warn("markets", e)).finally(() => { showList(); showTrend(); saveCache(); });
   // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
   let posSeq = 0;
   const showPositions = window.refreshPositions = async () => {
@@ -1994,22 +2052,12 @@ const MAJORS = new Set(["ETH", "WETH", "BNB", "WBNB", "HYPE", "WHYPE", "KHYPE", 
   "USDE", "USDS", "DAI", "FDUSD", "USD1", "USDH", "BTC", "WBTC", "BTCB", "UBTC", "CBBTC", "STETH", "WSTETH", "CBETH", "UETH"]);
 /// Trending tokens on every chain (one entry per token, its busiest pool): { ch, address, name, symbol, image, price,
 /// mc, vol, chg, liq, created, pool }. Our own launches are left out (they have their own list).
-/// `deep`: also trending pages 2-5 and the 3 pages of busiest pools (by 24 h volume) per chain, about 100 tokens a
-/// chain like DexScreener's first page; otherwise only trending page 1 (20 pools), the quick first paint.
+/// A short list like FOMO's (GeckoTerminal's first trending page, 20 pools a chain): search finds everything else.
 const MARKET_POOL = new Map(); // chain key + token -> its most liquid pool seen in the lists ({ pool, liq }), for the chart
-async function marketTokens(deep = false, stop = () => false) {
-  const paths = (ch) => [`/networks/${ch.gt}/trending_pools?page=1&include=base_token`,
-    ...(deep ? [2, 3, 4, 5].map((n) => `/networks/${ch.gt}/trending_pools?page=${n}&include=base_token`) : []),
-    ...(deep ? [1, 2, 3].map((n) => `/networks/${ch.gt}/pools?page=${n}&include=base_token&sort=h24_volume_usd_desc`) : [])];
-  // four at a time, so a visitor without the shared cache doesn't hit GeckoTerminal's limit all at once
-  const all = gtChains().flatMap((ch) => paths(ch).map((path) => ({ ch, path })));
-  let next = 0;
-  const lists = new Array(all.length);
-  await Promise.all(Array.from({ length: deep ? 4 : all.length }, async () => {
-    while (next < all.length && !stop()) { const i = next++; lists[i] = await one(all[i]); }
-  }));
-  async function one({ ch, path }) {
-    const j = await gtGet(path, deep ? 300_000 : 120_000).catch(() => null);
+async function marketTokens() {
+  const lists = await Promise.all(gtChains().map((ch) => one(ch, `/networks/${ch.gt}/trending_pools?page=1&include=base_token`)));
+  async function one(ch, path) {
+    const j = await gtGet(path).catch(() => null);
     if (!j?.data) return [];
     const toks = new Map((j.included || []).map((t) => [t.id, t.attributes]));
     return j.data.map((p) => {
@@ -2037,7 +2085,13 @@ async function findMarketChain(addr) {
   const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, { signal: AbortSignal.timeout(10000) });
   const ids = new Map(gtChains().filter((c) => c.dex).map((c) => [c.dex, c.key]));
   const pairs = ((await r.json())?.pairs || []).filter((p) => ids.has(p.chainId)).sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-  return pairs.length ? ids.get(pairs[0].chainId) : null;
+  if (pairs.length) return ids.get(pairs[0].chainId);
+  // brand-new tokens DexScreener hasn't listed yet: the first of our chains where GeckoTerminal knows it
+  for (const ch of gtChains()) {
+    const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000).catch(() => null);
+    if (j?.data) return ch.key;
+  }
+  return null;
 }
 /// One token's market data on `ch`: DexScreener first (its most liquid pair), GeckoTerminal if DexScreener has
 /// nothing. { name, symbol, image, price, mc, liq, vol, chg, chart (an embeddable chart URL or "") }.
@@ -2768,8 +2822,10 @@ async function allTokenInfos() {
     return out.map((t) => ({ t, P }));
   }));
   for (const { t, P } of lists.flat()) TOKEN_PAD.set(t.token.toLowerCase(), P);
-  return lists.flat();
+  ALL_OWN = lists.flat();
+  return ALL_OWN;
 }
+let ALL_OWN = null; // every token launched here ({ t, P }), once read: search looks through it
 const toUsdNum = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
 /// Full-precision dollars for the share card ("$8,295.89"); tiny amounts keep 2 significant digits.
 const usdLong = (n) => (n >= 1 ? "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : fmtUsd(n));
