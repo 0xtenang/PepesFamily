@@ -856,6 +856,16 @@ function xcSummary(q) {
 /// transaction hashes.
 async function xcExecute(q, o, onStatus) {
   let check = null;
+  const todo = [];
+  for (const step of q.steps || []) for (const item of step.items || []) if (item.status !== "complete") todo.push({ step, item });
+  if (todo.length > 1 && todo.every((x) => x.step.kind === "transaction")) {
+    await requireWallet(o.ch);
+    const done = await walletBatch(o.ch, todo.map((x) => x.item.data), "Confirm in your wallet: approval and payment in one confirmation…");
+    if (done) {
+      for (const x of todo) if (x.item.check) check = x.item.check.endpoint;
+      q = { ...q, steps: [] }; // all sent
+    }
+  }
   for (const step of q.steps || []) {
     if (step.kind !== "transaction") throw new Error("This payment needs a signature type the site doesn't support yet: pay with the chain's coin instead.");
     for (const item of step.items || []) {
@@ -1104,7 +1114,7 @@ function listen(eth) {
     if (accs?.length) connect().catch(() => {});
   });
   // Switching network inside the wallet: the signer is rebuilt for the new network before the next action.
-  eth.on?.("chainChanged", () => { signer = null; });
+  eth.on?.("chainChanged", (id) => { signer = null; WALLET_CHAIN = Number(id) || 0; window.refreshPaySource?.(); });
 }
 
 /// Connects the wallet and switches it to `ch` (Robinhood Chain by default). `quiet` skips the page re-render
@@ -1170,11 +1180,52 @@ async function requireWallet(ch = CHAINS.robinhood) {
     signer = null;
     throw new Error(`Switch your wallet to ${ch.name} (chain ID ${ch.chainId}) and try again.`);
   }
+  WALLET_CHAIN = ch.chainId;
   // The signer must be bound to `ch` too (it is rebuilt by connect after a switch).
   if (Number((await signer.provider.getNetwork()).chainId) !== ch.chainId) {
     signer = await new ethers.BrowserProvider(WALLET).getSigner();
   }
 }
+
+/// One wallet confirmation for several calls on `ch` (EIP-5792 `wallet_sendCalls`, atomic: all or nothing), when
+/// the wallet supports it (MetaMask does, through its smart account). Resolves with the receipts once mined; null
+/// when the wallet can't batch, so the caller sends the calls one by one as before. Rejecting it throws.
+async function walletBatch(ch, calls, label) {
+  const hex = "0x" + ch.chainId.toString(16);
+  let caps = null;
+  try { caps = await WALLET.request({ method: "wallet_getCapabilities", params: [account, [hex]] }); } catch { return null; }
+  const c = caps?.[hex] || caps?.[ch.chainId] || {};
+  const st = c.atomic?.status || (c.atomicBatch?.supported ? "supported" : "");
+  if (st !== "supported" && st !== "ready") return null;
+  toast(label || "Confirm in your wallet: one confirmation for all of it…", 12000);
+  let res;
+  try {
+    res = await WALLET.request({ method: "wallet_sendCalls", params: [{ version: "2.0.0", chainId: hex, from: account, atomicRequired: true,
+      calls: calls.map((x) => ({ to: x.to, data: x.data || "0x", value: "0x" + BigInt(x.value || 0).toString(16) })) }] });
+  } catch (e) {
+    if (e?.code === 4001 || e?.code === "ACTION_REJECTED") throw e; // the user said no
+    return null; // the wallet can't do this batch after all: one by one
+  }
+  const id = typeof res === "string" ? res : res?.id;
+  toast("Sent. Waiting for the network…", 30000);
+  for (let i = 0; i < 300; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const st2 = await WALLET.request({ method: "wallet_getCallsStatus", params: [id] }).catch(() => null);
+    if (!st2) continue;
+    const code = typeof st2.status === "number" ? st2.status : { PENDING: 100, CONFIRMED: 200 }[st2.status] ?? 100;
+    if (code >= 200 && code < 300) {
+      const receipts = st2.receipts || [];
+      if (receipts.some((r) => r.status === "0x0" || r.status === 0)) throw new Error("The transaction reverted");
+      return receipts;
+    }
+    if (code >= 400) throw new Error("The transaction didn't go through");
+  }
+  throw new Error("Still waiting for the transaction: check your wallet");
+}
+const ERC20_IFACE = new ethers.Interface(ERC20_ABI.concat(["function deposit() payable"]));
+const ROUTER_IFACE = new ethers.Interface(ROUTER_ABI), ETH_ROUTER_IFACE = new ethers.Interface(ETH_ROUTER_ABI);
+/// The chain the wallet is on now (so a buy can pay from it without a network switch), or 0.
+let WALLET_CHAIN = 0;
 $("#connect").onclick = () => connect().catch((e) => toast(errMsg(e), 7000));
 
 async function ensureImdAllowance(amount, spender, imdAddr = CONFIG.imd) {
@@ -1525,7 +1576,8 @@ function pickSource(dest, usd) {
   if (!CASH) return { error: "Connect a wallet" };
   const usable = (x) => x.usd - gasKeepUsd(x.ch);
   const home = CASH.list.find((x) => x.ch === dest);
-  const pick = home && usable(home) >= usd ? home : CASH.list.filter((x) => x.ch !== dest && x.ch.remote !== undefined).find((x) => usable(x) >= usd * 1.02);
+  const others = CASH.list.filter((x) => x.ch !== dest && x.ch.remote !== undefined && usable(x) >= usd * 1.02);
+  const pick = home && usable(home) >= usd ? home : others.find((x) => x.ch.chainId === WALLET_CHAIN) || others[0];
   if (!pick) {
     const best = CASH.list[0];
     return { error: best && best.usd > 0 ? `Not enough on any one chain: your largest balance is ${fmtUsd(Math.max(0, usable(best)))} of ${best.sym} on ${best.ch.short}` : "Your wallet has no ETH, BNB or HYPE yet" };
@@ -3069,15 +3121,34 @@ async function renderCreate() {
       const ethBuy = pay === "eth" ? amt : 0n, imdBuy = pay === "imd" ? amt : 0n;
       // IMD buy inside the launch: 10% below the previewed amount, so a changed start price can't fill it far worse.
       let minOut = 0n;
-      if (imdBuy > 0n) {
-        minOut = withSlippage(tokensFor(imdBuy, await padR.startTick(quote)), 1000);
-        await ensureImdAllowance(imdBuy, LAUNCH.router, quote);
-      }
+      if (imdBuy > 0n) minOut = withSlippage(tokensFor(imdBuy, await padR.startTick(quote)), 1000);
       const router = new ethers.Contract(LAUNCH.router, ROUTER_ABI, signer);
       if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
       const fee = launchFeeWei(ch);
+      if (fee > 0n && (await signer.provider.getBalance(account)) < fee + ethBuy) throw new Error(`Not enough ${NAT}: the launch fee is ${fmt(fee, 6)} ${NAT}${ethBuy ? ", plus your buy" : ""}`);
+      // One confirmation when the wallet can batch: the launch fee, any approval, the launch and the first buy. With a
+      // wrapped-coin pair (WETH, WBNB, WHYPE) the coin is wrapped and bought inside the launch itself.
+      if (LAUNCH.split) {
+        const wrappedBuy = ethBuy > 0n && !!LAUNCH.wrapped;
+        const buyIn = wrappedBuy ? ethBuy : imdBuy;
+        const bMin = wrappedBuy ? withSlippage(tokensFor(ethBuy, await padR.startTick(quote)), 1000) : minOut;
+        const calls = [];
+        if (fee > 0n) calls.push({ to: FEES.recipient, value: fee });
+        if (wrappedBuy) calls.push({ to: quote, data: ERC20_IFACE.encodeFunctionData("deposit", []), value: ethBuy });
+        if (buyIn > 0n) calls.push({ to: quote, data: ERC20_IFACE.encodeFunctionData("approve", [LAUNCH.router, buyIn]) });
+        calls.push({ to: LAUNCH.router, data: ROUTER_IFACE.encodeFunctionData("launchWithSplit", [form.name, form.symbol, JSON.stringify(m), quote, [split.c, split.h, split.b], buyIn, bMin]) });
+        const rcs = (calls.length > 1 && (!ethBuy || wrappedBuy)) ? await walletBatch(ch, calls, "Confirm in your wallet: launch fee, launch and buy in one confirmation…") : null;
+        if (rcs) {
+          let token = null;
+          for (const r of rcs) for (const l of r.logs || []) { try { const e = padR.interface.parseLog(l); if (e?.name === "TokenLaunched") token = e.args.token; } catch {} }
+          toast(buyIn > 0n ? "Token launched and bought" : "Token launched", 8000);
+          location.hash = token ? "#/t/" + token : "#/tokens";
+          btn.disabled = false;
+          return;
+        }
+      }
+      if (imdBuy > 0n) await ensureImdAllowance(imdBuy, LAUNCH.router, quote);
       if (fee > 0n) {
-        if ((await signer.provider.getBalance(account)) < fee + ethBuy) throw new Error(`Not enough ${NAT}: the launch fee is ${fmt(fee, 6)} ${NAT}${ethBuy ? ", plus your buy" : ""}`);
         toast(`Confirm the $${FEES.launchUsd} launch fee (${fmt(fee, 6)} ${NAT}) in your wallet…`, 10000);
         await (await signer.sendTransaction({ to: FEES.recipient, value: fee })).wait();
       }
@@ -3369,6 +3440,11 @@ async function renderToken(addr) {
       if (!amt) throw new Error("Enter an amount");
       const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
       let tx;
+      // An approval and the trade go in one confirmation when the wallet can batch them (receipts); otherwise the
+      // approval is a gasless permit signature or a separate approval, then the trade.
+      let receipts = null;
+      const needs = async (token, spender) => (await new ethers.Contract(token, ERC20_ABI, P.ch.reader).allowance(account, spender)) < amt;
+      const approveCall = (token, spender) => ({ to: token, data: ERC20_IFACE.encodeFunctionData("approve", [spender, amt]) });
       if (q !== ZERO && viaEth) {
         const buying = tradeSide === "buy";
         const expected = await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt);
@@ -3377,29 +3453,41 @@ async function renderToken(addr) {
           tx = await ethRouterW().buyWithEth(addr, withSlippage(expected, slipBps), deadline(), { value: amt });
         } else {
           const dl = deadline();
+          if (await needs(addr, P.ethRouter)) receipts = await walletBatch(P.ch, [approveCall(addr, P.ethRouter),
+            { to: P.ethRouter, data: ETH_ROUTER_IFACE.encodeFunctionData("sellForEth", [addr, amt, withSlippage(expected, slipBps), dl]) }]);
+          if (!receipts) {
           const sig = await authorizeSell(P, addr, P.ethRouter, amt, dl);
           toast("Confirm in your wallet…", 8000);
           tx = sig
             ? await ethRouterW().sellForEthWithPermit(addr, amt, withSlippage(expected, slipBps), dl, sig.v, sig.r, sig.s)
             : await ethRouterW().sellForEth(addr, amt, withSlippage(expected, slipBps), dl);
+          }
         }
       } else if (tradeSide === "buy") {
         const expected = await quoteSwap(P, addr, info.quoteIsCurrency0, true, amt);
-        if (q !== ZERO) await ensureImdAllowance(amt, P.router, q);
-        toast("Confirm in your wallet…", 8000);
-        tx = await routerW().buy(addr, amt, withSlippage(expected, slipBps), deadline(), { value: q === ZERO ? amt : 0n });
+        const buyData = ROUTER_IFACE.encodeFunctionData("buy", [addr, amt, withSlippage(expected, slipBps), deadline()]);
+        if (q !== ZERO && await needs(q, P.router)) receipts = await walletBatch(P.ch, [approveCall(q, P.router), { to: P.router, data: buyData }]);
+        if (!receipts) {
+          if (q !== ZERO) await ensureImdAllowance(amt, P.router, q);
+          toast("Confirm in your wallet…", 8000);
+          tx = await routerW().buy(addr, amt, withSlippage(expected, slipBps), deadline(), { value: q === ZERO ? amt : 0n });
+        }
       } else {
         const expected = await quoteSwap(P, addr, info.quoteIsCurrency0, false, amt);
         const dl = deadline();
-        // v1 tokens let their router sell without approval; later tokens use a permit signature or an approval
-        const sig = P.version === 1 ? null : await authorizeSell(P, addr, P.router, amt, dl);
-        toast("Confirm in your wallet…", 8000);
-        tx = sig
-          ? await routerW().sellWithPermit(addr, amt, withSlippage(expected, slipBps), dl, sig.v, sig.r, sig.s)
-          : await routerW().sell(addr, amt, withSlippage(expected, slipBps), dl);
+        // v1 tokens let their router sell without approval; later tokens: one batched confirmation, or a permit
+        // signature or an approval, then the sell
+        if (P.version !== 1 && await needs(addr, P.router)) receipts = await walletBatch(P.ch, [approveCall(addr, P.router),
+          { to: P.router, data: ROUTER_IFACE.encodeFunctionData("sell", [addr, amt, withSlippage(expected, slipBps), dl]) }]);
+        if (!receipts) {
+          const sig = P.version === 1 ? null : await authorizeSell(P, addr, P.router, amt, dl);
+          toast("Confirm in your wallet…", 8000);
+          tx = sig
+            ? await routerW().sellWithPermit(addr, amt, withSlippage(expected, slipBps), dl, sig.v, sig.r, sig.s)
+            : await routerW().sell(addr, amt, withSlippage(expected, slipBps), dl);
+        }
       }
-      toast("Transaction sent…", 15000);
-      await tx.wait();
+      if (!receipts) { toast("Transaction sent…", 15000); await tx.wait(); }
       toast(tradeSide === "buy" ? "Bought" : "Sold");
       if (!stale()) renderToken(addr);
     } catch (e) { toast(errMsg(e), 7000); }
