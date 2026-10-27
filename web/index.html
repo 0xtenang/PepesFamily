@@ -2011,6 +2011,60 @@ async function swapQuote(fromCh, from, toCh, to, amount) {
     ...(topup ? { topupGas: true, topupGasAmount: String(Math.round((GAS_TOPUP_USD[toCh.key] || 0.3) * 1e6)) } : {}),
   });
 }
+/// Where sells pay out: ETH on Robinhood Chain, whichever chain the token is on (like FOMO's one dollar balance).
+const HOME = () => CHAINS.robinhood;
+/// A sell of `amount` of `token` on `ch` into ETH on Robinhood (one Relay order, sold and moved in one go); the
+/// chain's own coin there when Relay has no such route.
+async function sellQuote(ch, token, amount) {
+  if (ch !== HOME()) {
+    try { return await swapQuote(ch, token, HOME(), ZERO_ADDR, amount); } catch (e) { console.warn("sell to Robinhood", e); }
+  }
+  return swapQuote(ch, token, ch, ZERO_ADDR, amount);
+}
+/// After a sell on one of our launchpads off Robinhood: moves what it paid (`wei` of `ch`'s coin) to ETH on
+/// Robinhood through Relay, keeping enough there for network fees. Small amounts stay where they are.
+async function sweepHome(ch, wei, onStatus) {
+  if (ch === HOME() || wei <= 0n) return;
+  const px = nativeUsd(ch);
+  if (!px || Number(ethers.formatEther(wei)) * px < 0.5) return;
+  onStatus?.(`Moving it to ETH on ${HOME().short}…`);
+  const o = { ch, sym: ch.native?.symbol || "ETH", addr: ZERO_ADDR, dec: 18, verb: "Moving…" };
+  await requireWallet(ch);
+  const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: ch.chainId, destinationChainId: HOME().chainId,
+    originCurrency: ZERO_ADDR, destinationCurrency: ZERO_ADDR, amount: wei.toString(), tradeType: "EXACT_INPUT" });
+  await xcExecute(q, o, () => {});
+}
+/// Swap fees Relay holds for FEES.recipient (app fees, in USDC), one entry per chain and currency.
+async function relayFeeBalances() {
+  const r = await fetch(`https://api.relay.link/app-fees/${FEES.recipient}/balances`, { signal: AbortSignal.timeout(10000) });
+  return (await r.json()).balances || [];
+}
+/// Claims them to FEES.recipient: Relay asks for one signature per claim from that address, then pays it out.
+async function claimRelayFees(balances, onStatus) {
+  for (const b of balances) {
+    if (Number(b.amountUsd) < 0.1) continue;
+    onStatus?.(`Claiming ${fmtUsd(Number(b.amountUsd))} of ${b.currency.symbol} from Relay…`);
+    const r = await fetch(`https://api.relay.link/app-fees/${FEES.recipient}/claim`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chainId: b.currency.chainId, currency: b.currency.address, recipient: FEES.recipient }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.message || `Relay answered ${r.status}`);
+    for (const step of j.steps || []) for (const item of step.items || []) {
+      if (item.status === "complete") continue;
+      const sign = item.data?.sign, post = item.data?.post;
+      if (!sign || !post) throw new Error("Relay's claim needs a step this site doesn't support yet: claim at relay.link");
+      const sigCh = Object.values(CHAINS).find((c) => c.chainId === Number(sign.domain?.chainId)) || CHAINS[Object.keys(CHAINS).find((k) => CHAINS[k].chainId === b.currency.chainId)] || HOME();
+      await requireWallet(sigCh);
+      let sig;
+      if (sign.signatureKind === "eip712") {
+        const types = { ...sign.types }; delete types.EIP712Domain;
+        sig = await signer.signTypedData(sign.domain, types, sign.value);
+      } else sig = await signer.signMessage(ethers.isHexString(sign.message) ? ethers.getBytes(sign.message) : sign.message);
+      const pr = await fetch(`https://api.relay.link${post.endpoint}?signature=${sig}`, { method: post.method || "POST", headers: { "content-type": "application/json" },
+        body: post.body ? JSON.stringify(post.body) : undefined });
+      if (!pr.ok) throw new Error((await pr.json().catch(() => ({}))).message || `Relay answered ${pr.status}`);
+    }
+  }
+}
 const GAS_TOPUP_USD = { ethereum: 2, robinhood: 0.3, base: 0.3, hyperevm: 0.3, bsc: 0.3 };
 const swapSummary = (q) => {
   const o = q.details?.currencyOut;
@@ -2202,7 +2256,7 @@ async function renderMarketToken(chKey, addrIn) {
     timer = setTimeout(async () => {
       const my = ++seq;
       try {
-        const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
+        const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await sellQuote(ch, addr, amt);
         if (my === seq && !stale()) { $("#mpv").innerHTML = swapSummary(q); if (side === "sell") mLabel(q); lastQ = { key: qKey(o || { ch, addr }, amt), who: account, at: Date.now(), q }; }
       } catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
     }, 500);
@@ -2211,7 +2265,7 @@ async function renderMarketToken(chKey, addrIn) {
     side = s2; $("#mamt").value = "";
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
     $("#mamt").placeholder = side === "buy" ? "$0" : "0.0";
-    $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ${NAT} on ${ch.short})`;
+    $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ETH on ${HOME().short})`;
     mLabel(null);
     const q = side === "buy" ? ["$5", "$20", "$50", "$100"] : ["25%", "50%", "100%"];
     $("#mquick").innerHTML = q.map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
@@ -2251,7 +2305,7 @@ async function renderMarketToken(chKey, addrIn) {
       await requireWallet(o.ch); // the paying chain
       const fresh = lastQ && lastQ.key === qKey(o, amt) && lastQ.who === account && Date.now() - lastQ.at < 25_000;
       if (!fresh) toast("Getting the price…", 6000);
-      const q = fresh ? lastQ.q : side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
+      const q = fresh ? lastQ.q : side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await sellQuote(ch, addr, amt);
       lastQ = null; // a quote is used once
       $("#mpv").innerHTML = swapSummary(q);
       const t0 = Date.now();
@@ -2455,6 +2509,12 @@ async function renderAdmin() {
   const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
     <div class="hero"><div><h1>Admin</h1><p>Your 1% protocol fees and the holders' rewards, per launchpad version.</p></div></div>
+    <div class="card" style="margin-bottom:14px">
+      <span class="h">Claim everything</span>
+      <div class="stat" id="claimall-sum" style="margin:4px 0 12px">Protocol fees on every launchpad: ${fmtUsd(totalUsd)}. Swap fees at Relay: checking…</div>
+      <button class="primary" id="claimall" type="button">Claim all</button>
+      <div class="stat" style="margin-top:8px">Protocol fees go to the fee address on each chain (any wallet can collect them; it only pays gas). Relay's swap fees (USDC on Base) need a signature from the fee address ${short(FEES.recipient)}. Launch fees need no claim: they are paid straight to it.</div>
+    </div>
     <div class="stats" style="margin:0 0 6px">
       <div class="card"><div class="k">Protocol fees to collect</div><div class="v">${fmtUsd(totalUsd)}</div><div class="stat">yours, all versions</div></div>
       <div class="card"><div class="k">Unclaimed by holders</div><div class="v">${fmtUsd(unclaimedUsd)}</div><div class="stat">paid out, holders haven't claimed yet</div></div>
@@ -2498,6 +2558,42 @@ async function renderAdmin() {
         <div class="row" style="margin-top:10px"><button id="rcyscan">Find expired rewards</button><button class="primary" id="rcysend" hidden></button></div>
       </div>` : ""}
     <p class="stat">Collecting always pays the fee address shown, whichever wallet signs. Paying out always pays the token's holders. Sending expired rewards always pays the fee address. The signer only pays gas.</p>`;
+  // One button for every claim: each launchpad's protocol fees (chain by chain, worth more than 5 cents), then
+  // Relay's swap fees when the fee address itself is connected.
+  const claims = rows.flatMap((r) => r.assets.map((q, i) => ({ r, q, amt: r.pending[i], usd: toUsd(r.pending[i], q) })))
+    .filter((c) => c.amt > 0n && c.usd >= 0.05).sort((a, b) => a.r.P.ch.chainId - b.r.P.ch.chainId);
+  let relayFees = [];
+  relayFeeBalances().then((list) => {
+    relayFees = list;
+    const usdR = list.reduce((t, b) => t + Number(b.amountUsd || 0), 0);
+    if ($("#claimall-sum")) $("#claimall-sum").textContent = `Protocol fees on every launchpad: ${fmtUsd(totalUsd)} (${claims.length} to collect). Swap fees at Relay: ${fmtUsd(usdR)}.`;
+  }).catch(() => { if ($("#claimall-sum")) $("#claimall-sum").textContent = `Protocol fees on every launchpad: ${fmtUsd(totalUsd)} (${claims.length} to collect). Swap fees at Relay: couldn't check.`; });
+  $("#claimall").onclick = async () => {
+    const b = $("#claimall"); b.disabled = true;
+    let done = 0, skipped = [];
+    try {
+      for (const [i, c] of claims.entries()) {
+        toast(`Collecting ${qsym(c.q)} on ${padLabel(c.r.P)} (${i + 1} of ${claims.length})…`, 30000);
+        try {
+          await ensureGas(c.r.P.ch, (m2) => toast(m2, 30000));
+          await requireWallet(c.r.P.ch);
+          const tx = await new ethers.Contract(c.r.P.pad, PAD_ABI, signer).collectProtocolFees(c.q);
+          await waitReceipt(c.r.P.ch, tx.hash);
+          done++;
+        } catch (e) {
+          if (e?.code === 4001 || e?.code === "ACTION_REJECTED") throw e;
+          skipped.push(`${padLabel(c.r.P)}: ${errMsg(e)}`);
+        }
+      }
+      const mine = account && account.toLowerCase() === FEES.recipient.toLowerCase();
+      if (relayFees.some((x) => Number(x.amountUsd) >= 0.1)) {
+        if (mine) { await claimRelayFees(relayFees, (m2) => toast(m2, 30000)); done++; }
+        else skipped.push(`Relay swap fees: connect the fee address ${short(FEES.recipient)} to claim them`);
+      }
+      toast(`Claimed ${done}${skipped.length ? `. Not claimed: ${skipped.join("; ")}` : ""}`, skipped.length ? 12000 : 6000);
+      renderAdmin();
+    } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
+  };
   app.querySelectorAll("button[data-q]").forEach((b) => b.onclick = async () => {
     b.disabled = true;
     const r = rows[Number(b.dataset.r)];
@@ -3802,6 +3898,7 @@ async function renderToken(addr) {
       if (tradeSide === "sell") await ensureGas(P.ch, (m2) => toast(m2, 30000));
       if (tradeSide === "buy" && gatherUsd) await gatherCash(P.ch, gatherUsd, (m2) => toast(m2, 30000));
       await requireWallet(P.ch);
+      const nat0 = tradeSide === "sell" && P.ch !== HOME() ? await P.ch.reader.getBalance(account).catch(() => null) : null;
       const amt = ethers.parseUnits($("#amt").value.trim() || "0", 18);
       if (!amt) throw new Error("Enter an amount");
       const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
@@ -3855,6 +3952,11 @@ async function renderToken(addr) {
       }
       const t0 = Date.now();
       if (!receipts) { toast(WALLET_KIND === "privy" ? (tradeSide === "buy" ? "Buying…" : "Selling…") : "Transaction sent…", 15000); await waitReceipt(P.ch, tx.hash); }
+      // sold for the chain's coin off Robinhood: what it paid goes on to ETH on Robinhood (sells all pay out there)
+      if (tradeSide === "sell" && payNative() && P.ch !== HOME() && nat0 != null) {
+        const got = (await P.ch.reader.getBalance(account)) - nat0;
+        await sweepHome(P.ch, got, (m2) => toast(m2, 30000)).catch((e) => toast(`Sold. Moving it to ${HOME().short} didn't work (${errMsg(e)}): it's in ${NAT} on ${P.ch.short}.`, 9000));
+      }
       toast(`${tradeSide === "buy" ? "Bought" : "Sold"}${receipts ? "" : ` in ${((Date.now() - t0) / 1000).toFixed(1)} s`}`);
       if (!stale()) renderToken(addr);
     } catch (e) { toast(errMsg(e), 7000); }
