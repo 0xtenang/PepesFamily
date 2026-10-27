@@ -345,6 +345,10 @@ td.n, th.n { text-align: right; }
 @media (max-width: 760px) { .mint-top { grid-template-columns: 1fr; } }
 
 /* wallet picker */
+.tradebtn { display: flex; align-items: center; justify-content: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.tradebtn .sep { width: 1px; height: 16px; background: currentColor; opacity: .35; }
+.tradebtn .usd { opacity: .7; font-weight: 500; }
+.tradewarn { color: var(--negative); font-size: 14px; margin-top: 8px; }
 .wopt.privy { display: grid; text-align: left; gap: 2px; border-color: var(--accent, #8fd66a); }
 .wopt .wsub { order: 2; font-size: 12px; color: var(--muted, #9a9a9a); font-weight: 400; }
 .modal { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .7); display: grid; place-items: center; }
@@ -1021,6 +1025,8 @@ const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 const qsym = (q) => QUOTES[String(q).toLowerCase()]?.sym || (q === ZERO ? "ETH" : "IMD");
 const pill = (q) => `<span class="pill ${q === ZERO ? "eth" : "imd"}">${qsym(q)}</span>`;
 
+/// 1.23M, 45.6K, 0.0123: compact amounts for trade buttons and previews.
+const compact = (n) => (n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(2) + "K" : n.toLocaleString("en-US", { maximumSignificantDigits: 4 }));
 function fmt(wei, max = 4) {
   const n = Number(ethers.formatUnits(wei, 18));
   if (n === 0) return "0";
@@ -1329,9 +1335,9 @@ function guardPrivy(p) {
     const [fee, pending] = await Promise.all([feesOf(ch), ch.reader.getTransactionCount(account, "pending")]);
     const nonce = Math.max(pending, nonces[ch.chainId] ?? 0);
     const t = { from: account, to: tx.to, data: tx.data || "0x", value: ethers.toQuantity(BigInt(tx.value || 0)), gas: ethers.toQuantity(gas),
-      nonce: ethers.toQuantity(nonce), chainId: ethers.toQuantity(ch.chainId) };
-    if (fee.maxFeePerGas) Object.assign(t, { type: "0x2", maxFeePerGas: ethers.toQuantity((fee.maxFeePerGas * 12n) / 10n), maxPriorityFeePerGas: ethers.toQuantity(fee.maxPriorityFeePerGas || 0n) });
-    else Object.assign(t, { type: "0x0", gasPrice: ethers.toQuantity(((fee.gasPrice || 0n) * 12n) / 10n) });
+      nonce: ethers.toQuantity(nonce), chainId: ch.chainId }; // Privy wants the chain ID and the type as plain numbers
+    if (fee.maxFeePerGas) Object.assign(t, { type: 2, maxFeePerGas: ethers.toQuantity((fee.maxFeePerGas * 12n) / 10n), maxPriorityFeePerGas: ethers.toQuantity(fee.maxPriorityFeePerGas || 0n) });
+    else Object.assign(t, { type: 0, gasPrice: ethers.toQuantity(((fee.gasPrice || 0n) * 12n) / 10n) });
     const raw = await p.request({ method: "eth_signTransaction", params: [t] });
     nonces[ch.chainId] = nonce + 1;
     sent.set(ethers.keccak256(raw), raw);
@@ -2068,7 +2074,8 @@ async function renderMarketToken(chKey, addrIn) {
         <div class="stat" id="msrc"></div>
         <div class="preview" id="mpv">&nbsp;</div>
         <div class="warn-box neg" id="mrisk" hidden></div>
-        <button class="primary full" id="mgo" style="margin-top:6px"></button>
+        <button class="primary full tradebtn" id="mgo" style="margin-top:6px"></button>
+        <div class="tradewarn" id="mwarn" hidden></div>
       </div>
     </div></div>`;
   $("#mcopy").onclick = async () => { try { await navigator.clipboard.writeText(addr); toast("Contract address copied"); } catch { toast(addr, 8000); } };
@@ -2091,6 +2098,26 @@ async function renderMarketToken(chKey, addrIn) {
       else { const c = await loadCash(); $("#mbal").textContent = c ? `Cash: ${fmtUsd(c.total)} across your chains` : ""; }
     } catch { $("#mbal").textContent = ""; }
   };
+  // the button says what the trade is, like GMGN: "Buy · $20 (0.0086 ETH)" / "Sell · 1.2M $X ($41.80)"
+  
+  function mLabel(q, o, amt) {
+    const btn = $("#mgo"), warn = $("#mwarn");
+    const raw = $("#mamt").value.trim();
+    warn.hidden = true;
+    if (side === "buy") {
+      const usd = usdIn();
+      if (!usd) return (btn.textContent = `Buy $${t.symbol}`);
+      const coin = o && amt ? `${compact(Number(ethers.formatUnits(amt, o.dec || 18)))} ${o.sym}` : "";
+      btn.innerHTML = `Buy <span class="sep"></span> ${fmtUsd(usd)}${coin ? ` <span class="usd">(${esc(coin)})</span>` : ""}`;
+      if (account && CASH && pickSource(ch, usd).error) { warn.hidden = false; warn.textContent = "Exceeds wallet balance"; }
+    } else {
+      let n = 0n; try { n = raw ? ethers.parseUnits(raw, dec) : 0n; } catch {}
+      if (!n) return (btn.textContent = `Sell $${t.symbol}`);
+      const usdOut = Number(q?.details?.currencyOut?.amountUsd || 0);
+      btn.innerHTML = `Sell <span class="sep"></span> ${esc(compact(Number(ethers.formatUnits(n, dec))))} $${esc(t.symbol)}${usdOut > 0 ? ` <span class="usd">(${fmtUsd(usdOut)})</span>` : ""}`;
+      if (account && n > tokBal) { warn.hidden = false; warn.textContent = "Exceeds wallet balance"; }
+    }
+  }
   const preview = () => {
     clearTimeout(timer);
     $("#msrc").textContent = "";
@@ -2103,8 +2130,10 @@ async function renderMarketToken(chKey, addrIn) {
       o = src.o;
       if (src.x) $("#msrc").textContent = `Paying with ${o.sym} on ${o.ch.short}${o.ch === ch ? "" : " (no bridging needed: one confirmation)"}`;
       try { amt = coinFor(o, usd); } catch (e) { return ($("#mpv").textContent = errMsg(e)); }
+      mLabel(null, o, amt);
     } else {
       try { amt = $("#mamt").value.trim() ? ethers.parseUnits($("#mamt").value.trim(), dec) : 0n; } catch { return ($("#mpv").textContent = "Enter a valid amount"); }
+      mLabel(null);
       if (!amt) return ($("#mpv").innerHTML = "&nbsp;");
     }
     $("#mpv").textContent = "Getting a price…";
@@ -2112,7 +2141,7 @@ async function renderMarketToken(chKey, addrIn) {
       const my = ++seq;
       try {
         const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await swapQuote(ch, addr, ch, ZERO_ADDR, amt);
-        if (my === seq && !stale()) { $("#mpv").innerHTML = swapSummary(q); lastQ = { key: qKey(o || { ch, addr }, amt), who: account, at: Date.now(), q }; }
+        if (my === seq && !stale()) { $("#mpv").innerHTML = swapSummary(q); if (side === "sell") mLabel(q); lastQ = { key: qKey(o || { ch, addr }, amt), who: account, at: Date.now(), q }; }
       } catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
     }, 500);
   };
@@ -2121,7 +2150,7 @@ async function renderMarketToken(chKey, addrIn) {
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
     $("#mamt").placeholder = side === "buy" ? "$0" : "0.0";
     $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ${NAT} on ${ch.short})`;
-    $("#mgo").textContent = side === "buy" ? `Buy $${t.symbol}` : `Sell $${t.symbol}`;
+    mLabel(null);
     const q = side === "buy" ? ["$5", "$20", "$50", "$100"] : ["25%", "50%", "100%"];
     $("#mquick").innerHTML = q.map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("");
     $("#mquick").querySelectorAll("button").forEach((b) => b.onclick = () => {
@@ -3513,7 +3542,8 @@ async function renderToken(addr) {
           <div class="preview" id="pv">&nbsp;</div>
           <div class="stat" id="pvcost"></div>
           <label for="slip">Max slippage (%)</label><input id="slip" value="5" inputmode="decimal" />
-          <button class="primary full" id="trade" style="margin-top:14px"></button>
+          <button class="primary full tradebtn" id="trade" style="margin-top:14px"></button>
+          <div class="tradewarn" id="tradewarn" hidden></div>
           <div class="fees">4% fee: ${sp ? esc(feeText(sp)) : `1% protocol, 3% to holders of $${esc(info.symbol)}`}.${P.expiry && (!sp || sp.h) ? " Claim at least weekly: rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}${sp?.b ? " Buyers receive, and sellers pay, the burn share in tokens." : ""}</div>
         </div>
         <div class="card" style="margin-top:14px">
@@ -3595,7 +3625,7 @@ async function renderToken(addr) {
     if ($("#vial")) $("#vial").textContent = buying ? "Pay with" : "Receive in";
 
     $("#amtl").textContent = buying ? `Amount (${payUnit()})` : `Amount ($${info.symbol})`;
-    $("#trade").textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`;
+    tradeLabel(0n, null);
     const payBal = payNative() ? ethBal : quoteBal;
     $("#bal").textContent = account ? `Balance: ${fmt(buying ? payBal : tokBal)} ${buying ? payUnit() : "$" + info.symbol}` : "";
     const opts = buying ? (payNative() ? NATIVE_QUICK[NAT] || NATIVE_QUICK.ETH : QUOTES[q.toLowerCase()]?.quick || ["1", "5", "10", "50"]) : ["25%", "50%", "75%", "100%"];
@@ -3638,18 +3668,38 @@ async function renderToken(addr) {
     if (src.error) { $("#fromnote").textContent = src.error; return; }
     if (src.o.ch !== P.ch) { from = src.o; $("#fromnote").textContent = `Paying with ${src.o.sym} on ${src.o.ch.short}: one confirmation, no bridging needed.`; }
   }
+  // The button says what the trade is, like GMGN: "Buy · 0.01 ETH ($23.16)" / "Sell · 1.2M $X ($41.80)", and a
+  // line under it when the amount is more than the wallet holds.
+  const unitUsd = () => (payNative() ? nativeUsd(P.ch) : quoteUsd(q));
+  
+  function tradeLabel(amt, out) {
+    const buying = tradeSide === "buy";
+    const btn = $("#trade"), warn = $("#tradewarn");
+    if (!amt) { btn.textContent = buying ? `Buy $${info.symbol}` : `Sell $${info.symbol}`; warn.hidden = true; return; }
+    const n = Number(ethers.formatUnits(amt, 18));
+    // dollars: what is paid when buying, what comes back when selling (once the quote is in)
+    const usdV = buying ? n * unitUsd() : out != null ? Number(ethers.formatUnits(out, 18)) * unitUsd() : 0;
+    btn.innerHTML = `${buying ? "Buy" : "Sell"} <span class="sep"></span> ${esc(compact(n))} ${esc(buying ? payUnit() : "$" + info.symbol)}${usdV > 0 ? ` <span class="usd">(${fmtUsd(usdV)})</span>` : ""}`;
+    const have = buying ? (payNative() ? ethBal : quoteBal) : tokBal;
+    warn.hidden = !account || amt <= have || (buying && !!from); // paid from another chain: that chain covers it
+    warn.textContent = "Exceeds wallet balance";
+  }
   async function preview() {
     const seq = ++pvSeq;
     let amt = 0n; try { amt = ethers.parseUnits($("#amt").value.trim() || "0", 18); } catch {}
     autoFrom(amt);
     updCost(amt);
+    tradeLabel(amt, null);
     if (!amt) return ($("#pv").innerHTML = "&nbsp;");
     try {
       const buying = tradeSide === "buy";
       const out = q !== ZERO && (viaEth || (from && buying))
         ? await quoteSwapEth(P, addr, info.quoteIsCurrency0, buying, amt)
         : await quoteSwap(P, addr, info.quoteIsCurrency0, buying, amt);
-      if (seq === pvSeq && !stale()) $("#pv").textContent = `You receive ≈ ${fmt(out, 6)} ${buying ? "$" + info.symbol : payUnit()}`;
+      if (seq === pvSeq && !stale()) {
+        $("#pv").textContent = `${compact(Number(ethers.formatUnits(amt, 18)))} ${buying ? payUnit() : "$" + info.symbol} ≈ ${compact(Number(ethers.formatUnits(out, 18)))} ${buying ? "$" + info.symbol : payUnit()}`;
+        tradeLabel(amt, out);
+      }
     } catch (e) { if (seq === pvSeq && !stale()) $("#pv").textContent = "Can't quote this amount"; }
   }
   $("#amt").oninput = preview;
