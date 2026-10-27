@@ -1283,13 +1283,13 @@ function discoverFrame(chains) {
       <div><div class="k">Traded, last 24h</div><div class="v" id="k-vol24"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="k-vol24-sub">&nbsp;</div></div>
       <div><div class="k">Tokens</div><div class="v" id="tot-count"><span class="skel" style="display:inline-block;width:110px;height:24px;vertical-align:middle"></span></div><div class="s" id="tot-count-sub">&nbsp;</div></div>
     </div>
-    <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours, every chain</span></div>
+    <div class="hsec"><h2>Trending now</h2><span class="stat">most traded in the last 24 hours, and the top PepesFamily launches</span></div>
     <div class="trend" id="trend">${Array.from({ length: 5 }, () => `<div class="tc"><div class="head"><div class="avatar"></div><div class="skel" style="height:14px;width:50%"></div></div><div class="skel" style="height:24px;width:60%"></div></div>`).join("")}</div>
     <div class="hsec"><h2>Tokens</h2><span class="stat">every chain · <svg class="pfmark" viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/></svg> launched on PepesFamily</span></div>
     <div class="dgrid">
       <section class="card listcard" aria-label="All tokens">
         <div class="tools">
-          <div class="utabs" id="sort" role="tablist"><button type="button" data-s="hot">Trending</button><button type="button" data-s="new">New</button><button type="button" data-s="mc">Market cap</button><button type="button" data-s="gain">Gainers</button></div>
+          <div class="utabs" id="sort" role="tablist"><button type="button" data-s="hot">Trending</button><button type="button" data-s="new">New</button><button type="button" data-s="mc">Market cap</button><button type="button" data-s="gain">Gainers</button><button type="button" data-s="pf">PepesFamily</button></div>
           <div class="seg" id="chainf"><button type="button" data-c="all">All chains</button>${chains.map((c) => `<button type="button" data-c="${c.key}">${esc(c.short)}</button>`).join("")}</div>
         </div>
         <div id="list">${THEAD}${skelRow.repeat(8)}</div>
@@ -1318,7 +1318,7 @@ async function renderHome() {
   loadOfficial().catch((e) => console.warn("official token", e));
 
   let sortMode = "hot";
-  try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain"].includes(v)) sortMode = v; } catch {}
+  try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain", "pf"].includes(v)) sortMode = v; } catch {}
   let chainMode = "all";
   try { const c = localStorage.getItem("tokenChain"); if (c && (c === "all" || chains.some((x) => x.key === c))) chainMode = c; } catch {}
   let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15, market = null;
@@ -1339,11 +1339,12 @@ async function renderHome() {
     const ext = (market || []).map((x) => ({ ...x, href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), own: false }));
     return [...own, ...ext];
   };
-  const score = { hot: (x) => x.vol, new: (x) => x.created, mc: (x) => x.mc, gain: (x) => x.chg ?? -1e9 };
+  const score = { hot: (x) => x.vol, new: (x) => x.created, mc: (x) => x.mc, gain: (x) => x.chg ?? -1e9, pf: (x) => x.vol };
   const ranked = (mode, list) => [...list].sort((a, b) => score[mode](b) - score[mode](a) || b.mc - a.mc);
   const inScope = () => {
     const q = SEARCH.toLowerCase().replace(/^\$/, "");
     let shown = chainMode === "all" ? items() : items().filter((x) => x.ch?.key === chainMode);
+    if (sortMode === "pf") shown = shown.filter((x) => x.own);
     if (q) shown = shown.filter((x) => x.name.toLowerCase().includes(q) || x.symbol.toLowerCase().includes(q) || x.address.toLowerCase().startsWith(q));
     return shown;
   };
@@ -1372,7 +1373,9 @@ async function renderHome() {
   const showTrend = () => {
     if (gen !== routeGen || (!listed && !market) || !$("#trend")) return;
     const skip = new Set(CONFIG.kingExclude.map((a) => a.toLowerCase()));
-    const top = ranked("hot", items().filter((x) => !skip.has(x.address.toLowerCase()))).slice(0, 5);
+    const pool = ranked("hot", items().filter((x) => !skip.has(x.address.toLowerCase())));
+    const ours = pool.filter((x) => x.own).slice(0, 2);
+    const top = [...pool.filter((x) => !ours.includes(x)).slice(0, 5 - ours.length), ...ours];
     $("#trend").innerHTML = top.map((x) => `<a class="tc" href="${x.href}">
         <div class="head">${x.av}<div style="min-width:0"><div class="nm">${esc(x.name)}${x.own ? FROG : ""}</div><div class="meta">$${esc(x.symbol)}<span class="ch"> · ${esc(x.ch?.short || "")}</span></div></div></div>
         <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${x.mc ? fmtUsd(x.mc) : "—"}</div></div>${chgText(x.chg)}</div>
@@ -1493,7 +1496,9 @@ async function marketTokens() {
     const toks = new Map((j.included || []).map((t) => [t.id, t.attributes]));
     return j.data.map((p) => {
       const a = p.attributes, t = toks.get(p.relationships?.base_token?.data?.id);
-      if (!t || MAJORS.has(String(t.symbol).toUpperCase()) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
+      const sym = String(t.symbol).toUpperCase(), px = Number(a.base_token_price_usd) || 0;
+      // stablecoins: anything named like a dollar or trading flat at $1 (RLUSD, PYUSD, USDe…), as well as the majors
+      if (!t || MAJORS.has(sym) || sym.includes("USD") || (px > 0.97 && px < 1.03) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
       return { ch, address: ethers.getAddress(t.address), name: t.name, symbol: t.symbol, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "",
         price: Number(a.base_token_price_usd) || 0, mc: Number(a.market_cap_usd || a.fdv_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
         chg: a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null, liq: Number(a.reserve_in_usd) || 0,
