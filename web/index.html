@@ -1739,8 +1739,7 @@ async function renderHome() {
       const m = M(t);
       const was = !m && mk.per.size === 0 && cached?.find((x) => x.own && x.address === t.token); // 24h data not in yet
       return { href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: chainOf(t), address: t.token, created: Number(t.createdAt),
-        mc: toUsdNum(t.marketCap, t.quote), vol: m ? toUsdNum(m.vol, t.quote) : was ? was.vol : 0, chg: was ? was.chg : pctOf(t, m), own: true,
-        official: t.token.toLowerCase() === CONFIG.pepes.toLowerCase() };
+        mc: toUsdNum(t.marketCap, t.quote), vol: m ? toUsdNum(m.vol, t.quote) : was ? was.vol : 0, chg: was ? was.chg : pctOf(t, m), own: true };
     });
     const ext = market ? market.map((x) => ({ ...x, href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), own: false }))
       : (cached || []).filter((x) => !x.own);
@@ -1756,7 +1755,7 @@ async function renderHome() {
   };
   const row = (x, n) => `<a class="lrow" href="${x.href}">
       <span class="rk">${n}</span>${x.av}
-      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? FROG : ""}${x.official ? `<span class="pill">Official</span>` : ""}</div>
+      <div class="tn" style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? FROG : ""}</div>
         <div class="sub">$${esc(x.symbol)} · ${esc(x.ch?.short || "")} · ${x.created ? ago(x.created) : "—"}</div></div>
       <span class="r mcc">${x.mc ? fmtUsd(x.mc) : "—"}</span>
       <span class="r vol${x.vol ? "" : " dim"}">${x.vol ? fmtUsd(x.vol) : "—"}</span>
