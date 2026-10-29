@@ -1,0 +1,707 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "exchange_",
+    "type": "address",
+    "internalType": "contract LevExchange"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "ACTION_LIQUIDATE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACTION_MAX_WIN",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACTION_NONE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACTION_RUG_SETTLE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_BREAKER",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_CLOSED",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_COIN_FULL",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_LEVERAGE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_LOCKED",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_LOW_LIQUIDITY",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_OK",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_ORACLE_DOWN",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_POOL_FULL",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_STAKE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_WOULD_LIQUIDATE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "actionable",
+  "inputs": [
+   {
+    "name": "offset",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limit",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ids",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   },
+   {
+    "name": "actions",
+    "type": "uint8[]",
+    "internalType": "uint8[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "exchange",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract LevExchangeAdmin"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "getMarket",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "v",
+    "type": "tuple",
+    "internalType": "struct LevLens.MarketView",
+    "components": [
+     {
+      "name": "oracle",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "active",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "maxLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "netCapEth",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "refTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "lastGoodTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "lastGoodAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "downSince",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "rugEpoch",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "rugAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "longSize",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "shortSize",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "longStake",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "shortStake",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "longMaxWin",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "shortMaxWin",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "getPosition",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "v",
+    "type": "tuple",
+    "internalType": "struct LevLens.PositionView",
+    "components": [
+     {
+      "name": "position",
+      "type": "tuple",
+      "internalType": "struct Position",
+      "components": [
+       {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+       },
+       {
+        "name": "marketId",
+        "type": "uint32",
+        "internalType": "uint32"
+       },
+       {
+        "name": "rugEpoch",
+        "type": "uint32",
+        "internalType": "uint32"
+       },
+       {
+        "name": "openedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+       },
+       {
+        "name": "isLong",
+        "type": "bool",
+        "internalType": "bool"
+       },
+       {
+        "name": "leverage",
+        "type": "uint8",
+        "internalType": "uint8"
+       },
+       {
+        "name": "entryTick",
+        "type": "int24",
+        "internalType": "int24"
+       },
+       {
+        "name": "maxWinBps",
+        "type": "uint32",
+        "internalType": "uint32"
+       },
+       {
+        "name": "stake",
+        "type": "uint96",
+        "internalType": "uint96"
+       },
+       {
+        "name": "feeIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+       }
+      ]
+     },
+     {
+      "name": "size",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "markTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "pnl",
+      "type": "int256",
+      "internalType": "int256"
+     },
+     {
+      "name": "holdFee",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "equity",
+      "type": "int256",
+      "internalType": "int256"
+     },
+     {
+      "name": "action",
+      "type": "uint8",
+      "internalType": "uint8"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "liabilityRange",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "owedLow",
+    "type": "int256",
+    "internalType": "int256"
+   },
+   {
+    "name": "owedHigh",
+    "type": "int256",
+    "internalType": "int256"
+   },
+   {
+    "name": "blocked",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "pool",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract ILevPool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "positionsOf",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "views",
+    "type": "tuple[]",
+    "internalType": "struct LevLens.PositionView[]",
+    "components": [
+     {
+      "name": "position",
+      "type": "tuple",
+      "internalType": "struct Position",
+      "components": [
+       {
+        "name": "owner",
+        "type": "address",
+        "internalType": "address"
+       },
+       {
+        "name": "marketId",
+        "type": "uint32",
+        "internalType": "uint32"
+       },
+       {
+        "name": "rugEpoch",
+        "type": "uint32",
+        "internalType": "uint32"
+       },
+       {
+        "name": "openedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+       },
+       {
+        "name": "isLong",
+        "type": "bool",
+        "internalType": "bool"
+       },
+       {
+        "name": "leverage",
+        "type": "uint8",
+        "internalType": "uint8"
+       },
+       {
+        "name": "entryTick",
+        "type": "int24",
+        "internalType": "int24"
+       },
+       {
+        "name": "maxWinBps",
+        "type": "uint32",
+        "internalType": "uint32"
+       },
+       {
+        "name": "stake",
+        "type": "uint96",
+        "internalType": "uint96"
+       },
+       {
+        "name": "feeIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+       }
+      ]
+     },
+     {
+      "name": "size",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "markTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "pnl",
+      "type": "int256",
+      "internalType": "int256"
+     },
+     {
+      "name": "holdFee",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "equity",
+      "type": "int256",
+      "internalType": "int256"
+     },
+     {
+      "name": "action",
+      "type": "uint8",
+      "internalType": "uint8"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "quoteOpen",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "isLong",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "leverage",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "stake",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "q",
+    "type": "tuple",
+    "internalType": "struct LevLens.Quote",
+    "components": [
+     {
+      "name": "reason",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "spotTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "fastTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "slowTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "entryTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "liquidityEth",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "maxLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "fee",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "maxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "netRoom",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "poolRoomStake",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "totalOpenStake",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "total",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ }
+]

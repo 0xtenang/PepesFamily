@@ -1,0 +1,1922 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "pool_",
+    "type": "address",
+    "internalType": "contract ILevPool"
+   },
+   {
+    "name": "owner_",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "treasury_",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "admin_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "fallback",
+  "stateMutability": "payable"
+ },
+ {
+  "type": "receive",
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "EXIT_CLOSE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "EXIT_LIQUIDATION",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "EXIT_MAX_WIN",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "EXIT_RUG",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "EXIT_STALE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "MAX_MARKETS",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "STALE_PING_GAP",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "acceptOwnership",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "admin",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "balanceOf",
+  "inputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "breakerUntil",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "close",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limitTick",
+    "type": "int24",
+    "internalType": "int24"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "closeAtMaxWin",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "closeFor",
+  "inputs": [
+   {
+    "name": "trader",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limitTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "maxSlipTicks",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "deposit",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "depositFor",
+  "inputs": [
+   {
+    "name": "user",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "guardian",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hourPoolPnl",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "int256",
+    "internalType": "int256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hourStart",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hourStartCash",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "liquidate",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "nextPositionId",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "open",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "isLong",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "leverage",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "stake",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limitTick",
+    "type": "int24",
+    "internalType": "int24"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "openFor",
+  "inputs": [
+   {
+    "name": "trader",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "isLong",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "leverage",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "stake",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limitTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "maxSlipTicks",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "openStakeOf",
+  "inputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "opensPaused",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "owner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "pendingOwner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "pool",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract ILevPool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "renounceOwnership",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "router",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "rugTickOf",
+  "inputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "int24",
+    "internalType": "int24"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "settleRugged",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "totalMaxWin",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "transferOwnership",
+  "inputs": [
+   {
+    "name": "newOwner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "treasury",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "treasuryBalance",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "withdraw",
+  "inputs": [
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "withdrawFor",
+  "inputs": [
+   {
+    "name": "trader",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "event",
+  "name": "Closed",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "kind",
+    "type": "uint8",
+    "indexed": false,
+    "internalType": "uint8"
+   },
+   {
+    "name": "pnl",
+    "type": "int256",
+    "indexed": false,
+    "internalType": "int256"
+   },
+   {
+    "name": "holdFee",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "fees",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "payout",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "keeper",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "keeperReward",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ConfigUpdated",
+  "inputs": [],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "Deposited",
+  "inputs": [
+   {
+    "name": "user",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "FeedDown",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "since",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "MarketListed",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "oracle",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "maxLeverage",
+    "type": "uint8",
+    "indexed": false,
+    "internalType": "uint8"
+   },
+   {
+    "name": "netCapEth",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "refTick",
+    "type": "int24",
+    "indexed": false,
+    "internalType": "int24"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "MarketUpdated",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "active",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   },
+   {
+    "name": "maxLeverage",
+    "type": "uint8",
+    "indexed": false,
+    "internalType": "uint8"
+   },
+   {
+    "name": "netCapEth",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "Opened",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "isLong",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   },
+   {
+    "name": "leverage",
+    "type": "uint8",
+    "indexed": false,
+    "internalType": "uint8"
+   },
+   {
+    "name": "stake",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "entryTick",
+    "type": "int24",
+    "indexed": false,
+    "internalType": "int24"
+   },
+   {
+    "name": "maxWinBps",
+    "type": "uint32",
+    "indexed": false,
+    "internalType": "uint32"
+   },
+   {
+    "name": "fee",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OpensPaused",
+  "inputs": [
+   {
+    "name": "paused",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OwnershipTransferStarted",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OwnershipTransferred",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "RouterSet",
+  "inputs": [
+   {
+    "name": "router",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "RugGuardTriggered",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "epoch",
+    "type": "uint32",
+    "indexed": false,
+    "internalType": "uint32"
+   },
+   {
+    "name": "fastTick",
+    "type": "int24",
+    "indexed": false,
+    "internalType": "int24"
+   },
+   {
+    "name": "slowTick",
+    "type": "int24",
+    "indexed": false,
+    "internalType": "int24"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "TreasuryClaimed",
+  "inputs": [
+   {
+    "name": "to",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "Withdrawn",
+  "inputs": [
+   {
+    "name": "user",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "error",
+  "name": "AlreadySet",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BadConfig",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BreakerTripped",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "CoinFull",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InsufficientBalance",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "LeverageNotAllowed",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "LiquidityTooLow",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "MarketClosed",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "MarketLocked",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NoRug",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotAtMaxWin",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotLiquidatable",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotOpen",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotPositionOwner",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotRugged",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "OracleDown",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "OwnableInvalidOwner",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "OwnableUnauthorizedAccount",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "PoolFull",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "PriceMoved",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "ReentrancyGuardReentrantCall",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "RugInProgress",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "StakeTooSmall",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "TooManyMarkets",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "TooSoon",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "TransferFailed",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "Unauthorized",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "WouldLiquidate",
+  "inputs": []
+ },
+ {
+  "type": "function",
+  "name": "claimTreasury",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "getConfig",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct Config",
+    "components": [
+     {
+      "name": "openFeeStakeBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "openFeeSizeBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "profitFeeBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "poolFeeShareBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "holdRateBpsPerHour",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "crowdMultBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "freeHoldSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "liqEquityBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "keeperRewardBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "longMaxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "longMaxWinBps2",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "longMaxWinBps3",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "maxWinTier2Cash",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "maxWinTier3Cash",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "shortMaxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "maxShortLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "lev5LiquidityEth",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "lev10LiquidityEth",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "minLiquidityEth",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "netCapLiquidityBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "coverageBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "rugDropBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "rugCapBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "rugLockSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "minHoldSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "staleSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "hourlyLossBreakerBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "minStake",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "listMarket",
+  "inputs": [
+   {
+    "name": "oracle",
+    "type": "address",
+    "internalType": "contract IPriceOracle"
+   },
+   {
+    "name": "maxLeverage",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "netCapEth",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "marketCount",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "marketData",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct Market",
+    "components": [
+     {
+      "name": "oracle",
+      "type": "address",
+      "internalType": "contract IPriceOracle"
+     },
+     {
+      "name": "active",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "maxLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "refTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "lastGoodTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "lastGoodFast",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "lastGoodAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "downSince",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "lastFailAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "lastFeeUpdate",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "rugEpoch",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "rugAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "shortCount",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "ruggedPending",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "netCapEth",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "longs",
+      "type": "tuple",
+      "internalType": "struct Side",
+      "components": [
+       {
+        "name": "size",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "stake",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "maxWin",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "expo",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "feeIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "sizeIndexSum",
+        "type": "uint256",
+        "internalType": "uint256"
+       }
+      ]
+     },
+     {
+      "name": "shorts",
+      "type": "tuple",
+      "internalType": "struct Side",
+      "components": [
+       {
+        "name": "size",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "stake",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "maxWin",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "expo",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "feeIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "sizeIndexSum",
+        "type": "uint256",
+        "internalType": "uint256"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "openPositionCount",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "openPositionIds",
+  "inputs": [
+   {
+    "name": "offset",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limit",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ids",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "positionData",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct Position",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "rugEpoch",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "openedAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "entryTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "maxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "feeIndex",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "positionIdsOf",
+  "inputs": [
+   {
+    "name": "owner_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "refresh",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setConfig",
+  "inputs": [
+   {
+    "name": "c",
+    "type": "tuple",
+    "internalType": "struct Config",
+    "components": [
+     {
+      "name": "openFeeStakeBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "openFeeSizeBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "profitFeeBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "poolFeeShareBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "holdRateBpsPerHour",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "crowdMultBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "freeHoldSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "liqEquityBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "keeperRewardBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "longMaxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "longMaxWinBps2",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "longMaxWinBps3",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "maxWinTier2Cash",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "maxWinTier3Cash",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "shortMaxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "maxShortLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "lev5LiquidityEth",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "lev10LiquidityEth",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "minLiquidityEth",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "netCapLiquidityBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "coverageBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "rugDropBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "rugCapBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "rugLockSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "minHoldSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "staleSeconds",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "hourlyLossBreakerBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "minStake",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setGuardian",
+  "inputs": [
+   {
+    "name": "g",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setMarket",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "active",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "maxLeverage",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "netCapEth",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setOpensPaused",
+  "inputs": [
+   {
+    "name": "paused",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setRouter",
+  "inputs": [
+   {
+    "name": "router_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setTreasury",
+  "inputs": [
+   {
+    "name": "t",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "triggerRugGuard",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ }
+]

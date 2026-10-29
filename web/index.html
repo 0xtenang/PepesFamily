@@ -119,9 +119,9 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
   .top .mark { display: block; width: 30px; height: 30px; flex: none; }
   .top .acct { border-left: 0; padding-left: 0; }
   main#app { padding: 16px 16px 96px; }
-  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--ground);
+  .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--ground);
     border-top: 1px solid var(--rule); padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); }
-  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; justify-content: center; font-size: 12px; color: var(--nav); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 48px; justify-content: center; font-size: 11px; white-space: nowrap; color: var(--nav); }
   .tabbar a svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.5; }
   .tabbar a.on { color: #fff; }
 }
@@ -399,7 +399,7 @@ td.n, th.n { text-align: right; }
 <a class="skip" href="#app">Skip to content</a>
 <aside class="side" aria-label="PepesFamily">
   <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span>PepesFamily</span></a>
-  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
+  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/perps" data-r="/perps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20V5M3.5 8.5L7 5l3.5 3.5M17 4v15M13.5 15.5L17 19l3.5-3.5"/></svg><span>Long/Short</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
   <div class="glabel">Networks</div>
   <div id="netlist"></div>
   <div class="foot">
@@ -413,7 +413,7 @@ td.n, th.n { text-align: right; }
   <div class="acct"><span class="cashpill" id="cash" hidden></span><button id="connect" type="button">Connect wallet</button></div>
 </header>
 <main id="app" tabindex="-1"><div class="card" style="height:240px" aria-busy="true"><div class="skel" style="height:18px;width:30%"></div></div></main>
-<nav class="tabbar" id="tabbar" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a></nav>
+<nav class="tabbar" id="tabbar" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/perps" data-r="/perps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20V5M3.5 8.5L7 5l3.5 3.5M17 4v15M13.5 15.5L17 19l3.5-3.5"/></svg><span>Long/Short</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a></nav>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <!-- the wallet library (500 KB) after the page's frame, so the sidebar and top bar paint while it downloads -->
@@ -458,6 +458,16 @@ const CONFIG = {
     { version: 1, pad: "0x2d7689E48Fd71D9A0f225C673D7b8F8A693368CC", router: "0xA73604EA3C393B47573986ff9Ce5A9EAb61883dC", ethRouter: "0x79eeE0C12C1284bc046e4494Eea6180695F5028A", permit: false },
   ],
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
+  // Long/short on curated Robinhood Chain coins (perps/ in the repo: one ETH pool is the other side of every
+  // position). Empty addresses show the markets with trading "opening soon"; fill them in from
+  // perps/contracts/deployments/robinhood.json once deployed. Markets are added one by one: `id` is the exchange's
+  // market id from listMarket, `pool` the coin's GeckoTerminal pool for the chart.
+  perps: {
+    exchange: "", lens: "", pool: "",
+    markets: [
+      { id: 0, symbol: "UBIK", name: "UBIK", coin: "0x812486EAea648819853F8E372dc9f1516C7868Bd", pool: "0x4aaa4f57bec2b6e67dac42909c8c4f9a6ddaf02bb63f8dcbbafb35316731d2a7" },
+    ],
+  },
   // King of the hill spotlights launches, so the house token (Pepes) is left out. Remove an address to include it.
   kingExclude: ["0xe2c46c7068566740a33a4c93f5445b07bcfe5644"],
   // Pepes Earn IMD ($EARN, the NFT collection's token), from contracts/deployments/robinhood-earn.json. The site no
@@ -1537,11 +1547,11 @@ window.addEventListener("hashchange", route);
 const sec = (n, title, extra = "") => `<div class="hsec"><h2>${esc(title)}</h2>${extra}</div>`;
 
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
-const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint Pepes Family", "/admin": "Admin" };
+const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint Pepes Family", "/admin": "Admin", "/perps": "Long/Short" };
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
-  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/x/") ? "/x" : h.startsWith("/rewards") ? "/rewards" : h;
+  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/x/") ? "/x" : h.startsWith("/rewards") ? "/rewards" : h.startsWith("/perps") ? "/perps" : h;
   for (const a of document.querySelectorAll("#nav a, #tabbar a")) a.classList.toggle("on", a.dataset.r === (page === "/tokens" ? "/" : page));
   document.title = (TITLES[page] && page !== "/" ? TITLES[page] + " · " : "") + "PepesFamily";
   window.scrollTo(0, 0);
@@ -1550,6 +1560,7 @@ function route() {
   // other launchpads' tokens aren't listed any more; this page stays so holders can still sell what they bought here
   if (h.startsWith("/x/")) { const [k, a] = h.slice(3).split("/"); return renderMarketToken(k, a); }
   if (h === "/create") return renderCreate();
+  if (h.startsWith("/perps")) return renderPerps(h.slice(7));
   if (h === "/admin") return renderAdmin();
   if (h === "/mint") return renderMint();
   if (h.startsWith("/rewards")) return renderRewards(h.slice(9) || null);
@@ -2219,6 +2230,264 @@ async function safetyCheck(ch, addr) {
   if (v.holder_count) ok.push(`${Number(v.holder_count).toLocaleString("en-US")} holders`);
   if (yes("trust_list")) ok.push("On GoPlus's trusted list");
   return { supported: true, danger, warn, ok, honeypot: yes("is_honeypot") || yes("cannot_sell_all") };
+}
+
+// ---------------------------------------------------------------- Long/short (#/perps/<symbol>)
+// Leveraged longs and shorts on curated Robinhood Chain coins, against one shared ETH pool (perps/ in the repo).
+// Opening sends the stake with the trade (one transaction); closing pays out and sends the cash back to the wallet.
+// Prices are ticks of the coin's ETH price (1.0001^tick), from the coin's own Uniswap pools.
+const PERP_EX_ABI = [
+  "function withdraw(uint256 amount)",
+  "function open(uint256 marketId, bool isLong, uint8 leverage, uint256 stake, int24 limitTick) payable returns (uint256)",
+  "function close(uint256 id, int24 limitTick)",
+  "function balanceOf(address) view returns (uint256)",
+  "function positionIdsOf(address) view returns (uint256[])",
+];
+const PERP_LENS_ABI = [
+  "function getMarket(uint256 id) view returns (tuple(address oracle, bool active, uint8 maxLeverage, uint256 netCapEth, int24 refTick, int24 lastGoodTick, uint64 lastGoodAt, uint64 downSince, uint32 rugEpoch, uint64 rugAt, uint256 longSize, uint256 shortSize, uint256 longStake, uint256 shortStake, uint256 longMaxWin, uint256 shortMaxWin))",
+  "function quoteOpen(uint256 marketId, bool isLong, uint8 leverage, uint256 stake) view returns (tuple(uint8 reason, int24 spotTick, int24 fastTick, int24 slowTick, int24 entryTick, uint256 liquidityEth, uint8 maxLeverage, uint256 fee, uint32 maxWinBps, uint256 netRoom, uint256 poolRoomStake))",
+  "function positionsOf(address owner) view returns (tuple(tuple(address owner, uint32 marketId, uint32 rugEpoch, uint64 openedAt, bool isLong, uint8 leverage, int24 entryTick, uint32 maxWinBps, uint96 stake, uint256 feeIndex) position, uint256 size, int24 markTick, int256 pnl, uint256 holdFee, int256 equity, uint8 action)[])",
+];
+const PERP_SLIP_TICKS = 100; // 1%: the worst fill a trade accepts beyond the price on screen
+const PERP_LEVS = [1, 2, 3, 5, 10];
+const PERP_WHY = { // {c} is the coin
+  1: "{c} isn't open for trading right now.", 2: "{c} is paused for an hour after a sharp drop (rug guard).", 3: "{c}'s price feed is catching up. Try again in a minute.",
+  4: "{c} doesn't have enough liquidity for new positions right now.", 6: "{c} is full on this side right now. Try a smaller amount.",
+  7: "The pool can't cover a win that size right now. Try a smaller amount.", 8: "The smallest position is 0.001 ETH.",
+  9: "New positions pause for an hour after the pool loses 10% in an hour.", 10: "This would be liquidated as soon as it opened. Lower the leverage.",
+};
+// Testing on this computer only: a deployment on a local chain, from localStorage "pf-perps-dev"
+// ({ "exchange", "lens", "pool", "rpc" }). Ignored on any other host.
+let PERP_DEV = null;
+const perpCfg = () => {
+  if (PERP_DEV === null) {
+    PERP_DEV = {};
+    if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) try { PERP_DEV = JSON.parse(localStorage.getItem("pf-perps-dev") || "{}"); } catch {}
+  }
+  return { ...CONFIG.perps, ...PERP_DEV };
+};
+const perpLive = () => !!(perpCfg().exchange && perpCfg().lens);
+const tickEth = (t) => Math.pow(1.0001, Number(t)); // ETH per coin (both 18 decimals)
+const ethNum = (wei) => Number(ethers.formatEther(wei));
+
+async function renderPerps(sym) {
+  const markets = perpCfg().markets;
+  const mk = markets.find((m) => m.symbol.toLowerCase() === (sym || "").toLowerCase()) || markets[0];
+  if (!mk) return ($("#app").innerHTML = `<div class="card empty"><h1>Long/Short</h1><p>No coins are listed yet.</p></div>`);
+  const ch = CHAINS.robinhood, gen = routeGen, stale = () => gen !== routeGen, app = $("#app");
+  const live = perpLive();
+  // the chain the contracts are read and confirmed on (Robinhood Chain; a local copy when testing)
+  const pch = perpCfg().rpc ? { ...ch, reader: new ethers.JsonRpcProvider(perpCfg().rpc, ch.chainId, { staticNetwork: true }) } : ch;
+  const ex = live ? new ethers.Contract(perpCfg().exchange, PERP_EX_ABI, pch.reader) : null;
+  const lens = live ? new ethers.Contract(perpCfg().lens, PERP_LENS_ABI, pch.reader) : null;
+  MARKET_POOL.set(ch.key + mk.coin.toLowerCase(), { pool: mk.pool, base: "base" });
+  prefetchChart(ch, mk.coin);
+  document.title = `Long/Short $${mk.symbol} · PepesFamily`;
+  let t = null;
+  try { t = await marketToken(ch, mk.coin); } catch {}
+  if (stale()) return;
+  const x = { symbol: mk.symbol, image: t?.image || "" };
+  app.innerHTML = `<div class="two mfirst">
+    <div class="mflat">
+      <div class="card mlead">
+        <div class="thead-token">${mAvatar(x, "lg")}
+          <div style="min-width:0"><div class="row"><h1>${esc(mk.name)}</h1><span class="pill">$${esc(mk.symbol)}</span><span class="pill">${esc(ch.short)}</span><span class="pill" id="pmaxlev">Long/Short</span></div>
+            <div class="stat" style="margin-top:4px">${markets.length > 1 ? markets.map((m) => `<a class="lnk" href="#/perps/${esc(m.symbol)}">${esc(m.symbol)}</a>`).join(" · ") + " · " : ""}<a class="lnk" href="${ch.explorer}/token/${mk.coin}" target="_blank" rel="noopener">${short(mk.coin)}</a></div></div>
+        </div>
+        <div class="tstrip">
+          <div class="tprice"><div class="price-big" id="pprice">${t?.price ? tinyUsd(t.price) : "—"}</div>${chgText(t?.chg)}</div>
+          <div><div class="k">Market cap</div><div class="v">${t?.mc ? "$" + compact(t.mc) : "—"}</div></div>
+          <div><div class="k">Longs open</div><div class="v pos" id="plong">—</div></div>
+          <div><div class="k">Shorts open</div><div class="v neg" id="pshort">—</div></div>
+          <div><div class="k">Pool</div><div class="v" id="ppool">—</div></div>
+        </div>
+        <div class="cbox" id="cbox"></div>
+        <div style="margin-top:18px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Your positions</h2><span class="stat" id="pbal"></span></div>
+          <div id="ppos" style="margin-top:10px"><div class="stat">${live ? "Connect your wallet to see your positions." : "Positions show here once trading opens."}</div></div></div>
+      </div>
+    </div>
+    <div class="mside">
+      <div class="card">
+        <div class="tabs"><button class="buy" data-s="long">Long</button><button class="sell" data-s="short">Short</button></div>
+        <label for="pamt" style="margin-top:0">Amount (USD)</label>
+        <input id="pamt" inputmode="decimal" placeholder="$0" autocomplete="off" />
+        <div class="quick" id="pquick">${[5, 20, 50, 100].map((v) => `<button type="button" data-v="${v}">$${v}</button>`).join("")}</div>
+        <label style="margin-top:14px">Leverage</label>
+        <div class="quick" id="plev">${PERP_LEVS.map((v) => `<button type="button" data-v="${v}">${v}x</button>`).join("")}</div>
+        <div class="stat" id="pcash" style="margin-top:10px"></div>
+        <div class="preview" id="ppv">&nbsp;</div>
+        <button class="primary full tradebtn buy" id="pgo" style="margin-top:6px"></button>
+        <div class="tradewarn" id="pwarn" hidden></div>
+        <div class="stat" style="margin-top:12px;font-size:12px">You win or lose your amount × leverage times the price move. A position is closed for you if it loses 85% of its amount; wins are capped (longs up to +400%, shorts +100%). Fees: 1% to open and to close, 10% of profit.</div>
+      </div>
+    </div></div>`;
+  candleChart($("#cbox"), { load: (sec) => gtCandles(ch, mk.coin, sec), mcap: (k) => k * (t?.price ? t.mc / t.price : 0), every: 30_000 }).catch(() => {});
+
+  let side = "long", lev = 2, seq = 0, timer = 0, q = null, mkt = null, bal = 0n, views = [], ids = [];
+  try { const v = Number(localStorage.getItem("pf-perp-lev")); if (PERP_LEVS.includes(v)) lev = v; } catch {}
+  const usdIn = () => { const v = Number($("#pamt").value.trim().replace(/^\$/, "")); return v > 0 ? v : 0; };
+  const ethUsd = () => prices.ethUsd || 0;
+  const usdOfWei = (w) => ethNum(w) * ethUsd();
+  const coinUsd = (tick) => tickEth(tick) * ethUsd();
+  const stakeWei = () => { const u = usdIn(), px = ethUsd(); return u && px ? ethers.parseEther((u / px).toFixed(15)) : 0n; };
+  const maxLev = () => Math.min(mkt ? Number(mkt.maxLeverage) : 10, side === "short" ? 5 : 10, q && q.reason !== 5 ? Number(q.maxLeverage) || 10 : 10);
+  const why = (r) => (PERP_WHY[r] || "").replace("{c}", "$" + mk.symbol);
+
+  function paint() {
+    app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
+    app.querySelectorAll("#plev button").forEach((b) => { const v = Number(b.dataset.v); b.classList.toggle("on", v === lev); b.disabled = v > maxLev(); });
+    const btn = $("#pgo"), warn = $("#pwarn"), usd = usdIn();
+    btn.classList.toggle("buy", side === "long"); btn.classList.toggle("sell", side === "short");
+    warn.hidden = true;
+    const verb = side === "long" ? "Long" : "Short";
+    if (!live) { btn.textContent = "Opening soon"; btn.disabled = true; return; }
+    btn.disabled = false;
+    btn.innerHTML = usd ? `${verb} ${lev}x <span class="sep"></span> ${fmtUsd(usd)} <span class="usd">(${esc(compact(ethNum(stakeWei())))} ETH)</span>` : `${verb} $${esc(mk.symbol)} ${lev}x`;
+    if (usd && account && CASH && usd > CASH.total + usdOfWei(bal)) { warn.hidden = false; warn.textContent = "Exceeds wallet balance"; }
+  }
+  // the quote: what this position would get (entry, liquidation price, max win, fee), or why it can't open
+  const preview = () => {
+    clearTimeout(timer);
+    paint();
+    const usd = usdIn();
+    if (!live) return ($("#ppv").textContent = `Long/short on $${mk.symbol} opens soon.`);
+    if (!usd) return ($("#ppv").innerHTML = $("#pamt").value.trim() ? "Enter a valid amount" : "&nbsp;");
+    $("#ppv").textContent = "Getting a price…";
+    timer = setTimeout(async () => {
+      const my = ++seq;
+      try {
+        const r = await lens.quoteOpen(mk.id, side === "long", lev, stakeWei());
+        if (my !== seq || stale()) return;
+        q = r;
+        const reason = Number(r.reason);
+        if (reason === 5) { lev = Math.max(...PERP_LEVS.filter((v) => v <= Number(r.maxLeverage))); paint(); return preview(); }
+        if (reason) return ($("#ppv").textContent = why(reason));
+        const entry = coinUsd(r.entryTick), lv = lev, long = side === "long";
+        const liq = entry * (long ? 1 - 0.85 / lv : 1 + 0.85 / lv);
+        const winPct = Number(r.maxWinBps) / 100;
+        $("#ppv").innerHTML = `<div class="row" style="justify-content:space-between"><span class="stat">Position size</span><b>${fmtUsd(usd * lv)}</b></div>
+          <div class="row" style="justify-content:space-between"><span class="stat">Entry price</span><b>${tinyUsd(entry)}</b></div>
+          <div class="row" style="justify-content:space-between"><span class="stat">Closed at a loss near</span><b class="neg">${tinyUsd(liq)}</b></div>
+          <div class="row" style="justify-content:space-between"><span class="stat">Max win</span><b class="pos">+${winPct.toLocaleString("en-US")}% (${fmtUsd(usd * winPct / 100)})</b></div>
+          <div class="row" style="justify-content:space-between"><span class="stat">Open fee</span><b>${fmtUsd(usdOfWei(r.fee))}</b></div>`;
+        paint();
+      } catch (e) { if (my === seq && !stale()) $("#ppv").textContent = "Couldn't get a price: " + errMsg(e); }
+    }, 250);
+  };
+  // market totals, the trading balance and the visitor's open positions
+  const refresh = async () => {
+    if (!live || stale()) return;
+    try {
+      const pool = new ethers.Contract(perpCfg().pool || ZERO_ADDR, ["function cash() view returns (uint256)"], pch.reader);
+      const [m, cash] = await Promise.all([lens.getMarket(mk.id), perpCfg().pool ? pool.cash() : 0n]);
+      if (stale()) return;
+      mkt = m;
+      $("#plong").textContent = fmtUsd(usdOfWei(m.longSize));
+      $("#pshort").textContent = fmtUsd(usdOfWei(m.shortSize));
+      $("#ppool").textContent = fmtUsd(usdOfWei(cash));
+      $("#pmaxlev").textContent = `Up to ${m.maxLeverage}x`;
+      if (!m.active) $("#ppv").textContent = why(1);
+    } catch (e) { console.warn("perps market", e); }
+    if (!account) { $("#pcash").textContent = "Connect a wallet to trade."; return; }
+    try {
+      const who = account;
+      const [b, list, idl] = await Promise.all([ex.balanceOf(who), lens.positionsOf(who), ex.positionIdsOf(who)]);
+      if (stale() || who !== account) return;
+      bal = b; views = list; ids = idl;
+      const c = await loadCash().catch(() => null);
+      $("#pcash").textContent = c ? `Cash: ${fmtUsd(c.total)} across your chains` : "";
+      $("#pbal").innerHTML = bal > 0n ? `Unused: ${fmtUsd(usdOfWei(bal))} <button type="button" class="sharebtn" id="pwd">Withdraw</button>` : "";
+      if ($("#pwd")) $("#pwd").onclick = () => withdrawAll().catch((e) => toast(errMsg(e), 7000));
+      showPositions();
+      paint();
+    } catch (e) { console.warn("perps positions", e); }
+  };
+  function showPositions() {
+    const mine = views.map((v, i) => ({ v, id: ids[i] })); // every coin's: this list is the visitor's whole book
+    if (!mine.length) return ($("#ppos").innerHTML = `<div class="stat">No open positions.</div>`);
+    $("#ppos").innerHTML = mine.map(({ v, id }) => {
+      const p = v.position, long = p.isLong, stakeUsd = usdOfWei(p.stake), pnlUsd = usdOfWei(v.pnl) - usdOfWei(v.holdFee);
+      const m = markets.find((z) => z.id === Number(p.marketId));
+      const entry = coinUsd(p.entryTick), liq = entry * (long ? 1 - 0.85 / Number(p.leverage) : 1 + 0.85 / Number(p.leverage));
+      const pct = stakeUsd ? (pnlUsd / stakeUsd) * 100 : 0;
+      return `<div class="fi" style="align-items:center">
+        <div class="avatar" style="font-size:12px;color:${long ? "var(--positive)" : "var(--negative)"}">${long ? "L" : "S"}</div>
+        <div style="min-width:0"><div class="t"><b>${long ? "Long" : "Short"} $${esc(m?.symbol || "?")} ${p.leverage}x</b></div>
+          <div class="w">${fmtUsd(stakeUsd)} · entry ${tinyUsd(entry)} · now ${tinyUsd(coinUsd(v.markTick))} · closes near ${tinyUsd(liq)}</div></div>
+        <div class="amt"><span class="${pnlUsd >= 0 ? "pos" : "neg"}">${pnlUsd >= 0 ? "+" : "−"}${fmtUsd(Math.abs(pnlUsd))}</span><div class="w">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</div></div>
+        ${Number(v.action) ? `<span class="stat" style="margin-left:10px">Settling…</span>` : `<button type="button" class="pclose" data-id="${id}" style="margin-left:10px">Close</button>`}</div>`;
+    }).join("");
+    app.querySelectorAll(".pclose").forEach((b) => b.onclick = () => closePos(BigInt(b.dataset.id), b).catch((e) => { toast(errMsg(e), 7000); b.disabled = false; }));
+  }
+  const exW = () => new ethers.Contract(perpCfg().exchange, PERP_EX_ABI, signer);
+  async function withdrawAll() {
+    await requireWallet(ch);
+    const b = await ex.balanceOf(account);
+    if (!b) return;
+    toast("Sending your cash back to your wallet…", 15000);
+    const tx = await exW().withdraw(b);
+    await waitReceipt(pch, tx.hash);
+    toast(`${fmtUsd(usdOfWei(b))} is back in your wallet`);
+    await loadCash(true).catch(() => {});
+    refresh();
+  }
+  async function closePos(id, b) {
+    b.disabled = true;
+    await requireWallet(ch);
+    const v = views[ids.findIndex((z) => z === id)];
+    const r = await lens.quoteOpen(Number(v.position.marketId), v.position.isLong, 1, 0n).catch(() => null);
+    // the exit fills at the worse of the live and the 1-minute price: the limit allows 1% beyond that
+    const fill = r ? (v.position.isLong ? Math.min(Number(r.spotTick), Number(r.fastTick)) : Math.max(Number(r.spotTick), Number(r.fastTick))) : Number(v.markTick);
+    const limit = v.position.isLong ? fill - PERP_SLIP_TICKS : fill + PERP_SLIP_TICKS;
+    toast(WALLET_KIND === "privy" ? "Closing…" : "Confirm in your wallet…", 15000);
+    const t0 = Date.now();
+    const tx = await exW().close(id, limit);
+    await waitReceipt(pch, tx.hash);
+    const out = await ex.balanceOf(account);
+    if (out > 0n) { const w = await exW().withdraw(out); await waitReceipt(pch, w.hash); }
+    toast(`Closed in ${((Date.now() - t0) / 1000).toFixed(1)} s: ${fmtUsd(usdOfWei(out))} back in your wallet`);
+    await loadCash(true).catch(() => {});
+    refresh();
+  }
+  async function openPos() {
+    const usd = usdIn();
+    if (!usd) return toast("Enter an amount");
+    await requireWallet(ch);
+    const stake = stakeWei();
+    const long = side === "long";
+    const r = await lens.quoteOpen(mk.id, long, lev, stake);
+    if (Number(r.reason)) throw new Error(why(Number(r.reason)) || "This position can't open right now.");
+    const have = await ex.balanceOf(account);
+    const need = stake + r.fee > have ? stake + r.fee - have : 0n;
+    if (need > 0n) {
+      const wallet = await pch.reader.getBalance(account);
+      const gas = ethers.parseEther("0.00003");
+      if (wallet < need + gas) await gatherCash(ch, usdOfWei(need + gas - wallet) + 0.05, (m) => toast(m, 30000));
+    }
+    const limit = long ? Number(r.entryTick) + PERP_SLIP_TICKS : Number(r.entryTick) - PERP_SLIP_TICKS;
+    toast(WALLET_KIND === "privy" ? (long ? "Opening long…" : "Opening short…") : "Confirm in your wallet…", 15000);
+    const t0 = Date.now();
+    const tx = await exW().open(mk.id, long, lev, stake, limit, { value: need });
+    await waitReceipt(pch, tx.hash);
+    toast(`${long ? "Long" : "Short"} ${lev}x opened in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+    $("#pamt").value = "";
+    await loadCash(true).catch(() => {});
+    refresh(); preview();
+  }
+
+  app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { side = b.dataset.s; if (lev > maxLev()) lev = Math.max(...PERP_LEVS.filter((v) => v <= maxLev())); preview(); });
+  app.querySelectorAll("#plev button").forEach((b) => b.onclick = () => { lev = Number(b.dataset.v); try { localStorage.setItem("pf-perp-lev", lev); } catch {} preview(); });
+  app.querySelectorAll("#pquick button").forEach((b) => b.onclick = () => { $("#pamt").value = b.dataset.v; preview(); });
+  $("#pamt").addEventListener("input", preview);
+  $("#pgo").onclick = async () => {
+    const btn = $("#pgo");
+    btn.disabled = true;
+    try { await openPos(); } catch (e) { toast(errMsg(e), 7000); }
+    btn.disabled = false;
+  };
+  preview();
+  refresh();
+  const timerR = setInterval(() => (stale() ? clearInterval(timerR) : !document.hidden && refresh()), 10_000);
 }
 
 /// A token from another launchpad or DEX (#/x/<chain>/<address>): price, chart, and buy or sell through Relay,
@@ -4284,7 +4553,7 @@ async function candleChart(box, src) {
 // The screen's frame paints at once (its title and grey bars where the figures will go); the chains fill it in.
 (() => {
   const h = location.hash.slice(1) || "/";
-  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/rewards") ? "/rewards" : h;
+  const page = h.startsWith("/t/") ? "/t" : h.startsWith("/rewards") ? "/rewards" : h.startsWith("/perps") ? "/perps" : h;
   const bar = (w, ht) => `<div class="skel" style="height:${ht}px;width:${w}"></div>`;
   const chains = Object.values(CHAINS).filter((c) => PADS.some((P) => P.ch === c && !c.testnet));
   if (page === "/" || page === "/tokens") $("#app").innerHTML = discoverFrame(chains);

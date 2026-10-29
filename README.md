@@ -368,3 +368,12 @@ They add funds by sending ETH, BNB or HYPE to the address in the wallet menu, an
 - Turn it on: set `CONFIG.privyAppId` (public; Privy dashboard > App settings). In the dashboard, add
   `https://pepesimd.fun` and `https://www.pepesimd.fun` to the allowed domains, pick the login methods, and turn on
   EVM embedded wallets.
+
+## Long/Short (2026-10-29, not deployed yet)
+
+Leveraged longs and shorts on coins we pick, one by one, against one shared ETH pool: the `perps/` folder (the MemeLev contracts, keeper and relayer). The first coin is UBIK on Robinhood Chain. The site's Long/Short page (`#/perps`) shows the market, its chart and a trade panel; trading stays "opening soon" until the contracts are deployed and their addresses are in `CONFIG.perps`. Opening a position is one transaction (the stake goes with it); closing pays out and sends the cash back to the wallet. Steps to go live: [perps/README.md](perps/README.md#pepesfamily-longshort-2026-10-29).
+
+The contracts have had an internal review (perps/SECURITY_REVIEW.md) but no outside audit. Leveraged trading is regulated in many countries.
+
+Discover and search list only tokens launched on PepesFamily (2026-10-29).
+

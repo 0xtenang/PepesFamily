@@ -1,0 +1,149 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "pool_",
+    "type": "address",
+    "internalType": "contract IUniswapV3PoolLike"
+   },
+   {
+    "name": "weth_",
+    "type": "address",
+    "internalType": "contract IERC20"
+   },
+   {
+    "name": "fastWindow_",
+    "type": "uint32",
+    "internalType": "uint32"
+   },
+   {
+    "name": "slowWindow_",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "coinIsToken0",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "fastWindow",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "pool",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IUniswapV3PoolLike"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "prepare",
+  "inputs": [
+   {
+    "name": "cardinality",
+    "type": "uint16",
+    "internalType": "uint16"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "read",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "spotTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "fastTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "slowTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "liquidityEth",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "slowWindow",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "weth",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IERC20"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "error",
+  "name": "BadWindows",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "HistoryTooShort",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotWethPool",
+  "inputs": []
+ }
+]

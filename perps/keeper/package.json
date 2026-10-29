@@ -1,0 +1,15 @@
+{
+  "name": "memelev-keeper",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/keeper.ts",
+    "demo-prices": "node src/demo-prices.ts"
+  },
+  "dependencies": {
+    "viem": "^2.57.13"
+  }
+}

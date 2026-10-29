@@ -1,0 +1,708 @@
+<title>Memecoin Pool Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,300..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Risk desk: a control rail on the left, results and the rule comparison on the right; one column on phones. */
+:root {
+  --bg: #EDF0F4;
+  --panel: #FFFFFF;
+  --ink: #121821;
+  --muted: #586373;
+  --line: #D5DBE3;
+  --chip: #E2E7EE;
+  --base: #5B6676;
+  --accent: #2357D9;
+  --band-base: rgba(91, 102, 118, 0.17);
+  --band-accent: rgba(35, 87, 217, 0.16);
+  --gain: #127A3E;
+  --loss: #B42318;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1116; --panel: #151B23; --ink: #E6EAF0; --muted: #97A1AE; --line: #29313C; --chip: #1E2630;
+    --base: #A6B1C0; --accent: #7EA6FF; --band-base: rgba(166, 177, 192, 0.16); --band-accent: rgba(126, 166, 255, 0.2);
+    --gain: #4CC38A; --loss: #FF7B6F; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1116; --panel: #151B23; --ink: #E6EAF0; --muted: #97A1AE; --line: #29313C; --chip: #1E2630;
+  --base: #A6B1C0; --accent: #7EA6FF; --band-base: rgba(166, 177, 192, 0.16); --band-accent: rgba(126, 166, 255, 0.2);
+  --gain: #4CC38A; --loss: #FF7B6F; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap {
+  max-width: 1240px; margin: 0 auto;
+  padding-block: 28px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+h1 { font-stretch: 118%; font-weight: 760; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.04; letter-spacing: -0.012em; }
+h2 { font-stretch: 112%; font-weight: 700; font-size: 19px; line-height: 1.2; }
+h3 { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+p { margin: 0; }
+.num, output, td.n, dd, .big { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+header { display: grid; gap: 12px; max-width: 760px; }
+.lede { font-size: 17px; color: var(--ink); max-width: 65ch; }
+.source { font-size: 13px; color: var(--muted); max-width: 70ch; }
+.source a { color: inherit; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 310px) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 28px; }
+.main { display: grid; gap: 24px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.section { padding: 20px; display: grid; gap: 14px; min-width: 0; }
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.note { font-size: 13px; color: var(--muted); }
+
+/* Rail */
+.rail { display: grid; gap: 0; }
+.rail-group { padding: 18px 18px 20px; display: grid; gap: 16px; border-top: 1px solid var(--line); }
+.rail-group:first-child { border-top: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 4px 11px;
+  font-size: 13px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.ctl { display: grid; gap: 4px; }
+.ctl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.ctl label { font-size: 14px; font-weight: 560; }
+.ctl output { font-size: 13px; font-weight: 500; white-space: nowrap; }
+.ctl input[type="range"] { width: 100%; accent-color: var(--accent); margin: 2px 0; }
+.ctl select, .rules select {
+  border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 5px 8px; font-size: 14px; max-width: 100%;
+}
+.hint { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.rail-foot { padding: 14px 18px 18px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.btn {
+  border: 1px solid var(--line); background: var(--chip); border-radius: 7px; padding: 7px 12px; font-size: 14px; font-weight: 560; cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.progress { height: 3px; background: var(--chip); border-radius: 3px; overflow: hidden; }
+.progress > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.15s linear; }
+
+/* Result cards */
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { border: 1px solid var(--line); border-radius: 9px; padding: 16px; display: grid; gap: 6px; align-content: start; }
+.card[data-k="b"] { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.card-k { display: flex; align-items: center; gap: 8px; font-weight: 640; font-size: 14px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.sw-a { background: var(--base); }
+.sw-b { background: var(--accent); }
+.big { font-size: clamp(30px, 4vw, 40px); font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
+.up { color: var(--gain); }
+.down { color: var(--loss); }
+.sub { font-size: 13px; color: var(--muted); }
+.kv { display: grid; gap: 4px; margin: 8px 0 0; padding-top: 10px; border-top: 1px solid var(--line); }
+.kv > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-size: 13px; font-weight: 500; }
+.verdict { font-size: 15px; max-width: 75ch; }
+.verdict b { font-weight: 650; }
+
+/* Chart */
+.chart-box { position: relative; min-width: 0; }
+.chart-box svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.chart-box .axis { fill: var(--muted); font-family: var(--font-data); font-size: 11px; }
+.chart-box .grid { stroke: var(--line); stroke-width: 1; }
+.chart-box .startline { stroke: var(--muted); stroke-dasharray: 4 4; stroke-width: 1; }
+.band-a { fill: var(--band-base); }
+.band-b { fill: var(--band-accent); }
+.line-a { fill: none; stroke: var(--base); stroke-width: 2.2; }
+.line-b { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.hover-line { stroke: var(--muted); stroke-width: 1; }
+.dot-a { fill: var(--base); }
+.dot-b { fill: var(--accent); }
+.tip {
+  position: absolute; top: 8px; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+  padding: 7px 9px; font-size: 12.5px; display: grid; gap: 2px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08); min-width: 150px;
+}
+.tip .row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.tip .row span:first-child { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Tables */
+.table-scroll { overflow-x: auto; min-width: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+thead th { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); white-space: nowrap; }
+th.n, td.n { text-align: right; white-space: nowrap; }
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+tr.total td, tr.total th { font-weight: 650; border-top: 2px solid var(--line); }
+.rules td:first-child { min-width: 180px; }
+.rules .what { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.rules .inv { font-family: var(--font-data); font-size: 13px; white-space: nowrap; }
+.rules tr.diff td.yours select { border-color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.fixed { font-size: 13px; color: var(--muted); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; }
+
+/* Calculator */
+.calc { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.calc-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 13px; font-weight: 560; }
+.field input, .field select { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 8px; font-size: 14px; width: 100%; min-width: 0; }
+.field input[type="number"] { font-family: var(--font-data); }
+.check { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
+.check input { accent-color: var(--accent); }
+.ledger td:first-child { color: var(--ink); }
+.ledger .why { display: block; color: var(--muted); font-size: 12.5px; }
+
+.notes { display: grid; gap: 10px; font-size: 14px; max-width: 80ch; }
+.notes ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+
+@media (min-width: 921px) {
+  .rail { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+}
+@media (max-width: 920px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .calc { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .cards { grid-template-columns: minmax(0, 1fr); }
+  .section { padding: 16px; }
+  th, td { padding: 8px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress > i { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Memecoin Pool Simulator</h1>
+    <p class="lede">On Inverse, every long and short is a bet against one shared SOL pool. Set up a market and a crowd of traders, compare Inverse's rules with your own, and see what the pool's owners (LPs) are left with.</p>
+    <p class="source">Inverse rules as published at <a href="https://useinverse.xyz/how" target="_blank" rel="noopener">useinverse.xyz/how</a> on Oct 29, 2026. The traders and prices here are simulated. This is a model to learn from, not a forecast.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="rail panel" aria-label="Simulation settings">
+      <div class="rail-group" id="g-market">
+        <h3>Market</h3>
+        <div class="chips" id="presets" role="group" aria-label="Market presets"></div>
+      </div>
+      <div class="rail-group" id="g-traders"><h3>Traders</h3></div>
+      <div class="rail-group" id="g-pool"><h3>Pool</h3></div>
+      <div class="rail-foot">
+        <button class="btn btn-primary" id="reseed" type="button">New random markets</button>
+        <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+        <p class="note" id="status">Starting…</p>
+      </div>
+    </aside>
+
+    <div class="main">
+      <section class="panel section" aria-labelledby="h-result">
+        <div class="section-head">
+          <h2 id="h-result">LP value after <span id="days-label">30</span> days</h2>
+          <p class="note" id="runs-note">Typical result across simulated markets</p>
+        </div>
+        <div class="cards">
+          <div class="card" data-k="a">
+            <div class="card-k"><span class="sw sw-a"></span>Inverse rules</div>
+            <div class="big" id="a-big">…</div>
+            <p class="sub" id="a-sub">Running</p>
+            <dl class="kv">
+              <div><dt>Bad case (1 run in 10)</dt><dd id="a-p10">…</dd></div>
+              <div><dt>Good case (1 run in 10)</dt><dd id="a-p90">…</dd></div>
+              <div><dt>Chance LPs lose money</dt><dd id="a-loss">…</dd></div>
+              <div><dt>Platform's fee income</dt><dd id="a-plat">…</dd></div>
+            </dl>
+          </div>
+          <div class="card" data-k="b">
+            <div class="card-k"><span class="sw sw-b"></span>Your rules</div>
+            <div class="big" id="b-big">…</div>
+            <p class="sub" id="b-sub">Running</p>
+            <dl class="kv">
+              <div><dt>Bad case (1 run in 10)</dt><dd id="b-p10">…</dd></div>
+              <div><dt>Good case (1 run in 10)</dt><dd id="b-p90">…</dd></div>
+              <div><dt>Chance LPs lose money</dt><dd id="b-loss">…</dd></div>
+              <div><dt>Platform's fee income</dt><dd id="b-plat">…</dd></div>
+            </dl>
+          </div>
+        </div>
+        <p class="verdict" id="verdict"></p>
+      </section>
+
+      <section class="panel section" aria-labelledby="h-chart">
+        <div class="section-head">
+          <h2 id="h-chart">Pool value over time</h2>
+          <div class="legend">
+            <span><span class="sw sw-a"></span>Inverse rules</span>
+            <span><span class="sw sw-b"></span>Your rules</span>
+            <span>Line: typical run · Band: middle 80% of runs</span>
+          </div>
+        </div>
+        <div class="chart-box" id="chart-box">
+          <svg id="chart" viewBox="0 0 800 330" role="img" aria-label="Pool value in SOL over time for both rule sets"></svg>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+        <p class="note">Value counts open bets at their current price, so it is what LPs could withdraw if every bet closed now.</p>
+      </section>
+
+      <section class="panel section" aria-labelledby="h-rules">
+        <div class="section-head">
+          <h2 id="h-rules">Rules</h2>
+          <div class="btn-row">
+            <button class="btn" type="button" id="load-fixes">Load suggested fixes</button>
+            <button class="btn" type="button" id="copy-inverse">Copy Inverse rules</button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="rules">
+            <thead><tr><th>Rule</th><th>Inverse</th><th>Yours</th></tr></thead>
+            <tbody id="rules-body"></tbody>
+          </table>
+        </div>
+        <p class="fixed">Same for both: open and close fees of 1% of the stake or 0.25% of position size, whichever is more; 10% of profit on winners; liquidation at −85%; max win +400%, rising to +600% at 250 SOL and +1000% at 500 SOL of pool; leverage up to 10x from 500 SOL of coin liquidity, 5x from 150 SOL, 2x below.</p>
+      </section>
+
+      <section class="panel section" aria-labelledby="h-flow">
+        <div class="section-head">
+          <h2 id="h-flow">Where the pool's SOL went</h2>
+          <p class="note">Average per run, in SOL</p>
+        </div>
+        <div class="two">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Flow</th><th class="n">Inverse</th><th class="n">Yours</th></tr></thead>
+              <tbody id="flow-body"></tbody>
+            </table>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Bets</th><th class="n">Inverse</th><th class="n">Yours</th></tr></thead>
+              <tbody id="stats-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel section" aria-labelledby="h-calc">
+        <div class="section-head">
+          <h2 id="h-calc">One bet, line by line</h2>
+          <p class="note">Every fee for a single position</p>
+        </div>
+        <div class="calc">
+          <form class="calc-form" id="calc-form">
+            <div class="field"><label for="c-side">Side</label>
+              <select id="c-side"><option value="-1">Short</option><option value="1">Long</option></select></div>
+            <div class="field"><label for="c-lev">Leverage</label>
+              <select id="c-lev"><option>2</option><option>5</option><option>10</option></select></div>
+            <div class="field"><label for="c-stake">Stake (SOL)</label>
+              <input id="c-stake" type="number" min="0.01" step="0.01" value="1"></div>
+            <div class="field"><label for="c-move">Coin price move (%)</label>
+              <input id="c-move" type="number" min="-100" step="1" value="-50"></div>
+            <div class="field"><label for="c-hours">Hours held</label>
+              <input id="c-hours" type="number" min="0" step="0.5" value="24"></div>
+            <div class="field"><label for="c-rules">Rules</label>
+              <select id="c-rules"><option value="a">Inverse</option><option value="b">Yours</option></select></div>
+            <label class="check"><input type="checkbox" id="c-crowd" checked> This bet is on the crowded side</label>
+          </form>
+          <div class="table-scroll">
+            <table class="ledger">
+              <tbody id="calc-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel section" aria-labelledby="h-notes">
+        <h2 id="h-notes">How the model works</h2>
+        <div class="notes">
+          <ul>
+            <li><b>Prices.</b> Thirty coins are listed at a time. Every 10 minutes each coin moves randomly around its own trend. Pumps multiply the price by 1.5 to 3 in one step; rugs drop it to 5–15%.</li>
+            <li><b>Listings.</b> A coin that rugs, or falls 80% below its listing price, stops taking new bets and is replaced by a fresh coin. Liquidity starts around 120 SOL (20 to 3,000) and moves with the square root of price, as in a DEX pool.</li>
+            <li><b>Traders.</b> Bets arrive at random. Stakes vary around the average, and hold times are random around the average hold. Trend readers bet on the side each coin is really heading. Insiders know a pump or rug is coming and bet the coin's full room at the highest leverage it allows.</li>
+            <li><b>Same markets for both columns.</b> Each run feeds identical prices and traders to both rule sets, so differences come from the rules alone.</li>
+            <li><b>Where Inverse's page is silent, I assumed:</b> the pool's fee share also covers the profit fee and the 15% liquidation fee; max win stays +400% below 100 SOL of pool; the per-coin limit counts position size (stake × leverage); the hourly loss pause and the 30-second fair-fill average are not modeled; a hedge costs 0.5% each time it is resized.</li>
+            <li><b>LPs</b> never deposit or withdraw during a run, so the pool's value change is their return.</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script>
+(function () {
+  'use strict';
+  const E = window.PoolEngine;
+  const $ = (id) => document.getElementById(id);
+  const MINUS = '−';
+
+  /* ---------- Settings ---------- */
+  const PRESETS = {
+    'Meme bleed': { move: -10, vol: 80, spread: 25, rugRate: 3, pumpRate: 2 },
+    'Choppy': { move: 0, vol: 70, spread: 15, rugRate: 1.5, pumpRate: 2 },
+    'Meme season': { move: 8, vol: 100, spread: 25, rugRate: 2, pumpRate: 5 },
+  };
+  const signedPct = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v) + '%';
+  const CONTROLS = {
+    'g-market': [
+      { id: 'move', label: "Typical coin's daily move", min: -30, max: 20, step: 1, value: -10, fmt: signedPct, hint: 'How much the median listed coin gains or loses per day.' },
+      { id: 'vol', label: 'Daily swings', min: 30, max: 200, step: 5, value: 80, fmt: (v) => v + '%', hint: 'Volatility. Bigger swings mean more liquidations and more max wins.' },
+      { id: 'spread', label: 'Trend spread between coins', min: 0, max: 50, step: 5, value: 25, fmt: (v) => '±' + v + '%/day', hint: 'Some coins die fast while others climb. This sets how far apart they are.' },
+      { id: 'rugRate', label: 'Rug chance per coin per day', min: 0, max: 10, step: 0.5, value: 3, fmt: (v) => v + '%' },
+      { id: 'pumpRate', label: 'Pump chance per coin per day', min: 0, max: 10, step: 0.5, value: 2, fmt: (v) => v + '%' },
+      { id: 'days', label: 'Days to simulate', min: 7, max: 60, step: 1, value: 30, fmt: (v) => v + ' days' },
+    ],
+    'g-traders': [
+      { id: 'perDay', label: 'Bets per day', min: 100, max: 3000, step: 50, value: 1000, fmt: (v) => v.toLocaleString('en-US') },
+      { id: 'stake', label: 'Average stake', min: 0.02, max: 1, step: 0.01, value: 0.12, fmt: (v) => v.toFixed(2) + ' SOL' },
+      { id: 'shortShare', label: 'Guessers who pick short', min: 0, max: 100, step: 5, value: 65, fmt: (v) => v + '%', hint: 'Most open bets on Inverse were shorts when we looked.' },
+      { id: 'skill', label: 'Trend readers', min: 0, max: 100, step: 5, value: 20, fmt: (v) => v + '%', hint: "Share of bets placed on the side the coin is really heading. This is the trader's edge." },
+      { id: 'insider', label: 'Insiders', min: 0, max: 100, step: 5, value: 0, fmt: (v) => v + '%', hint: 'Share of pumps and rugs that someone bets on just before they happen.' },
+      { id: 'holdHours', label: 'Average hold', min: 0.25, max: 24, step: 0.25, value: 3, fmt: (v) => (v < 1 ? Math.round(v * 60) + ' min' : v + ' h') },
+      { id: 'levMix', label: 'Leverage they ask for', type: 'select', value: 'low', options: [['low', 'Mostly 2x'], ['mid', 'Mixed'], ['high', 'Mostly 10x']], hint: 'Thin coins still cap leverage at 2x or 5x.' },
+    ],
+    'g-pool': [
+      { id: 'pool', label: 'Starting pool', min: 20, max: 1000, step: 1, value: 123, fmt: (v) => v + ' SOL', hint: "123 SOL matches Inverse's live pool on Oct 29, 2026." },
+    ],
+  };
+  const LEV_MIX = { low: [0.8, 0.15, 0.05], mid: [0.5, 0.3, 0.2], high: [0.2, 0.3, 0.5] };
+
+  const INVERSE = { feeShare: 0.2, holdRate: 0.0005, crowdMult: 1, shortWinCap: 10, rugGuard: true, rugCap: 0.2, coverage: 0.5, coinCapSol: 2, coinCapPct: 0.005, hedge: 0 };
+  const FIXES = { ...INVERSE, feeShare: 0.5, crowdMult: 3, shortWinCap: 1 };
+  const RULES = [
+    { key: 'feeShare', label: "Pool's share of trading fees", what: 'The rest goes to the platform, referrers and the weekly prize.', opts: [[0.2, '20%'], [0.35, '35%'], [0.5, '50%'], [0.75, '75%'], [1, '100%']] },
+    { key: 'holdRate', label: 'Holding fee per hour', what: 'Of position size, after the first free hour. Paid to the pool.', opts: [[0.0002, '0.02%'], [0.0005, '0.05%'], [0.001, '0.10%'], [0.002, '0.20%']] },
+    { key: 'crowdMult', label: 'Crowded side pays', what: 'Multiplies the holding fee for bets on the side most traders are on, coin by coin.', opts: [[1, '1× (same as other side)'], [2, '2×'], [3, '3×'], [5, '5×']] },
+    { key: 'shortWinCap', label: 'Max win on shorts', what: 'An extra cap for shorts, since most memecoins drift down.', opts: [[10, 'Same as longs'], [3, '+300%'], [2, '+200%'], [1, '+100%'], [0.5, '+50%']] },
+    { key: 'rugGuard', label: 'Rug guard', what: 'When a coin crashes 80% at once, shorts settle with a capped win.', opts: [[true, 'On, +20% cap'], [false, 'Off']] },
+    { key: 'coverage', label: 'Room for open max wins', what: 'New bets are refused once every open bet hitting max win would need more than this much of the pool.', opts: [[0.25, '25% of pool'], [0.5, '50% of pool'], [0.75, '75% of pool'], [1, '100% of pool']] },
+    { key: 'coinCapSol', label: 'Net size per coin, in SOL', what: 'How lopsided the pool can be on one coin.', opts: [[0.5, '0.5 SOL'], [1, '1 SOL'], [2, '2 SOL'], [5, '5 SOL'], [10, '10 SOL']] },
+    { key: 'coinCapPct', label: 'Net size per coin, vs liquidity', what: "Also capped by the coin's DEX liquidity.", opts: [[0.0025, '0.25%'], [0.005, '0.5%'], [0.01, '1%'], [0.02, '2%']] },
+    { key: 'hedge', label: 'Hedge net longs with spot', what: 'The pool buys the coin to cover traders who are net long. Shorts cannot be hedged.', opts: [[0, 'Off'], [0.25, '25%'], [0.5, '50%'], [1, '100%']] },
+  ];
+
+  /* ---------- Build controls ---------- */
+  function buildControls() {
+    for (const [group, list] of Object.entries(CONTROLS)) {
+      const host = $(group);
+      for (const c of list) {
+        const el = document.createElement('div');
+        el.className = 'ctl';
+        const input = c.type === 'select'
+          ? `<select id="${c.id}">${c.options.map(([v, t]) => `<option value="${v}"${v === c.value ? ' selected' : ''}>${t}</option>`).join('')}</select>`
+          : `<input type="range" id="${c.id}" min="${c.min}" max="${c.max}" step="${c.step}" value="${c.value}">`;
+        el.innerHTML = `<div class="ctl-head"><label for="${c.id}">${c.label}</label>${c.type === 'select' ? '' : `<output id="${c.id}-out" for="${c.id}"></output>`}</div>${input}${c.hint ? `<p class="hint">${c.hint}</p>` : ''}`;
+        host.appendChild(el);
+        const inp = el.querySelector('#' + c.id);
+        inp.addEventListener('input', () => { showValue(c); if (group === 'g-market') syncPresets(); schedule(); });
+        showValue(c);
+      }
+    }
+    const presetHost = $('presets');
+    for (const name of Object.keys(PRESETS)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.textContent = name;
+      b.addEventListener('click', () => {
+        for (const [id, v] of Object.entries(PRESETS[name])) { $(id).value = v; showValue(findCtl(id)); }
+        syncPresets(); schedule();
+      });
+      presetHost.appendChild(b);
+    }
+    syncPresets();
+  }
+  function findCtl(id) { for (const list of Object.values(CONTROLS)) for (const c of list) if (c.id === id) return c; }
+  function showValue(c) { if (c.type !== 'select') $(c.id + '-out').textContent = c.fmt(+$(c.id).value); }
+  function syncPresets() {
+    const btns = $('presets').querySelectorAll('.chip');
+    Object.entries(PRESETS).forEach(([name, p], i) => {
+      const on = Object.entries(p).every(([id, v]) => +$(id).value === v);
+      btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  const val = (id) => +$(id).value;
+
+  function buildRules() {
+    const body = $('rules-body');
+    body.innerHTML = RULES.map((r) => {
+      const inv = r.opts.find(([v]) => v === INVERSE[r.key]);
+      return `<tr data-key="${r.key}"><td>${r.label}<span class="what">${r.what}</span></td><td class="inv">${inv ? inv[1] : ''}</td>` +
+        `<td class="yours"><select id="r-${r.key}" aria-label="${r.label}, your rule">${r.opts.map(([v, t], i) => `<option value="${i}">${t}</option>`).join('')}</select></td></tr>`;
+    }).join('');
+    for (const r of RULES) $('r-' + r.key).addEventListener('change', () => { markDiffs(); schedule(); calc(); });
+    setRules(FIXES);
+  }
+  function setRules(rules) {
+    for (const r of RULES) $('r-' + r.key).value = String(r.opts.findIndex(([v]) => v === rules[r.key]));
+    markDiffs();
+  }
+  function readRules() {
+    const out = { ...INVERSE };
+    for (const r of RULES) out[r.key] = r.opts[+$('r-' + r.key).value][0];
+    return out;
+  }
+  function markDiffs() {
+    const mine = readRules();
+    for (const r of RULES) document.querySelector(`tr[data-key="${r.key}"]`).classList.toggle('diff', mine[r.key] !== INVERSE[r.key]);
+  }
+
+  function readCfg() {
+    return {
+      pool: val('pool'),
+      market: { days: val('days'), move: val('move') / 100, vol: val('vol') / 100, spread: val('spread') / 100,
+        rugRate: val('rugRate') / 100, pumpRate: val('pumpRate') / 100, insider: val('insider') / 100 },
+      traders: { perDay: val('perDay'), stake: val('stake'), shortShare: val('shortShare') / 100, skill: val('skill') / 100,
+        holdHours: val('holdHours'), levMix: LEV_MIX[$('levMix').value] },
+    };
+  }
+
+  /* ---------- Formatting ---------- */
+  const sign = (x) => (x > 0 ? '+' : x < 0 ? MINUS : '');
+  const pct = (x) => {
+    const a = Math.abs(x * 100);
+    return sign(x) + (a < 9.95 ? a.toFixed(1) : a.toFixed(0)) + '%';
+  };
+  const sol = (x, d = 1) => sign(x) + Math.abs(x).toFixed(d);
+  const tone = (x) => (x > 0.0005 ? 'up' : x < -0.0005 ? 'down' : '');
+
+  /* ---------- Run ---------- */
+  let token = 0, timer = 0, baseSeed = 20261029, last = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(run, 220); }
+
+  function run() {
+    const my = ++token;
+    const cfg = readCfg();
+    const ruleSets = [INVERSE, readRules()];
+    const work = cfg.market.days * cfg.traders.perDay;
+    const runs = Math.max(12, Math.min(30, Math.round((30 * 30000) / work)));
+    const all = [[], []];
+    let k = 0;
+    $('status').textContent = `Running 0 of ${runs} markets…`;
+    $('bar').style.width = '0%';
+    function chunk() {
+      if (my !== token) return;
+      const t0 = performance.now();
+      do {
+        const seed = E.mix(baseSeed, k);
+        all[0].push(E.simulate(cfg, ruleSets[0], seed));
+        all[1].push(E.simulate(cfg, ruleSets[1], seed));
+        k++;
+      } while (k < runs && performance.now() - t0 < 140);
+      const sums = all.map((r) => E.summarize(cfg.pool, r));
+      last = { cfg, sums };
+      render(cfg, sums, k, runs);
+      $('bar').style.width = (100 * k / runs).toFixed(0) + '%';
+      $('status').textContent = k < runs ? `Running ${k} of ${runs} markets…` : `Done: ${runs} simulated markets, same for both rule sets.`;
+      if (k < runs) setTimeout(chunk, 0);
+    }
+    setTimeout(chunk, 0);
+  }
+
+  /* ---------- Render ---------- */
+  const FLOWS = [
+    ['kept', 'Kept from losing bets', 'stakes kept from losing bets'],
+    ['liq', 'Kept from liquidations', 'stakes kept from liquidations'],
+    ['hold', 'Holding fees', 'holding fees'],
+    ['fees', "Pool's share of trading fees", 'its share of trading fees'],
+    ['paidShorts', 'Paid to winning shorts', 'payouts to winning shorts'],
+    ['paidLongs', 'Paid to winning longs', 'payouts to winning longs'],
+    ['rugPaid', 'Paid out by the rug guard', 'rug-guard payouts'],
+    ['hedge', 'Hedge, after swap costs', 'the hedge'],
+  ];
+
+  function render(cfg, sums, done, runs) {
+    $('days-label').textContent = cfg.market.days;
+    $('runs-note').textContent = `Typical result across ${done} simulated markets`;
+    ['a', 'b'].forEach((k, i) => {
+      const s = sums[i];
+      const ch = s.median / s.start - 1;
+      const big = $(k + '-big');
+      big.textContent = pct(ch);
+      big.className = 'big ' + tone(ch);
+      $(k + '-sub').textContent = `${s.start.toFixed(0)} → ${s.median.toFixed(1)} SOL in a typical run`;
+      $(k + '-p10').textContent = pct(s.p10 / s.start - 1);
+      $(k + '-p90').textContent = pct(s.p90 / s.start - 1);
+      $(k + '-loss').textContent = Math.round(s.lossChance * 100) + '%';
+      $(k + '-plat').textContent = s.st.platform.toFixed(1) + ' SOL';
+    });
+    renderVerdict(sums);
+    renderChart(cfg, sums);
+    renderTables(sums);
+  }
+
+  function renderVerdict(sums) {
+    const [a, b] = sums;
+    const diff = b.median - a.median;
+    const drains = FLOWS.filter(([k]) => a.bd[k] < 0).sort((x, y) => a.bd[x[0]] - a.bd[y[0]]);
+    const sources = FLOWS.filter(([k]) => a.bd[k] > 0).sort((x, y) => a.bd[y[0]] - a.bd[x[0]]);
+    let txt = Math.abs(diff) < 0.5
+      ? 'Your rules end up about the same as Inverse’s in a typical run. '
+      : `Your rules leave LPs <b>${Math.abs(diff).toFixed(1)} SOL ${diff > 0 ? 'better' : 'worse'} off</b> than Inverse’s in a typical run. `;
+    if (drains[0] && sources[0]) {
+      txt += `Under Inverse’s rules, the biggest drain is ${drains[0][2]} (${sol(a.bd[drains[0][0]], 0)} SOL per run) and the biggest income is ${sources[0][2]} (${sol(a.bd[sources[0][0]], 0)} SOL).`;
+    }
+    $('verdict').innerHTML = txt;
+  }
+
+  function niceStep(range, target) {
+    const raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const n = raw / mag;
+    return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * mag;
+  }
+
+  const CH = { w: 800, h: 330, l: 54, r: 18, t: 14, b: 34 };
+  let chartState = null;
+
+  function renderChart(cfg, sums) {
+    const svg = $('chart');
+    const n = sums[0].bands.length;
+    const per = E.SAMPLES_PER_DAY;
+    const days = (n - 1) / per;
+    let lo = cfg.pool, hi = cfg.pool;
+    for (const s of sums) for (const b of s.bands) { lo = Math.min(lo, b.p10); hi = Math.max(hi, b.p90); }
+    const pad = (hi - lo) * 0.08 || cfg.pool * 0.1;
+    lo = Math.max(0, lo - pad); hi += pad;
+    const step = niceStep(hi - lo, 5);
+    lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+    const X = (i) => CH.l + (i / (n - 1)) * (CH.w - CH.l - CH.r);
+    const Y = (v) => CH.t + (1 - (v - lo) / (hi - lo)) * (CH.h - CH.t - CH.b);
+    let out = '';
+    for (let v = lo; v <= hi + 1e-9; v += step) {
+      out += `<line class="grid" x1="${CH.l}" x2="${CH.w - CH.r}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>`;
+      out += `<text class="axis" x="${CH.l - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${+v.toFixed(2)}</text>`;
+    }
+    const dStep = days <= 10 ? 1 : days <= 20 ? 2 : days <= 40 ? 5 : 10;
+    for (let d = 0; d <= days; d += dStep) {
+      out += `<text class="axis" x="${X(d * per).toFixed(1)}" y="${CH.h - 12}" text-anchor="middle">${d === 0 ? 'day 0' : d}</text>`;
+    }
+    out += `<line class="startline" x1="${CH.l}" x2="${CH.w - CH.r}" y1="${Y(cfg.pool).toFixed(1)}" y2="${Y(cfg.pool).toFixed(1)}"/>`;
+    out += `<text class="axis" x="${CH.w - CH.r}" y="${(Y(cfg.pool) - 6).toFixed(1)}" text-anchor="end">start ${cfg.pool} SOL</text>`;
+    const area = (bands) => {
+      let d = 'M' + bands.map((b, i) => `${X(i).toFixed(1)},${Y(b.p90).toFixed(1)}`).join('L');
+      for (let i = bands.length - 1; i >= 0; i--) d += `L${X(i).toFixed(1)},${Y(bands[i].p10).toFixed(1)}`;
+      return d + 'Z';
+    };
+    const line = (bands) => 'M' + bands.map((b, i) => `${X(i).toFixed(1)},${Y(b.p50).toFixed(1)}`).join('L');
+    out += `<path class="band-a" d="${area(sums[0].bands)}"/><path class="band-b" d="${area(sums[1].bands)}"/>`;
+    out += `<path class="line-a" d="${line(sums[0].bands)}"/><path class="line-b" d="${line(sums[1].bands)}"/>`;
+    out += `<g id="hover" visibility="hidden"><line class="hover-line" id="hv-line" y1="${CH.t}" y2="${CH.h - CH.b}"/><circle class="dot-a" id="hv-a" r="4"/><circle class="dot-b" id="hv-b" r="4"/></g>`;
+    out += `<rect id="hit" x="${CH.l}" y="${CH.t}" width="${CH.w - CH.l - CH.r}" height="${CH.h - CH.t - CH.b}" fill="transparent"/>`;
+    svg.innerHTML = out;
+    chartState = { sums, n, per, X, Y };
+    const hit = $('hit');
+    hit.addEventListener('pointermove', hover);
+    hit.addEventListener('pointerleave', () => { $('hover').setAttribute('visibility', 'hidden'); $('tip').hidden = true; });
+  }
+
+  function hover(ev) {
+    if (!chartState) return;
+    const { sums, n, per, X, Y } = chartState;
+    const svg = $('chart');
+    const rect = svg.getBoundingClientRect();
+    const sx = ((ev.clientX - rect.left) / rect.width) * CH.w;
+    const i = Math.max(0, Math.min(n - 1, Math.round(((sx - CH.l) / (CH.w - CH.l - CH.r)) * (n - 1))));
+    const a = sums[0].bands[i].p50, b = sums[1].bands[i].p50;
+    const x = X(i);
+    $('hover').setAttribute('visibility', 'visible');
+    $('hv-line').setAttribute('x1', x); $('hv-line').setAttribute('x2', x);
+    $('hv-a').setAttribute('cx', x); $('hv-a').setAttribute('cy', Y(a));
+    $('hv-b').setAttribute('cx', x); $('hv-b').setAttribute('cy', Y(b));
+    const tip = $('tip');
+    const day = i / per;
+    tip.innerHTML = `<div><b>Day ${day % 1 ? day.toFixed(2) : day}</b></div>` +
+      `<div class="row"><span><span class="sw sw-a"></span>Inverse</span><span class="num">${a.toFixed(1)} SOL</span></div>` +
+      `<div class="row"><span><span class="sw sw-b"></span>Yours</span><span class="num">${b.toFixed(1)} SOL</span></div>`;
+    tip.hidden = false;
+    const px = (x / CH.w) * rect.width;
+    const w = tip.offsetWidth;
+    tip.style.left = Math.min(rect.width - w - 4, Math.max(4, px + 12 + w > rect.width ? px - w - 12 : px + 12)) + 'px';
+  }
+
+  function renderTables(sums) {
+    const [a, b] = sums;
+    const cell = (x) => `<td class="n num ${tone(x)}">${sol(x)}</td>`;
+    let rows = FLOWS.map(([k, label]) => `<tr><th scope="row">${label}</th>${cell(a.bd[k])}${cell(b.bd[k])}</tr>`).join('');
+    const net = (s) => Object.values(s.bd).reduce((x, y) => x + y, 0);
+    rows += `<tr class="total"><th scope="row">Net change in pool cash</th>${cell(net(a))}${cell(net(b))}</tr>`;
+    $('flow-body').innerHTML = rows;
+
+    const n0 = (x) => Math.round(x).toLocaleString('en-US');
+    const st = (s) => s.st;
+    const STATS = [
+      ['Bets that came in', (s) => n0(st(s).arrivals + st(s).insiders)],
+      ['Accepted', (s) => n0(st(s).accepted + st(s).insiders)],
+      ['Refused: coin limit full', (s) => n0(st(s).rejCoin)],
+      ['Refused: pool max-win room', (s) => n0(st(s).rejCover)],
+      ['Closed at max win', (s) => n0(st(s).maxWins)],
+      ['Liquidated', (s) => n0(st(s).liqs)],
+      ['Bets that made money', (s) => (st(s).closes ? Math.round((100 * st(s).wins) / st(s).closes) : 0) + '%'],
+      ['Insider bets', (s) => n0(st(s).insiders)],
+      ['Insiders’ profit (SOL)', (s) => sol(st(s).insiderNet)],
+      ['All traders’ profit (SOL)', (s) => sol(st(s).traderNet)],
+    ];
+    $('stats-body').innerHTML = STATS.map(([label, f]) => `<tr><th scope="row">${label}</th><td class="n num">${f(a)}</td><td class="n num">${f(b)}</td></tr>`).join('');
+  }
+
+  /* ---------- One bet calculator ---------- */
+  function calc() {
+    const rules = $('c-rules').value === 'a' ? INVERSE : readRules();
+    const dir = +$('c-side').value, lev = +$('c-lev').value;
+    const stake = Math.max(0.01, +$('c-stake').value || 0);
+    const move = Math.max(-100, +$('c-move').value || 0) / 100;
+    const hours = Math.max(0, +$('c-hours').value || 0);
+    const crowd = $('c-crowd').checked;
+    const size = stake * lev;
+    const fo = E.openFee(stake, size);
+    const pool = val('pool');
+    let cap = E.maxWinTier(pool);
+    if (dir < 0) cap = Math.min(cap, rules.shortWinCap, lev);
+    let pnl = dir * lev * move, capped = false;
+    if (pnl >= cap) { pnl = cap; capped = true; }
+    const P = pnl * stake;
+    const H = rules.holdRate * size * (crowd ? rules.crowdMult : 1) * Math.max(0, hours - E.FEE.freeHours);
+    const liquidated = !capped && stake + P - H <= E.FEE.liqEquity * stake;
+    const s = E.settle(stake, size, P, H, liquidated, rules.feeShare);
+    const traderNet = s.traderBack - stake - fo;
+    const poolNet = s.pool + rules.feeShare * fo;
+    const platNet = s.platform + (1 - rules.feeShare) * fo;
+    const row = (label, why, x, cls = '') => `<tr class="${cls}"><td>${label}${why ? `<span class="why">${why}</span>` : ''}</td><td class="n num ${tone(x)}">${sol(x, 3)}</td></tr>`;
+    const amount = (label, why, x, cls = '') => `<tr class="${cls}"><td>${label}${why ? `<span class="why">${why}</span>` : ''}</td><td class="n num">${x.toFixed(3)}</td></tr>`;
+    const side = dir > 0 ? 'long' : 'short';
+    let h = '';
+    h += amount('Position size', `${stake} SOL stake × ${lev}x ${side}`, size);
+    h += row('Open fee', 'Paid by the trader on top of the stake', -fo);
+    h += row('Price result', capped ? `Capped at the +${Math.round(cap * 100)}% max win` : `${pct(move)} price × ${lev}x ${side} = ${pct(dir * lev * move)} of stake`, P);
+    h += row('Holding fee', hours > 1 ? `${(rules.holdRate * 100).toFixed(2)}% of size × ${(hours - 1).toFixed(1)} h${crowd && rules.crowdMult > 1 ? ` × ${rules.crowdMult} (crowded side)` : ''}` : 'First hour is free', -H);
+    if (liquidated) {
+      h += row('Liquidated', 'Equity fell to 15% of stake or less. The trader loses the stake; what is left is the liquidation fee.', -s.liqFee);
+    } else {
+      h += row('Close fee', '1% of what comes back, or 0.25% of size if more', -s.closeFee);
+      h += row('Profit fee', '10% of the profit', -s.profitFee);
+    }
+    h += amount('Trader gets back', '', s.traderBack, 'total');
+    h += row('Trader profit', `${pct(traderNet / stake)} on the stake`, traderNet, 'total');
+    h += row('Pool result', `Pays the win, keeps the loss, plus ${Math.round(rules.feeShare * 100)}% of fees and all holding fees`, poolNet);
+    h += row('Platform result', `${Math.round((1 - rules.feeShare) * 100)}% of trading fees`, platNet);
+    $('calc-body').innerHTML = h;
+  }
+
+  /* ---------- Wire up ---------- */
+  buildControls();
+  buildRules();
+  $('reseed').addEventListener('click', () => { baseSeed = (baseSeed * 1103515245 + 12345) >>> 0; run(); });
+  $('load-fixes').addEventListener('click', () => { setRules(FIXES); schedule(); calc(); });
+  $('copy-inverse').addEventListener('click', () => { setRules(INVERSE); schedule(); calc(); });
+  $('calc-form').addEventListener('input', calc);
+  $('calc-form').addEventListener('submit', (e) => e.preventDefault());
+  $('pool').addEventListener('input', calc);
+  calc();
+  run();
+})();
+</script>

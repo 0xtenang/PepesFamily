@@ -1,0 +1,1529 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "exchange_",
+    "type": "address",
+    "internalType": "contract ILevExchangeForRouter"
+   },
+   {
+    "name": "owner_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "ACT_CLOSE_ANY",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACT_CLOSE_OWN",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACT_OPEN",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACT_WITHDRAW",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "CLOSE_TYPEHASH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "KIND_CLOSE",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "KIND_OPEN",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "KIND_WITHDRAW",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "MAX_DEADLINE_AHEAD",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "MAX_SESSION",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "MAX_SLIP_TICKS",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint16",
+    "internalType": "uint16"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "OPEN_TYPEHASH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "REVOKE_TYPEHASH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "WITHDRAW_TYPEHASH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "acceptOwnership",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "authorize",
+  "inputs": [
+   {
+    "name": "qx",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "qy",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "limits",
+    "type": "tuple",
+    "internalType": "struct LevRouter.Limits",
+    "components": [
+     {
+      "name": "expiry",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "actions",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "maxLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "openSlipTicks",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "closeSlipTicks",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "maxStakePerTrade",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "maxOpenStake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "dailyBudget",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "outputs": [
+   {
+    "name": "key",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "cancelNonce",
+  "inputs": [
+   {
+    "name": "nonce",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "close",
+  "inputs": [
+   {
+    "name": "c",
+    "type": "tuple",
+    "internalType": "struct LevRouter.CloseIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "positionId",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "limitTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   },
+   {
+    "name": "r",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "s",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "domainSeparator",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "eip712Domain",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "fields",
+    "type": "bytes1",
+    "internalType": "bytes1"
+   },
+   {
+    "name": "name",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "version",
+    "type": "string",
+    "internalType": "string"
+   },
+   {
+    "name": "chainId",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "verifyingContract",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "salt",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "extensions",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "epochOf",
+  "inputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "exchange",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract ILevExchangeForRouter"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "generationOf",
+  "inputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "globalEpoch",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "guardian",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hashClose",
+  "inputs": [
+   {
+    "name": "c",
+    "type": "tuple",
+    "internalType": "struct LevRouter.CloseIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "positionId",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "limitTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hashOpen",
+  "inputs": [
+   {
+    "name": "o",
+    "type": "tuple",
+    "internalType": "struct LevRouter.OpenIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "limitTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hashRevoke",
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tuple",
+    "internalType": "struct LevRouter.RevokeIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "hashWithdraw",
+  "inputs": [
+   {
+    "name": "w",
+    "type": "tuple",
+    "internalType": "struct LevRouter.WithdrawIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "amount",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "nonceUsed",
+  "inputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "open",
+  "inputs": [
+   {
+    "name": "o",
+    "type": "tuple",
+    "internalType": "struct LevRouter.OpenIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "limitTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   },
+   {
+    "name": "r",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "s",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "openedBy",
+  "inputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "owner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "paused",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "pendingOwner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "renounceOwnership",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "revoke",
+  "inputs": [
+   {
+    "name": "key",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "revokeAll",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "revokeBySig",
+  "inputs": [
+   {
+    "name": "v",
+    "type": "tuple",
+    "internalType": "struct LevRouter.RevokeIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   },
+   {
+    "name": "r",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "s",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "revokeEverySession",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "sessionGlobalEpoch",
+  "inputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint32",
+    "internalType": "uint32"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "sessionOf",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "key",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "s",
+    "type": "tuple",
+    "internalType": "struct LevRouter.Session",
+    "components": [
+     {
+      "name": "qx",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "qy",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "limits",
+      "type": "tuple",
+      "internalType": "struct LevRouter.Limits",
+      "components": [
+       {
+        "name": "expiry",
+        "type": "uint64",
+        "internalType": "uint64"
+       },
+       {
+        "name": "actions",
+        "type": "uint8",
+        "internalType": "uint8"
+       },
+       {
+        "name": "maxLeverage",
+        "type": "uint8",
+        "internalType": "uint8"
+       },
+       {
+        "name": "openSlipTicks",
+        "type": "uint16",
+        "internalType": "uint16"
+       },
+       {
+        "name": "closeSlipTicks",
+        "type": "uint16",
+        "internalType": "uint16"
+       },
+       {
+        "name": "maxStakePerTrade",
+        "type": "uint96",
+        "internalType": "uint96"
+       },
+       {
+        "name": "maxOpenStake",
+        "type": "uint96",
+        "internalType": "uint96"
+       },
+       {
+        "name": "dailyBudget",
+        "type": "uint96",
+        "internalType": "uint96"
+       }
+      ]
+     },
+     {
+      "name": "epoch",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "dayStart",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "spentToday",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "active",
+      "type": "bool",
+      "internalType": "bool"
+     }
+    ]
+   },
+   {
+    "name": "live",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "setGuardian",
+  "inputs": [
+   {
+    "name": "guardian_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setPaused",
+  "inputs": [
+   {
+    "name": "paused_",
+    "type": "bool",
+    "internalType": "bool"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "transferOwnership",
+  "inputs": [
+   {
+    "name": "newOwner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "withdraw",
+  "inputs": [
+   {
+    "name": "w",
+    "type": "tuple",
+    "internalType": "struct LevRouter.WithdrawIntent",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "key",
+      "type": "bytes32",
+      "internalType": "bytes32"
+     },
+     {
+      "name": "generation",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "amount",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "nonce",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "deadline",
+      "type": "uint64",
+      "internalType": "uint64"
+     }
+    ]
+   },
+   {
+    "name": "r",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   },
+   {
+    "name": "s",
+    "type": "bytes32",
+    "internalType": "bytes32"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "event",
+  "name": "AllSessionsRevoked",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "epoch",
+    "type": "uint32",
+    "indexed": false,
+    "internalType": "uint32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "EIP712DomainChanged",
+  "inputs": [],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "EverySessionRevoked",
+  "inputs": [
+   {
+    "name": "globalEpoch",
+    "type": "uint32",
+    "indexed": false,
+    "internalType": "uint32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "IntentExecuted",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "key",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "nonce",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "kind",
+    "type": "uint8",
+    "indexed": false,
+    "internalType": "uint8"
+   },
+   {
+    "name": "positionIdOrAmount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "submitter",
+    "type": "address",
+    "indexed": false,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "NonceCancelled",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "nonce",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OwnershipTransferStarted",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OwnershipTransferred",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "PausedSet",
+  "inputs": [
+   {
+    "name": "paused",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "SessionAuthorized",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "key",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "generation",
+    "type": "uint32",
+    "indexed": false,
+    "internalType": "uint32"
+   },
+   {
+    "name": "qx",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "qy",
+    "type": "bytes32",
+    "indexed": false,
+    "internalType": "bytes32"
+   },
+   {
+    "name": "limits",
+    "type": "tuple",
+    "indexed": false,
+    "internalType": "struct LevRouter.Limits",
+    "components": [
+     {
+      "name": "expiry",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "actions",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "maxLeverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "openSlipTicks",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "closeSlipTicks",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "maxStakePerTrade",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "maxOpenStake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "dailyBudget",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "SessionRevoked",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "key",
+    "type": "bytes32",
+    "indexed": true,
+    "internalType": "bytes32"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "error",
+  "name": "BadDeadline",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BadKey",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BadLimits",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BadSignature",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidShortString",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NonceUsed",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotAllowed",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "OverLimit",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "OwnableInvalidOwner",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "OwnableUnauthorizedAccount",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "Paused",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "SessionInvalid",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "StringTooLong",
+  "inputs": [
+   {
+    "name": "str",
+    "type": "string",
+    "internalType": "string"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "Unauthorized",
+  "inputs": []
+ }
+]
