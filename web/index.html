@@ -1547,6 +1547,7 @@ function route() {
   window.scrollTo(0, 0);
   if (!LAUNCH) return renderSetup();
   if (h.startsWith("/t/")) return renderToken(h.slice(3));
+  // other launchpads' tokens aren't listed any more; this page stays so holders can still sell what they bought here
   if (h.startsWith("/x/")) { const [k, a] = h.slice(3).split("/"); return renderMarketToken(k, a); }
   if (h === "/create") return renderCreate();
   if (h === "/admin") return renderAdmin();
@@ -1555,29 +1556,17 @@ function route() {
   return renderHome();
 }
 
-// Search, like FOMO: a pasted contract address opens its token at once (ours, or any token trading on our chains);
-// a name or ticker lists matches from every chain under the box (our launches first, then DexScreener's search),
-// and filters Discover's list too.
+// Search: a pasted contract address opens its token at once; a name or ticker lists our launches that match under
+// the box, and filters Discover's list too.
 let SEARCH = "", searchSeq = 0, searchT = 0;
 const sres = () => $("#sres");
 const openCA = (v) => { $("#q").value = ""; SEARCH = ""; sres().hidden = true; window.showDiscoverList?.(); location.hash = "#/t/" + ethers.getAddress(v.toLowerCase()); };
 async function searchTokens(q) {
   const ql = q.toLowerCase().replace(/^\$/, "");
-  const own = (ALL_OWN || []).filter(({ t }) => isListed(t) && (t.name.toLowerCase().includes(ql) || t.symbol.toLowerCase().includes(ql)))
+  if (!ALL_OWN) await allTokenInfos().catch(() => {});
+  return (ALL_OWN || []).filter(({ t }) => isListed(t) && (t.name.toLowerCase().includes(ql) || t.symbol.toLowerCase().includes(ql)))
     .map(({ t, P }) => ({ href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: P.ch, mc: toUsdNum(t.marketCap, t.quote), liq: 0, own: true }))
-    .sort((a, b) => b.mc - a.mc).slice(0, 4);
-  const ids = new Map(gtChains().filter((c) => c.dex).map((c) => [c.dex, c]));
-  let pairs = [];
-  try { pairs = (await (await fetch(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(q)}`, { signal: AbortSignal.timeout(8000) })).json()).pairs || []; } catch {}
-  const best = new Map();
-  for (const p of pairs) {
-    const ch = ids.get(p.chainId), b = p.baseToken;
-    if (!ch || !b?.address || TOKEN_PAD.has(b.address.toLowerCase()) || MAJORS.has(String(b.symbol).toUpperCase())) continue;
-    const k = ch.key + b.address.toLowerCase(), liq = Number(p.liquidity?.usd) || 0;
-    if (!best.has(k) || liq > best.get(k).liq) best.set(k, { href: `#/x/${ch.key}/${ethers.getAddress(b.address)}`, av: mAvatar({ image: p.info?.imageUrl || "", symbol: b.symbol }),
-      name: b.name, symbol: b.symbol, ch, mc: Number(p.marketCap || p.fdv) || 0, liq, own: false });
-  }
-  return [...own, ...[...best.values()].sort((a, b) => b.liq - a.liq).slice(0, 10 - own.length)];
+    .sort((a, b) => b.mc - a.mc).slice(0, 10);
 }
 function showResults(list, q) {
   const box = sres();
@@ -1585,7 +1574,7 @@ function showResults(list, q) {
   box.innerHTML = list.length ? list.map((x, i) => `<a href="${x.href}" role="option" class="${i === 0 ? "on" : ""}">${x.av}
       <div style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? `<span class="pill">PepesFamily</span>` : ""}</div><div class="sub">$${esc(x.symbol)} · ${esc(x.ch.short)}</div></div>
       <div class="r">${x.mc ? "$" + compact(x.mc) : "—"}<div class="w">${x.liq ? "liq $" + compact(x.liq) : "mcap"}</div></div></a>`).join("")
-    : `<div class="msg">No token matches “${esc(q)}”. Paste its contract address to open it.</div>`;
+    : `<div class="msg">No PepesFamily token matches “${esc(q)}”.</div>`;
 }
 $("#q").addEventListener("input", () => {
   const v = $("#q").value.trim();
@@ -1685,7 +1674,7 @@ function discoverFrame(chains) {
     <div class="dgrid">
       <section class="card listcard" aria-label="All tokens">
         <div class="tools">
-          <div class="utabs" id="sort" role="tablist"><button type="button" data-s="hot">Trending</button><button type="button" data-s="new">New</button><button type="button" data-s="mc">Market cap</button><button type="button" data-s="gain">Gainers</button><button type="button" data-s="pf">PepesFamily</button></div>
+          <div class="utabs" id="sort" role="tablist"><button type="button" data-s="hot">Trending</button><button type="button" data-s="new">New</button><button type="button" data-s="mc">Market cap</button><button type="button" data-s="gain">Gainers</button></div>
           <div class="seg" id="chainf"><button type="button" data-c="all">All chains</button>${chains.map((c) => `<button type="button" data-c="${c.key}">${esc(c.short)}</button>`).join("")}</div>
         </div>
         <div id="list">${THEAD}${skelRow.repeat(8)}</div>
@@ -1703,8 +1692,8 @@ function discoverFrame(chains) {
     </footer>`;
 }
 
-/// Discover, the home page. Its question: what is moving right now that I could buy? Trending tokens by 24 h volume,
-/// every token ranked (trending, new, top, gainers) on every chain, and the live tape of buys and sells.
+/// Discover, the home page. Its question: what is moving right now that I could buy? Tokens launched on PepesFamily,
+/// ranked (trending, new, top, gainers) on every chain, and the live tape of buys and sells.
 async function renderHome() {
   const gen = routeGen;
   const chains = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
@@ -1714,7 +1703,7 @@ async function renderHome() {
   loadOfficial().catch((e) => console.warn("official token", e));
 
   let sortMode = "hot";
-  try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain", "pf"].includes(v)) sortMode = v; } catch {}
+  try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain"].includes(v)) sortMode = v; } catch {}
   let chainMode = "all";
   try { const c = localStorage.getItem("tokenChain"); if (c && (c === "all" || chains.some((x) => x.key === c))) chainMode = c; } catch {}
   let listed = null, mk = { per: new Map(), recent: [] }, shownCount = 15, market = null;
@@ -1732,8 +1721,7 @@ async function renderHome() {
   const chainOf = (t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch;
   const ownHot = (list) => [...list].sort((a, b) => (M(b) ? toUsdNum(M(b).vol, b.quote) : 0) - (M(a) ? toUsdNum(M(a).vol, a.quote) : 0)
     || toUsdNum(b.marketCap, b.quote) - toUsdNum(a.marketCap, a.quote));
-  // One list, like a trading app: tokens launched here and trending tokens from other launchpads and DEXes on our
-  // chains (GeckoTerminal), in the same shape. Ours carry the frog mark; every row buys the same way.
+  // One list of tokens launched here (`market` stays empty: other launchpads' tokens aren't listed).
   const FROG = `<svg class="pfmark" viewBox="0 0 32 32" aria-label="Launched on PepesFamily" role="img"><title>Launched on PepesFamily</title><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.4" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.4" fill="#fff"/></svg>`;
   const items = () => {
     const own = (listed || []).map((t) => {
@@ -1752,7 +1740,6 @@ async function renderHome() {
   const inScope = () => {
     const q = SEARCH.toLowerCase().replace(/^\$/, "");
     let shown = chainMode === "all" ? items() : items().filter((x) => x.ch?.key === chainMode);
-    if (sortMode === "pf") shown = shown.filter((x) => x.own);
     if (q) shown = shown.filter((x) => x.name.toLowerCase().includes(q) || x.symbol.toLowerCase().includes(q) || x.address.toLowerCase().startsWith(q));
     return shown;
   };
@@ -1774,7 +1761,7 @@ async function renderHome() {
     // one row that fails to render (odd creator data) is skipped, never the whole list
     const safe = (x, i) => { try { return row(x, i + 1); } catch (e) { console.warn("token row", x.address, e); return ""; } };
     $("#list").innerHTML = THEAD + (sorted.length ? sorted.map(safe).join("")
-      : `<div class="empty">${SEARCH ? `No token matches “${esc(SEARCH)}”. Paste a contract address in the search to open any token.` : `No tokens on ${esc(CHAINS[chainMode]?.name || "this chain")} yet.`} <a class="lnk" href="#/create">Launch one</a></div>`)
+      : `<div class="empty">${SEARCH ? `No token matches “${esc(SEARCH)}”.` : `No tokens on ${esc(CHAINS[chainMode]?.name || "this chain")} yet.`} <a class="lnk" href="#/create">Launch one</a></div>`)
       + (all.length > shownCount ? `<div class="more"><button type="button" id="more">Show ${Math.min(25, all.length - shownCount)} more · ${shownCount} of ${all.length}</button></div>` : "");
     const more = $("#more"); if (more) more.onclick = () => { shownCount += 25; showList(); };
   };
@@ -1790,8 +1777,8 @@ async function renderHome() {
         <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
       || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
   };
-  // the first trending page of every chain at once, then the rest (about 100 tokens a chain) when it comes in
-  const loadMarket = () => marketTokens().then((m) => { market = m; }).catch((e) => console.warn("markets", e)).finally(() => { showList(); showTrend(); saveCache(); });
+  // Discover lists only tokens launched here; other launchpads' tokens are no longer shown
+  const loadMarket = () => { market = []; showList(); showTrend(); saveCache(); };
   // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
   let posSeq = 0;
   const showPositions = window.refreshPositions = async () => {
@@ -1977,7 +1964,7 @@ const heldList = () => { try { return JSON.parse(localStorage.getItem(heldKey())
 async function loadPositions() {
   if (!account) return null;
   const who = account;
-  const [own, market] = await Promise.all([allTokenInfos().catch(() => []), marketTokens().catch(() => [])]);
+  const own = await allTokenInfos().catch(() => []), market = [];
   const want = new Map(); // chain key -> Map(address -> entry)
   const add = (ch, address, entry) => { if (!want.has(ch.key)) want.set(ch.key, new Map()); const m = want.get(ch.key); if (!m.has(address.toLowerCase())) m.set(address.toLowerCase(), entry); };
   for (const { t, P } of own) if (isListed(t)) add(P.ch, t.token, { kind: "own", t, ch: P.ch });
@@ -2058,49 +2045,10 @@ const gtChains = () => Object.values(CHAINS).filter((c) => c.gt && !c.testnet);
 // coins, wrapped coins and stablecoins: trending pools are full of them, they are not what people come to find
 const MAJORS = new Set(["ETH", "WETH", "BNB", "WBNB", "HYPE", "WHYPE", "KHYPE", "STHYPE", "USDC", "USDT", "USDT0", "USD₮0", "USDG",
   "USDE", "USDS", "DAI", "FDUSD", "USD1", "USDH", "BTC", "WBTC", "BTCB", "UBTC", "CBBTC", "STETH", "WSTETH", "CBETH", "UETH"]);
-/// Trending tokens on every chain (one entry per token, its busiest pool): { ch, address, name, symbol, image, price,
-/// mc, vol, chg, liq, created, pool }. Our own launches are left out (they have their own list).
-/// A short list like FOMO's (GeckoTerminal's first trending page, 20 pools a chain): search finds everything else.
-const MARKET_POOL = new Map(); // chain key + token -> its most liquid pool seen in the lists ({ pool, liq }), for the chart
-async function marketTokens() {
-  const lists = await Promise.all(gtChains().map((ch) => one(ch, `/networks/${ch.gt}/trending_pools?page=1&include=base_token`)));
-  async function one(ch, path) {
-    const j = await gtGet(path).catch(() => null);
-    if (!j?.data) return [];
-    const toks = new Map((j.included || []).map((t) => [t.id, t.attributes]));
-    return j.data.map((p) => {
-      const a = p.attributes, t = toks.get(p.relationships?.base_token?.data?.id);
-      if (!t) return null;
-      const sym = String(t.symbol).toUpperCase(), px = Number(a.base_token_price_usd) || 0;
-      // stablecoins: anything named like a dollar or trading flat at $1 (RLUSD, PYUSD, USDe…), as well as the majors
-      if (MAJORS.has(sym) || sym.includes("USD") || (px > 0.97 && px < 1.03) || TOKEN_PAD.has(t.address.toLowerCase())) return null;
-      return { ch, address: ethers.getAddress(t.address), name: t.name, symbol: t.symbol, decimals: Number(t.decimals) || 18, image: t.image_url && t.image_url !== "missing.png" ? t.image_url : "",
-        price: Number(a.base_token_price_usd) || 0, mc: Number(a.market_cap_usd || a.fdv_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
-        chg: a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null, liq: Number(a.reserve_in_usd) || 0,
-        created: a.pool_created_at ? Date.parse(a.pool_created_at) / 1000 : 0, pool: a.address };
-    }).filter(Boolean).map((x) => { if (!MARKET_POOL.has(x.ch.key + x.address.toLowerCase()) || x.liq > (MARKET_POOL.get(x.ch.key + x.address.toLowerCase()).liq || 0)) MARKET_POOL.set(x.ch.key + x.address.toLowerCase(), { pool: x.pool, liq: x.liq }); return x; });
-  }
-  const best = new Map();
-  for (const x of lists.flat().filter(Boolean)) { const k = x.ch.key + x.address.toLowerCase(), o = best.get(k); if (!o || x.vol > o.vol) best.set(k, x); }
-  if (!best.size && lists.every((l) => !l.length)) throw new Error("no chain answered");
-  return [...best.values()];
-}
+const MARKET_POOL = new Map(); // chain key + token -> its most liquid pool ({ pool, base }), for the chart
 /// A token's picture from the market data (falls back to its ticker letters like our own tokens).
 const mAvatar = (x, cls = "") => (x.image ? `<img class="avatar ${cls}" width="${cls === "lg" ? 64 : 48}" height="${cls === "lg" ? 64 : 48}" src="${esc(x.image)}" alt="${esc(String(x.symbol).slice(0, 2))}" loading="lazy" referrerpolicy="no-referrer">`
   : `<div class="avatar ${cls}">${esc(String(x.symbol || "?").slice(0, 2))}</div>`);
-/// Which of our chains `addr` trades on (DexScreener; the most liquid pair wins): the chain key, or null.
-async function findMarketChain(addr) {
-  const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, { signal: AbortSignal.timeout(10000) });
-  const ids = new Map(gtChains().filter((c) => c.dex).map((c) => [c.dex, c.key]));
-  const pairs = ((await r.json())?.pairs || []).filter((p) => ids.has(p.chainId)).sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0));
-  if (pairs.length) return ids.get(pairs[0].chainId);
-  // brand-new tokens DexScreener hasn't listed yet: the first of our chains where GeckoTerminal knows it
-  for (const ch of gtChains()) {
-    const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000).catch(() => null);
-    if (j?.data) return ch.key;
-  }
-  return null;
-}
 /// One token's market data on `ch`: DexScreener first (its most liquid pair), GeckoTerminal if DexScreener has
 /// nothing. { name, symbol, image, price, mc, liq, vol, chg, chart (an embeddable chart URL or "") }.
 async function marketToken(ch, addr) {
@@ -3765,11 +3713,7 @@ async function renderToken(addr) {
   }
   if (stale()) return;
   if (!P) {
-    // not launched here: open it as a market token if it trades on one of our chains
-    const k = await findMarketChain(addr).catch(() => null);
-    if (stale()) return;
-    if (k) return (location.hash = `#/x/${k}/${ethers.getAddress(addr)}`);
-    return (app.innerHTML = `<div class="card empty"><h1>Token not found</h1><p>${esc(short(addr))} isn't a PepesFamily token and doesn't trade on Robinhood Chain, Ethereum, Base, HyperEVM or BSC.</p></div>`);
+    return (app.innerHTML = `<div class="card empty"><h1>Token not found</h1><p>${esc(short(addr))} wasn't launched on PepesFamily. Only tokens launched here are listed and traded here.</p></div>`);
   }
   const sp = await splitOf(P, addr).catch(() => null); // v5: where this token's 3% goes
   if (stale()) return;
