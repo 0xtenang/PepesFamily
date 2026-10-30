@@ -1,4 +1,5 @@
-// Local end-to-end check: a trader opens four positions, prices move, one keeper pass handles them.
+// Local end-to-end check: a trader opens five positions and places an order, prices move, and one keeper pass
+// liquidates, closes at max win, settles a rugged short, fires a stop-loss and fills the order.
 //   node src/e2e.ts      (needs the local anvil stack)
 
 import { execFileSync } from 'node:child_process';
@@ -58,10 +59,16 @@ await write(trader, ex, exchangeAbi, 'deposit', [], parseEther('1'));
 const liq = await openPos('PLONK', true, 10, '0.05');
 const maxWin = await openPos('WOB', false, 5, '0.05');
 const keep = await openPos('SNRK', true, 2, '0.02');
-const rugged = await openPos('GRMB', false, 2, '0.02');
+const rugged = await openPos('GRMB', false, 2, '0.01'); // 9 ETH of liquidity: 0.0225 ETH of new size an hour
+const stopped = await openPos('WOB', true, 2, '0.05');
+await write(trader, ex, exchangeAbi, 'setTriggers', [stopped, false, 0, true, (await read<{ position: { entryTick: number } }>('getPosition', [stopped], d.lens, lensAbiJson as Abi)).position.entryTick - 513]); // stop at -5%
+// a short that opens once PLONK is 10% down (fills may run up to 1000 ticks past the trigger)
+const plonkTick = await tickOf(bySymbol('PLONK').uniPool);
+await write(trader, ex, exchangeAbi, 'placeOrder', [BigInt(bySymbol('PLONK').id), false, 2, parseEther('0.02'), plonkTick - 1054, false, 1000, BigInt(Math.floor(Date.now() / 1000) + 86_400)]);
+const orderId = (await read<bigint[]>('orderIdsOf', [trader.account.address]))[0];
 
 await movePct('PLONK', -15); // 10x long wiped out
-await movePct('WOB', -20); // 5x short reaches its +100% max win
+await movePct('WOB', -22); // 5x short reaches its +100% max win (past the entry spread); the 2x long's stop fires
 await movePct('SNRK', 5); // stays open
 await movePct('GRMB', -90); // rug
 // Let the 60-second fast averages catch up.
@@ -76,7 +83,10 @@ const results = {
   closedAtMaxWin: !(await isOpen(maxWin)),
   ruggedShortSettled: !(await isOpen(rugged)),
   untouchedStillOpen: await isOpen(keep),
+  stopLossFired: !(await isOpen(stopped)),
+  orderFilled: (await read<bigint[]>('orderIdsOf', [trader.account.address])).length === 0 && (await read<bigint>('orderEscrow')) === 0n,
 };
+void orderId;
 await write(trader, ex, exchangeAbi, 'close', [keep, -8_388_608]); // a long: no price limit
 const cash1 = await read<bigint>('cash', [], d.pool, poolAbi);
 const poolBal = await pub.getBalance({ address: d.pool });

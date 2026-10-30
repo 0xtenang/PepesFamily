@@ -43,6 +43,7 @@ struct Side {
     uint256 expo; // sum of size * 1.0001^(refTick - entryTick): current value = expo * 1.0001^(tick - refTick)
     uint256 feeIndex; // cumulative holding fee per 1e18 of size
     uint256 sizeIndexSum; // sum of size * feeIndex at open / 1e18: holding fees owed = size * feeIndex / 1e18 - this
+    uint256 margin; // collateral added to open positions after they opened (LevExchange.marginOf)
 }
 
 struct Market {
@@ -63,6 +64,8 @@ struct Market {
     uint256 netCapEth;
     Side longs;
     Side shorts;
+    uint64 growthStart; // start of the current hour for the new-size limit
+    uint256 growthSize; // size opened on this coin since growthStart
 }
 
 struct Position {
@@ -76,4 +79,43 @@ struct Position {
     uint32 maxWinBps;
     uint96 stake;
     uint256 feeIndex;
+}
+
+/// @dev Risk limits learned from Hyperliquid, Veranta and Inverse (2026-10-30). Ticks: 1.0001^ticks, so 100 ticks
+///      is about 1%.
+struct RiskConfig {
+    uint24 openBandSpotTicks; // no new positions while spot and the fast price differ by more than this
+    uint24 openBandTrendTicks; // ...or the fast and the slow price by more than this
+    uint24 pumpBandTicks; // a long's exit is priced at most this far above the slow price
+    uint16 spreadBaseBps; // opens and closes fill this much worse than the oracle price...
+    uint32 spreadImpactBps; // ...plus the position's share of the coin's liquidity times this...
+    uint16 spreadMaxBps; // ...up to this
+    uint16 sizeTier5xBps; // a position larger than this share of the coin's liquidity gets at most 5x
+    uint16 sizeTier2xBps; // ...larger than this, at most 2x
+    uint16 hourlyGrowthBps; // new size per coin per hour, as a share of the coin's cap
+    uint32 platformSizeBps; // open size across all coins, as a share of pool cash
+}
+
+/// @dev Take-profit and stop-loss levels of a position, as fast-price ticks. Anyone may close the position once
+///      the fast price reaches one (`closeByTrigger`), and is paid a share of its fees.
+struct Trigger {
+    int24 takeProfit;
+    int24 stopLoss;
+    bool hasTakeProfit;
+    bool hasStopLoss;
+}
+
+/// @dev An order that opens a position once the fast price reaches `triggerTick` (from below when `above`, from
+///      above otherwise). The stake and the open fee wait in escrow until it fills, is cancelled or expires.
+struct Order {
+    address owner;
+    uint32 marketId;
+    bool isLong;
+    bool above;
+    uint8 leverage;
+    int24 triggerTick;
+    uint24 slipTicks; // the fill may be at most this far past the trigger, against the trader
+    uint64 expiresAt;
+    uint96 stake;
+    uint96 escrow;
 }

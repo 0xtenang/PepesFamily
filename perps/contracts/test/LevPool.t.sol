@@ -192,10 +192,10 @@ contract LpTimingTest is Base {
         ex.closeAtMaxWin(id);
         uint256 lp2Got = lp2.balance - before;
         uint256 lp1Left = pool.previewRedeem(pool.balanceOf(lp));
-        // The leaver carries the winner's payout too. Holding fees owed are left out of NAV,
-        // so leaving early is slightly worse than staying, never better.
+        // The leaver carries the winner's payout too. Holding fees owed are left out of NAV, and leaving while
+        // traders are winning pays the stress fee (kept for lp1), so leaving early is worse than staying, never better.
         assertLe(lp2Got, lp1Left);
-        assertApproxEqRel(lp2Got, lp1Left, 0.03e18);
+        assertApproxEqRel(lp2Got, lp1Left, 0.06e18);
     }
 
     function test_depositPricedAtTheHigherValue() public {

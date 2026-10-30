@@ -5,7 +5,7 @@ import {LevExchange} from "./LevExchange.sol";
 import {LevExchangeAdmin} from "./LevExchangeAdmin.sol";
 import {ILevPool} from "./interfaces/ILevPool.sol";
 import {LevLogic} from "./libraries/LevLogic.sol";
-import {Config, Side, Market, Position} from "./LevTypes.sol";
+import {Config, Side, Market, Position, RiskConfig, Trigger, Order} from "./LevTypes.sol";
 
 /// @title LevLens
 /// @notice Read-only previews for apps and keepers (what `open` would do, where each position stands) and the
@@ -27,11 +27,18 @@ contract LevLens {
     uint8 public constant QUOTE_STAKE = 8;
     uint8 public constant QUOTE_BREAKER = 9;
     uint8 public constant QUOTE_WOULD_LIQUIDATE = 10;
+    uint8 public constant QUOTE_PRICE_BAND = 11; // live, fast and slow prices disagree: the coin is being pushed
+    uint8 public constant QUOTE_GROWING_TOO_FAST = 12; // the coin took its hourly share of new size already
 
     uint8 public constant ACTION_NONE = 0;
     uint8 public constant ACTION_LIQUIDATE = 1;
     uint8 public constant ACTION_MAX_WIN = 2;
     uint8 public constant ACTION_RUG_SETTLE = 3;
+    uint8 public constant ACTION_TAKE_PROFIT = 4;
+    uint8 public constant ACTION_STOP_LOSS = 5;
+
+    uint8 public constant ORDER_FILL = 1;
+    uint8 public constant ORDER_EXPIRED = 2;
 
     struct MarketView {
         address oracle;
@@ -110,20 +117,17 @@ contract LevLens {
                 fast = m.lastGoodFast;
                 slow = m.lastGoodTick;
             }
-            int256 a = _marketLiability(m, spot);
-            int256 b = _marketLiability(m, fast);
-            int256 d = _marketLiability(m, slow);
-            int256 lo = a < b ? a : b;
-            if (d < lo) lo = d;
-            int256 hi = a > b ? a : b;
-            if (d > hi) hi = d;
+            // owedLow prices deposits: margin counts toward what losers lose. owedHigh prices withdrawals: it doesn't.
+            int256 lo = _min3(_marketLiability(m, spot, true), _marketLiability(m, fast, true), _marketLiability(m, slow, true));
+            int256 hi = _max3(_marketLiability(m, spot, false), _marketLiability(m, fast, false), _marketLiability(m, slow, false));
             owedLow += lo - int256(_feesOwedLowerBound(c, m, m.longs, m.shorts) + _feesOwedLowerBound(c, m, m.shorts, m.longs));
             owedHigh += hi;
         }
     }
 
-    function _marketLiability(Market memory m, int24 tick) internal pure returns (int256) {
-        return LevLogic.sideLiability(m.longs, true, m.refTick, tick) + LevLogic.sideLiability(m.shorts, false, m.refTick, tick);
+    function _marketLiability(Market memory m, int24 tick, bool withMargin) internal pure returns (int256) {
+        return LevLogic.sideLiability(m.longs, true, m.refTick, tick, withMargin)
+            + LevLogic.sideLiability(m.shorts, false, m.refTick, tick, withMargin);
     }
 
     /// @dev Holding fees one side already owes the pool, less the most the free first hour could waive, plus the
@@ -170,9 +174,11 @@ contract LevLens {
         });
     }
 
-    /// @notice Everything `open` would check, without reverting. `leverage` 0 means the highest allowed.
+    /// @notice Everything `open` would check, without reverting. `leverage` 0 means the highest allowed. The
+    ///         entry includes the spread; `maxLeverage` includes the size tiers for this stake.
     function quoteOpen(uint256 marketId, bool isLong, uint8 leverage, uint256 stake) public view returns (Quote memory q) {
         Config memory c = exchange.getConfig();
+        RiskConfig memory r = exchange.getRiskConfig();
         Market memory m = exchange.marketData(marketId);
         uint256 cash = pool.cash();
         bool ok;
@@ -181,27 +187,78 @@ contract LevLens {
             q.reason = QUOTE_ORACLE_DOWN;
             return q;
         }
-        q.entryTick = isLong ? _max24(q.spotTick, q.fastTick) : _min24(q.spotTick, q.fastTick);
-        q.maxLeverage = LevLogic.allowedLeverage(c, m.maxLeverage, q.liquidityEth, isLong);
+        q.maxLeverage = _maxLeverage(c, r, m.maxLeverage, q.liquidityEth, isLong, stake);
         uint8 lev = leverage == 0 ? q.maxLeverage : leverage;
+        uint256 size = stake * lev;
+        int24 fill = isLong ? _max24(q.spotTick, q.fastTick) : _min24(q.spotTick, q.fastTick);
+        q.entryTick = LevLogic.worsen(fill, LevLogic.spreadTicks(r, size, q.liquidityEth), isLong);
         q.maxWinBps = LevLogic.maxWinBps(c, cash, isLong, lev);
         q.netRoom = LevLogic.netRoom(c, m.netCapEth, m.longs.size, m.shorts.size, isLong, q.liquidityEth);
         uint256 coverRoom = (cash * c.coverageBps) / BPS;
         uint256 reserved = exchange.totalMaxWin();
         coverRoom = coverRoom > reserved ? coverRoom - reserved : 0;
         q.poolRoomStake = q.maxWinBps == 0 ? 0 : (coverRoom * BPS) / q.maxWinBps;
-        uint256 size = stake * lev;
         q.fee = LevLogic.tradeFee(c, stake, size);
+        q.reason = _quoteReason(c, r, m, q, isLong, lev, stake, cash);
+    }
 
-        if (exchange.opensPaused() || !m.active) q.reason = QUOTE_CLOSED;
-        else if (m.rugAt != 0 && block.timestamp < uint256(m.rugAt) + c.rugLockSeconds) q.reason = QUOTE_LOCKED;
-        else if (_breaker(c)) q.reason = QUOTE_BREAKER;
-        else if (stake < c.minStake) q.reason = QUOTE_STAKE;
-        else if (q.liquidityEth < c.minLiquidityEth) q.reason = QUOTE_LOW_LIQUIDITY;
-        else if (lev > q.maxLeverage) q.reason = QUOTE_LEVERAGE;
-        else if (q.netRoom < size) q.reason = QUOTE_COIN_FULL;
-        else if (stake > q.poolRoomStake) q.reason = QUOTE_POOL_FULL;
-        else if (_wouldLiquidate(c, q, isLong, lev, stake)) q.reason = QUOTE_WOULD_LIQUIDATE;
+    function _quoteReason(
+        Config memory c,
+        RiskConfig memory r,
+        Market memory m,
+        Quote memory q,
+        bool isLong,
+        uint8 lev,
+        uint256 stake,
+        uint256 cash
+    ) internal view returns (uint8) {
+        uint256 size = stake * lev;
+        if (exchange.opensPaused() || !m.active) return QUOTE_CLOSED;
+        if (m.rugAt != 0 && block.timestamp < uint256(m.rugAt) + c.rugLockSeconds) return QUOTE_LOCKED;
+        if (_breaker(c)) return QUOTE_BREAKER;
+        if (stake < c.minStake) return QUOTE_STAKE;
+        if (q.liquidityEth < c.minLiquidityEth) return QUOTE_LOW_LIQUIDITY;
+        if (!LevLogic.bandsOk(r, q.spotTick, q.fastTick, q.slowTick)) return QUOTE_PRICE_BAND;
+        if (lev == 0 || lev > q.maxLeverage) return QUOTE_LEVERAGE;
+        if (q.netRoom < size) return QUOTE_COIN_FULL;
+        uint256 grown = block.timestamp >= uint256(m.growthStart) + HOUR ? 0 : m.growthSize;
+        if ((grown + size) * BPS > LevLogic.coinCap(c, m.netCapEth, q.liquidityEth) * r.hourlyGrowthBps) {
+            return QUOTE_GROWING_TOO_FAST;
+        }
+        if (stake > q.poolRoomStake || (exchange.totalOpenSize() + size) * BPS > cash * r.platformSizeBps) return QUOTE_POOL_FULL;
+        if (_wouldLiquidate(c, q, isLong, lev, stake)) return QUOTE_WOULD_LIQUIDATE;
+        return QUOTE_OK;
+    }
+
+    /// @dev Highest leverage the coin's liquidity, the curator, the side and this stake's size tier allow.
+    function _maxLeverage(Config memory c, RiskConfig memory r, uint8 marketMax, uint256 liq, bool isLong, uint256 stake)
+        internal
+        pure
+        returns (uint8 lev)
+    {
+        lev = LevLogic.allowedLeverage(c, marketMax, liq, isLong);
+        while (lev > 1 && lev > LevLogic.sizeTierLeverage(r, stake * lev, liq)) lev--;
+    }
+
+    /// @notice The exit tick a close of position `id` would get right now (worse of live and fast price, the pump
+    ///         band for longs, the spread), for setting the close's price limit. `ok` is false while it can't close
+    ///         at a live price (feed down, rug under way, or settled at the rug price instead).
+    function quoteClose(uint256 id) external view returns (bool ok, int24 exitTick) {
+        Position memory p = exchange.positionData(id);
+        if (p.owner == address(0)) return (false, 0);
+        Config memory c = exchange.getConfig();
+        RiskConfig memory r = exchange.getRiskConfig();
+        Market memory m = exchange.marketData(p.marketId);
+        if (!p.isLong && p.rugEpoch < m.rugEpoch) return (false, 0);
+        int24 spot;
+        int24 fast;
+        int24 slow;
+        uint256 liq;
+        (ok, spot, fast, slow, liq) = _tryRead(m);
+        if (!ok || (!p.isLong && LevLogic.isRug(c, spot, slow))) return (false, 0);
+        exitTick = p.isLong ? _min24(spot, fast) : _max24(spot, fast);
+        if (p.isLong) exitTick = LevLogic.capLongExit(r, exitTick, slow);
+        exitTick = LevLogic.worsen(exitTick, LevLogic.spreadTicks(r, uint256(p.stake) * p.leverage, liq), !p.isLong);
     }
 
     function _wouldLiquidate(Config memory c, Quote memory q, bool isLong, uint8 lev, uint256 stake)
@@ -228,6 +285,7 @@ contract LevLens {
         Market memory m = exchange.marketData(p.marketId);
         v.position = p;
         v.size = uint256(p.stake) * p.leverage;
+        int256 margin = int256(exchange.marginOf(id));
         (uint256 gl, uint256 gs) = LevLogic.feeGrowth(c, block.timestamp - m.lastFeeUpdate, m.longs.size, m.shorts.size);
         uint256 indexNow = p.isLong ? m.longs.feeIndex + gl : m.shorts.feeIndex + gs;
         v.holdFee = LevLogic.holdFee(p, indexNow, c, block.timestamp);
@@ -243,16 +301,69 @@ contract LevLens {
             v.markTick = ok ? fast : m.lastGoodFast;
             v.pnl = LevLogic.pnl(p, v.markTick);
             int256 maxWin = int256((uint256(p.stake) * p.maxWinBps) / BPS);
-            int256 eqNow = stake + v.pnl - int256(v.holdFee);
+            int256 eqNow = stake + margin + v.pnl - int256(v.holdFee);
+            // a long's max win counts at the pump-band-capped price, as closeAtMaxWin counts it
+            int256 winPnl = p.isLong
+                ? LevLogic.pnl(p, LevLogic.capLongExit(exchange.getRiskConfig(), v.markTick, ok ? slow : m.lastGoodTick))
+                : v.pnl;
             // Report only what the exchange would accept now: a down feed counts once it is stale, and a short
             // can't be closed while a rug the guard hasn't caught yet is under way.
             bool actable = ok ? (p.isLong || !LevLogic.isRug(c, spot, slow)) : _stale(c, m);
             if (actable) {
-                if (v.pnl >= maxWin) v.action = ACTION_MAX_WIN;
+                if (winPnl >= maxWin) v.action = ACTION_MAX_WIN;
                 else if (eqNow <= int256((uint256(p.stake) * c.liqEquityBps) / BPS)) v.action = ACTION_LIQUIDATE;
+                else if (block.timestamp >= uint256(p.openedAt) + c.minHoldSeconds) v.action = _triggerAction(id, p, v.markTick);
             }
         }
-        v.equity = stake + v.pnl - int256(v.holdFee);
+        v.equity = stake + margin + v.pnl - int256(v.holdFee);
+    }
+
+    function _triggerAction(uint256 id, Position memory p, int24 fast) internal view returns (uint8) {
+        Trigger memory t = exchange.triggerOf(id);
+        if (t.hasTakeProfit && (p.isLong ? fast >= t.takeProfit : fast <= t.takeProfit)) return ACTION_TAKE_PROFIT;
+        if (t.hasStopLoss && (p.isLong ? fast <= t.stopLoss : fast >= t.stopLoss)) return ACTION_STOP_LOSS;
+        return ACTION_NONE;
+    }
+
+    /// @notice An owner's waiting orders, with their ids.
+    function ordersOf(address owner) external view returns (uint256[] memory ids, Order[] memory orders) {
+        ids = exchange.orderIdsOf(owner);
+        orders = new Order[](ids.length);
+        for (uint256 i; i < ids.length; ++i) {
+            orders[i] = exchange.orderData(ids[i]);
+        }
+    }
+
+    /// @notice Keeper helper: waiting orders in [offset, offset+limit) whose trigger the fast price has reached
+    ///         (ORDER_FILL) or that have expired (ORDER_EXPIRED: anyone may cancel them, refunding the owner).
+    function actionableOrders(uint256 offset, uint256 limit) external view returns (uint256[] memory ids, uint8[] memory kinds) {
+        uint256[] memory page = exchange.openOrderIds(offset, limit);
+        uint8[] memory all = new uint8[](page.length);
+        uint256 n;
+        for (uint256 i; i < page.length; ++i) {
+            Order memory o = exchange.orderData(page[i]);
+            if (block.timestamp > o.expiresAt) all[i] = ORDER_EXPIRED;
+            else if (_fillable(o)) all[i] = ORDER_FILL;
+            if (all[i] != 0) n++;
+        }
+        ids = new uint256[](n);
+        kinds = new uint8[](n);
+        uint256 k;
+        for (uint256 i; i < page.length; ++i) {
+            if (all[i] == 0) continue;
+            ids[k] = page[i];
+            kinds[k++] = all[i];
+        }
+    }
+
+    /// @dev True when fillOrder would succeed now: trigger reached, every open check passes, the fill within the
+    ///      order's slippage, and the escrow plus the owner's balance covering today's fee.
+    function _fillable(Order memory o) internal view returns (bool) {
+        Quote memory q = quoteOpen(o.marketId, o.isLong, o.leverage, o.stake);
+        if (q.reason != QUOTE_OK || (o.above ? q.fastTick < o.triggerTick : q.fastTick > o.triggerTick)) return false;
+        int256 limit = o.isLong ? int256(o.triggerTick) + int256(uint256(o.slipTicks)) : int256(o.triggerTick) - int256(uint256(o.slipTicks));
+        if (o.isLong ? int256(q.entryTick) > limit : int256(q.entryTick) < limit) return false;
+        return uint256(o.escrow) + exchange.balanceOf(o.owner) >= uint256(o.stake) + q.fee;
     }
 
     function positionsOf(address owner) external view returns (PositionView[] memory views) {
@@ -283,12 +394,13 @@ contract LevLens {
         }
     }
 
-    /// @notice Sum of all open stakes. The exchange holds exactly sum(balances) + this + treasuryBalance.
+    /// @notice Sum of all open stakes, with margin added to them. The exchange holds exactly sum(balances) + this
+    ///         + treasuryBalance + orderEscrow.
     function totalOpenStake() external view returns (uint256 total) {
         uint256 n = exchange.marketCount();
         for (uint256 i; i < n; ++i) {
             Market memory m = exchange.marketData(i);
-            total += m.longs.stake + m.shorts.stake;
+            total += m.longs.stake + m.shorts.stake + m.longs.margin + m.shorts.margin;
         }
     }
 
@@ -311,6 +423,16 @@ contract LevLens {
         } catch {
             return (false, 0, 0, 0, 0);
         }
+    }
+
+    function _min3(int256 a, int256 b, int256 c) internal pure returns (int256) {
+        int256 m = a < b ? a : b;
+        return c < m ? c : m;
+    }
+
+    function _max3(int256 a, int256 b, int256 c) internal pure returns (int256) {
+        int256 m = a > b ? a : b;
+        return c > m ? c : m;
     }
 
     function _max24(int24 a, int24 b) internal pure returns (int24) {

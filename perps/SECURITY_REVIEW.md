@@ -89,3 +89,18 @@ Disputed findings were not changed, except F39: the v1 `CreatorFeeRouter` it con
 | F53 | A stored session from a reset chain stays in 'Checking…' for hours | `web/src/lib/session.ts` |
 
 Full descriptions, attack scenarios, test evidence and impact reasoning for every finding are kept in the review run's results (`review2-result.json` in the session scratchpad).
+
+## Round 3 — 2026-10-30: risk rules and trader tools
+
+One adversarial reviewer read the change (diff against commit 64cacb3) with DESIGN.md and this file, and proved four findings with Foundry probes. All fixed; each has a regression test in `contracts/test/Review3Regression.t.sol`. After the fixes: 211 offline tests, the UBIK fork tests, the keeper e2e (liquidation, max win, rug settlement, stop-loss, order fill) and the relayer e2e (34 checks) pass.
+
+| # | Sev | Finding | Fix | Test |
+|---|---|---|---|---|
+| R3-1 | High | A take-profit set at a level already reached turned `closeByTrigger` into a close at the lagging fast price (skipping the worse-of-spot-and-fast rule), and the owner could take the keeper's fee share | Reached levels are refused; a trigger exit counts the live price (up to the 5% open band past fast); the owner gets no keeper share | `test_R3_1_*` |
+| R3-2 | Medium | The hourly growth limit counted opens but not closes: open and close a coin's allowance to block it for an hour | A position opened this hour gives its size back on close | `test_R3_2_closingFreesTheGrowthAllowance` |
+| R3-3 | Low | Margin raised the whole side's "all stakes lost" floor, overstating the value LPs withdraw at | Margin kept per side (`Side.margin`); it counts only in deposit pricing | `test_R3_3_marginDoesntLiftWithdrawalValue` |
+| R3-4 | Low | Orders that could never fill (a 10x short) were accepted and listed as fillable | `placeOrder` checks the coin's and the short leverage caps; the lens lists an order only when `fillOrder` would succeed | `test_R3_4_unfillableOrdersRefusedOrNotListed` |
+| R3-5 | Info | Stale-feed exits: close applied no spread, a trigger close the maximum | Both apply none (a stale exit is the last good fast price) | — |
+| R3-6 | Info | The session slippage bound is checked before the spread | Documented in DESIGN.md (the spread goes to the pool) | — |
+| R3-7 | Info | A large deposit just before a withdrawal can lower the stress-fee tier | Accepted: the deposit is locked by the 24 h cooldown | — |
+

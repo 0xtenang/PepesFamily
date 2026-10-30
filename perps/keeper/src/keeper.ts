@@ -4,9 +4,10 @@
 //   3. refreshes each coin's last good price: every REFRESH_OPEN_SECONDS (15 s) on coins with open positions and every
 //      REFRESH_SECONDS (120 s) on the rest; at once when a feed starts failing (starts the stale clock) or comes back
 //      (clears it), and every REFRESH_OPEN_SECONDS while it stays down with positions open,
-//   4. liquidates, then closes at max win, then settles rugged shorts, at most MAX_ACTIONS a pass (the next pass
-//      starts at once if more are waiting). A short at max win on a coin whose spot price has fallen to the rug level
-//      is not closed: it waits for the rug guard, which settles it at the rug cap instead,
+//   4. liquidates, then closes at max win, then settles rugged shorts, then fires take-profits and stop-losses and
+//      fills orders whose trigger price has been reached (refunding expired ones), at most MAX_ACTIONS a pass (the
+//      next pass starts at once if more are waiting). A short at max win on a coin whose spot price has fallen to
+//      the rug level is not closed: it waits for the rug guard, which settles it at the rug cap instead,
 //   5. withdraws its liquidation rewards to its wallet and logs an ALERT when its gas money runs low.
 // Each step's transactions are simulated together, sent back to back and confirmed together (see Sender in
 // config.ts), and every coin, oracle and step is isolated, so one failing read can't stop the others.
@@ -62,6 +63,10 @@ const DEFAULT_RUG_DROP_BPS = 8000; // the exchange's default; the live value is 
 const ACTION_LIQUIDATE = 1;
 const ACTION_MAX_WIN = 2;
 const ACTION_RUG_SETTLE = 3;
+const ACTION_TAKE_PROFIT = 4;
+const ACTION_STOP_LOSS = 5;
+const ORDER_FILL = 1;
+const ORDER_EXPIRED = 2;
 
 type MarketView = { oracle: Address; lastGoodAt: bigint; downSince: bigint; longStake: bigint; shortStake: bigint };
 type PositionView = { position: { isLong: boolean; marketId: number }; action: number };
@@ -326,26 +331,58 @@ async function positionCalls(dropBps: number, markets: (MarketState | undefined)
   const liquidate: bigint[] = [];
   const maxWin: bigint[] = [];
   const settle: bigint[] = [];
+  const triggered: bigint[] = [];
   for (const [ids, actions] of pages) {
     ids.forEach((id, i) => {
       if (actions[i] === ACTION_LIQUIDATE) liquidate.push(id);
       else if (actions[i] === ACTION_MAX_WIN) maxWin.push(id);
       else if (actions[i] === ACTION_RUG_SETTLE) settle.push(id);
+      else if (actions[i] === ACTION_TAKE_PROFIT || actions[i] === ACTION_STOP_LOSS) triggered.push(id);
     });
   }
   const closable = await closableAtMaxWin(maxWin, at, dropBps, markets);
-  const call = (id: bigint, functionName: 'liquidate' | 'closeAtMaxWin' | 'settleRugged'): Call => ({
+  const call = (id: bigint, functionName: 'liquidate' | 'closeAtMaxWin' | 'settleRugged' | 'closeByTrigger', quiet?: string[]): Call => ({
     address: exchange,
     abi: exchangeAbi,
     functionName,
     args: [id],
     label: `position ${id} ${functionName}`,
+    quiet,
   });
+  const [fills, expired] = await orderActions(at);
+  // An order can wait on a limit that clears later (a full coin or pool, the price bands, the breaker): it stays.
+  const waits = ['NotTriggered', 'PriceMoved', 'PriceBand', 'CoinFull', 'PoolFull', 'GrowingTooFast', 'BreakerTripped', 'MarketLocked', 'LeverageNotAllowed', 'InsufficientBalance', 'WouldLiquidate', 'LiquidityTooLow', 'OracleDown'];
   return [
     ...liquidate.map((id) => call(id, 'liquidate')),
     ...closable.map((id) => call(id, 'closeAtMaxWin')),
     ...settle.map((id) => call(id, 'settleRugged')),
+    // a short's stop is held while a rug the guard hasn't caught is under way, like its max win
+    ...triggered.map((id) => call(id, 'closeByTrigger', ['NotTriggered', 'RugInProgress', 'OracleDown'])),
+    ...fills.map((id): Call => ({ address: exchange, abi: exchangeAbi, functionName: 'fillOrder', args: [id], label: `order ${id} fill`, quiet: waits })),
+    ...expired.map((id): Call => ({ address: exchange, abi: exchangeAbi, functionName: 'cancelOrder', args: [id], label: `order ${id} expired: refund`, quiet: ['NoOrder'] })),
   ];
+}
+
+/** Orders whose trigger the fast price has reached, and expired orders to refund, at block `at`. */
+async function orderActions(at: bigint): Promise<[bigint[], bigint[]]> {
+  const fills: bigint[] = [];
+  const expired: bigint[] = [];
+  const count = await readAt<bigint>(exchange, exchangeAbi, 'openOrderCount', [], at).catch((e) => {
+    log(`orders: count read failed (${why(e)})`);
+    return 0n;
+  });
+  const offsets: bigint[] = [];
+  for (let o = 0n; o < count; o += PAGE) offsets.push(o);
+  const pages = await mapLimit(offsets, READ_CONCURRENCY, (offset) =>
+    readAt<readonly [readonly bigint[], readonly number[]]>(d.lens, lensAbi, 'actionableOrders', [offset, PAGE], at).catch((e) => {
+      log(`orders from ${offset}: read failed (${why(e)})`);
+      return [[], []] as const;
+    }),
+  );
+  for (const [ids, kinds] of pages) {
+    ids.forEach((id, i) => (kinds[i] === ORDER_FILL ? fills : kinds[i] === ORDER_EXPIRED ? expired : []).push(id));
+  }
+  return [fills, expired];
 }
 
 // ------------------------------------------------------------------ gas money

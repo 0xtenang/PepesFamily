@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {Config} from "../LevTypes.sol";
+import {Config, RiskConfig} from "../LevTypes.sol";
 
 /// @notice The hard limits on LevExchange settings. A separately deployed library, to keep LevExchange under
 ///         the 24 KB contract size limit; it only runs when the owner changes the config.
@@ -22,6 +22,17 @@ library ConfigCheck {
             // Exits must never be frozen for long: a dead feed settles within an hour, a rug lock ends within a day.
             || c.staleSeconds > 1 hours || c.rugLockSeconds < 10 minutes || c.rugLockSeconds > 1 days
             || c.freeHoldSeconds > 6 hours;
+        return !bad;
+    }
+
+    /// @dev Bands between 1% and 20x (wide bands switch them off), a spread of at most 10%, size tiers within 5% of
+    ///      liquidity, between 10% and 6x a coin's cap per hour, and open size between half and ten times pool cash.
+    function isValidRisk(RiskConfig memory r) public pure returns (bool) {
+        bool bad = r.openBandSpotTicks < 100 || r.openBandSpotTicks > 30_000 || r.openBandTrendTicks < 100
+            || r.openBandTrendTicks > 30_000 || r.pumpBandTicks < 953 || r.pumpBandTicks > 30_000
+            || r.spreadMaxBps > 1000 || r.spreadBaseBps > r.spreadMaxBps || r.spreadImpactBps > 100_000
+            || r.sizeTier5xBps > r.sizeTier2xBps || r.sizeTier2xBps > 500 || r.hourlyGrowthBps < 1000
+            || r.hourlyGrowthBps > 6 * BPS || r.platformSizeBps < 5000 || r.platformSizeBps > 10 * BPS;
         return !bad;
     }
 }

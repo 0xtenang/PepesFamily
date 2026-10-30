@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/.foundry/bin:$PATH"
 (cd "$ROOT/contracts" && forge build >/dev/null)
 mkdir -p "$ROOT/abi"
-for c in LevLens LevRouter LevPool CreatorFeeRouterV2 PonsV4BuybackExecutor UniV3Oracle UniV4SampledOracle MockV3Pool; do
+for c in LevLens LevRouter LevPool CreatorFeeRouterV2 PonsV4BuybackExecutor UniV3Oracle UniV4SampledOracle UniV4BridgedOracle MockV3Pool; do
   python3 -c "import json,sys; json.dump(json.load(open(sys.argv[1]))['abi'], open(sys.argv[2],'w'), indent=1)" \
     "$ROOT/contracts/out/$c.sol/$c.json" "$ROOT/abi/$c.json"
 done

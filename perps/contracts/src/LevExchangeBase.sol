@@ -8,7 +8,7 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {ILevPool} from "./interfaces/ILevPool.sol";
 import {LevLogic} from "./libraries/LevLogic.sol";
 import {ConfigCheck} from "./libraries/ConfigCheck.sol";
-import {Config, Side, Market, Position} from "./LevTypes.sol";
+import {Config, Side, Market, Position, RiskConfig, Trigger, Order} from "./LevTypes.sol";
 
 /// @title LevExchangeBase
 /// @notice Storage, events, errors and shared helpers of the exchange. LevExchange (money paths) and
@@ -31,6 +31,7 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
     uint8 public constant EXIT_MAX_WIN = 2;
     uint8 public constant EXIT_RUG = 3;
     uint8 public constant EXIT_STALE = 4;
+    uint8 public constant EXIT_TRIGGER = 5; // take-profit or stop-loss
 
     address public treasury;
     address public guardian;
@@ -55,6 +56,16 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
     uint256 public hourStartCash;
     int256 public hourPoolPnl; // pool's trading result since hourStart: fees and losses in, wins out
     uint64 public breakerUntil; // new positions are paused until this time after the loss breaker trips
+
+    RiskConfig internal _risk;
+    uint256 public totalOpenSize; // open size across every coin, for the platform cap
+    mapping(uint256 => uint256) public marginOf; // collateral added to a position after it opened
+    mapping(uint256 => Trigger) internal _triggers;
+    mapping(uint256 => Order) internal _orders;
+    EnumerableSet.UintSet internal _openOrders;
+    mapping(address => EnumerableSet.UintSet) internal _ordersByOwner;
+    uint256 public nextOrderId = 1;
+    uint256 public orderEscrow; // ETH held for orders that haven't filled
 
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -89,6 +100,12 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
     event OpensPaused(bool paused);
     event TreasuryClaimed(address to, uint256 amount);
     event RouterSet(address router);
+    event RiskConfigUpdated();
+    event MarginAdded(uint256 indexed id, uint256 amount);
+    event TriggersSet(uint256 indexed id, bool hasTakeProfit, int24 takeProfit, bool hasStopLoss, int24 stopLoss);
+    event OrderPlaced(uint256 indexed orderId, address indexed owner, uint256 indexed marketId, Order order);
+    event OrderCancelled(uint256 indexed orderId);
+    event OrderFilled(uint256 indexed orderId, uint256 positionId);
 
     error MarketClosed();
     error MarketLocked();
@@ -115,6 +132,11 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
     error AlreadySet();
     error RugInProgress();
     error WouldLiquidate();
+    error PriceBand();
+    error GrowingTooFast();
+    error NotTriggered();
+    error NoOrder();
+    error OrderExpired();
 
     modifier onlyRouter() {
         if (msg.sender != router || router == address(0)) revert Unauthorized();
@@ -155,6 +177,20 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
         });
         _validate(c);
         _config = c;
+        RiskConfig memory r = RiskConfig({
+            openBandSpotTicks: 488, // 5%
+            openBandTrendTicks: 1823, // 20%
+            pumpBandTicks: 4055, // +50%
+            spreadBaseBps: 10,
+            spreadImpactBps: 20_000, // 2x the position's share of liquidity
+            spreadMaxBps: 300,
+            sizeTier5xBps: 10, // 0.1% of liquidity
+            sizeTier2xBps: 25, // 0.25%
+            hourlyGrowthBps: 5000,
+            platformSizeBps: 30_000
+        });
+        _validateRisk(r);
+        _risk = r;
     }
 
     // ---------------------------------------------------------------- shared
@@ -203,6 +239,20 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
     /// @dev Hard limits the owner can't go past, so LPs and traders know the worst case.
     function _validate(Config memory c) internal pure {
         if (!ConfigCheck.isValid(c)) revert BadConfig();
+    }
+
+    /// @dev Removes an order and returns its escrow to the owner's balance.
+    function _takeOrder(uint256 orderId) internal returns (Order memory o) {
+        o = _orders[orderId];
+        delete _orders[orderId];
+        _openOrders.remove(orderId);
+        _ordersByOwner[o.owner].remove(orderId);
+        orderEscrow -= o.escrow;
+        balanceOf[o.owner] += o.escrow;
+    }
+
+    function _validateRisk(RiskConfig memory r) internal pure {
+        if (!ConfigCheck.isValidRisk(r)) revert BadConfig();
     }
 
     function _max24(int24 a, int24 b) internal pure returns (int24) {

@@ -643,6 +643,19 @@
  },
  {
   "type": "function",
+  "name": "withdrawFeeBps",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "withdrawRequests",
   "inputs": [
    {
@@ -827,6 +840,25 @@
    },
    {
     "name": "shares",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "WithdrawFeeKept",
+  "inputs": [
+   {
+    "name": "lp",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "fee",
     "type": "uint256",
     "indexed": false,
     "internalType": "uint256"

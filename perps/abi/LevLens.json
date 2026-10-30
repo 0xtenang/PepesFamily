@@ -64,6 +64,58 @@
  },
  {
   "type": "function",
+  "name": "ACTION_STOP_LOSS",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ACTION_TAKE_PROFIT",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ORDER_EXPIRED",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "ORDER_FILL",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "QUOTE_BREAKER",
   "inputs": [],
   "outputs": [
@@ -91,6 +143,19 @@
  {
   "type": "function",
   "name": "QUOTE_COIN_FULL",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "QUOTE_GROWING_TOO_FAST",
   "inputs": [],
   "outputs": [
    {
@@ -181,6 +246,19 @@
  },
  {
   "type": "function",
+  "name": "QUOTE_PRICE_BAND",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "QUOTE_STAKE",
   "inputs": [],
   "outputs": [
@@ -228,6 +306,35 @@
    },
    {
     "name": "actions",
+    "type": "uint8[]",
+    "internalType": "uint8[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "actionableOrders",
+  "inputs": [
+   {
+    "name": "offset",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limit",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ids",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   },
+   {
+    "name": "kinds",
     "type": "uint8[]",
     "internalType": "uint8[]"
    }
@@ -481,6 +588,82 @@
  },
  {
   "type": "function",
+  "name": "ordersOf",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ids",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   },
+   {
+    "name": "orders",
+    "type": "tuple[]",
+    "internalType": "struct Order[]",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "above",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "triggerTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "slipTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "expiresAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "escrow",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "pool",
   "inputs": [],
   "outputs": [
@@ -596,6 +779,30 @@
       "internalType": "uint8"
      }
     ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "quoteClose",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ok",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "exitTick",
+    "type": "int24",
+    "internalType": "int24"
    }
   ],
   "stateMutability": "view"

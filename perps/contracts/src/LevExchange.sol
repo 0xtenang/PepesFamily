@@ -8,13 +8,14 @@ import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {ILevPool} from "./interfaces/ILevPool.sol";
 import {LevLogic} from "./libraries/LevLogic.sol";
 import {ConfigCheck} from "./libraries/ConfigCheck.sol";
-import {Config, Side, Market, Position} from "./LevTypes.sol";
+import {Config, Side, Market, Position, RiskConfig, Trigger, Order} from "./LevTypes.sol";
 import {LevExchangeBase} from "./LevExchangeBase.sol";
 
 /// @title LevExchange
 /// @notice Leveraged longs and shorts on curated memecoins. The LevPool takes the other side of every position.
 /// @dev Trader ETH sits here as internal balances and open stakes. The pool's money sits in LevPool.
-///      Invariant: address(this).balance == sum(balanceOf) + open stakes + treasuryBalance.
+///      Invariant: address(this).balance == sum(balanceOf) + open stakes (with added margin) + treasuryBalance
+///      + orderEscrow.
 ///      This contract holds the money paths. Listings, config, the rug guard, refresh and reads run in
 ///      LevExchangeAdmin through `fallback` (delegatecall, same storage), so to callers it is one contract.
 ///      Read-only previews and the pool's valuation live in LevLens; session-key trades arrive through LevRouter.
@@ -110,9 +111,11 @@ contract LevExchange is LevExchangeBase {
         Market storage m = _markets[p.marketId];
         if (!p.isLong && p.rugEpoch < m.rugEpoch) revert NotLiquidatable();
         _accrue(m, c);
-        int256 pnl = LevLogic.pnl(p, _markTick(m, c, false));
+        (int24 fast,,) = _readMark(m, c, false);
+        int256 pnl = LevLogic.pnl(p, fast);
         Side storage s = p.isLong ? m.longs : m.shorts;
-        int256 equity = int256(uint256(p.stake)) + pnl - int256(LevLogic.holdFee(p, s.feeIndex, c, block.timestamp));
+        int256 equity = int256(uint256(p.stake) + marginOf[id]) + pnl
+            - int256(LevLogic.holdFee(p, s.feeIndex, c, block.timestamp));
         bool atMax = pnl >= int256((uint256(p.stake) * p.maxWinBps) / BPS);
         if (atMax || equity > int256((uint256(p.stake) * c.liqEquityBps) / BPS)) revert NotLiquidatable();
         _finish(id, p, m, c, pnl, EXIT_LIQUIDATION, msg.sender);
@@ -125,9 +128,56 @@ contract LevExchange is LevExchangeBase {
         Market storage m = _markets[p.marketId];
         if (!p.isLong && p.rugEpoch < m.rugEpoch) revert NotAtMaxWin();
         _accrue(m, c);
-        int256 pnl = LevLogic.pnl(p, _markTick(m, c, !p.isLong));
+        (int24 fast, int24 slow,) = _readMark(m, c, !p.isLong);
+        // a long's max win counts only once the pump has lasted (pump band)
+        int256 pnl = LevLogic.pnl(p, p.isLong ? LevLogic.capLongExit(_risk, fast, slow) : fast);
         if (pnl < int256((uint256(p.stake) * p.maxWinBps) / BPS)) revert NotAtMaxWin();
         _finish(id, p, m, c, pnl, EXIT_MAX_WIN, msg.sender);
+    }
+
+    /// @notice Close a position whose take-profit or stop-loss the fast price has reached. Anyone but the owner
+    ///         is paid a share of the position's fees for it. The exit is priced like a close (the worse of the live
+    ///         and the fast price, the pump band for longs, the spread), except that the live price counts at most
+    ///         openBandSpotTicks past the fast one, so whoever calls it can't push the exit far. On a stale feed it
+    ///         is the last good fast price, as for a close.
+    function closeByTrigger(uint256 id) external nonReentrant {
+        Position memory p = _requireOpen(id);
+        Config memory c = _config;
+        Market storage m = _markets[p.marketId];
+        if ((!p.isLong && p.rugEpoch < m.rugEpoch) || block.timestamp < uint256(p.openedAt) + c.minHoldSeconds) {
+            revert NotTriggered();
+        }
+        _accrue(m, c);
+        RiskConfig memory r = _risk;
+        (bool ok, int24 spot, int24 fast, int24 slow, uint256 liq) = _tryRead(m);
+        if (ok) {
+            _recordGood(m, fast, slow);
+            if (!p.isLong) _requireNoRug(c, spot, slow);
+        } else {
+            _requireStale(m, c);
+            (spot, fast, slow) = (m.lastGoodFast, m.lastGoodFast, m.lastGoodTick);
+        }
+        Trigger memory t = _triggers[id];
+        bool hit = (t.hasTakeProfit && (p.isLong ? fast >= t.takeProfit : fast <= t.takeProfit))
+            || (t.hasStopLoss && (p.isLong ? fast <= t.stopLoss : fast >= t.stopLoss));
+        if (!hit) revert NotTriggered();
+        int24 exit = LevLogic.triggerExit(r, p.isLong, spot, fast, slow);
+        if (ok) exit = LevLogic.worsen(exit, LevLogic.spreadTicks(r, uint256(p.stake) * p.leverage, liq), !p.isLong);
+        _finish(id, p, m, c, LevLogic.pnl(p, exit), EXIT_TRIGGER, msg.sender == p.owner ? address(0) : msg.sender);
+    }
+
+    /// @notice Open the position an order describes, once the fast price has reached its trigger. Anyone can call
+    ///         this. Every check of a normal open applies; if one fails, the order stays and can be filled later.
+    function fillOrder(uint256 orderId) external nonReentrant returns (uint256 id) {
+        Order memory o = _orders[orderId];
+        if (o.owner == address(0)) revert NoOrder();
+        if (block.timestamp > o.expiresAt) revert OrderExpired();
+        (, int24 fast,,) = _market(o.marketId).oracle.read();
+        if (o.above ? fast < o.triggerTick : fast > o.triggerTick) revert NotTriggered();
+        _takeOrder(orderId);
+        int256 limit = o.isLong ? int256(o.triggerTick) + int256(uint256(o.slipTicks)) : int256(o.triggerTick) - int256(uint256(o.slipTicks));
+        id = _openPosition(o.owner, o.marketId, o.isLong, o.leverage, o.stake, int24(limit), NO_SLIP_BOUND);
+        emit OrderFilled(orderId, id);
     }
 
     /// @notice Settle a short that was open when the rug guard fired. Anyone can call this.
@@ -195,22 +245,30 @@ contract LevExchange is LevExchangeBase {
         int24 limitTick,
         uint256 maxSlipTicks
     ) internal returns (Position memory np) {
+        RiskConfig memory r = _risk;
         (int24 spot, int24 fast, int24 slow, uint256 liq) = m.oracle.read();
         _recordGood(m, fast, slow);
         if (liq < c.minLiquidityEth) revert LiquidityTooLow();
-        if (leverage == 0 || leverage > LevLogic.allowedLeverage(c, m.maxLeverage, liq, isLong)) revert LeverageNotAllowed();
-        // Fill at whichever price is worse for the trader.
-        np.entryTick = isLong ? _max24(spot, fast) : _min24(spot, fast);
-        if (isLong ? np.entryTick > limitTick : np.entryTick < limitTick) revert PriceMoved();
-        if (maxSlipTicks != NO_SLIP_BOUND && _gap(isLong ? np.entryTick : fast, isLong ? fast : np.entryTick) > maxSlipTicks) {
+        if (!LevLogic.bandsOk(r, spot, fast, slow)) revert PriceBand();
+        uint256 size = stake * leverage;
+        if (
+            leverage == 0 || leverage > LevLogic.allowedLeverage(c, m.maxLeverage, liq, isLong)
+                || leverage > LevLogic.sizeTierLeverage(r, size, liq)
+        ) revert LeverageNotAllowed();
+        // Fill at whichever price is worse for the trader, then the spread.
+        int24 fill = isLong ? _max24(spot, fast) : _min24(spot, fast);
+        if (maxSlipTicks != NO_SLIP_BOUND && _gap(isLong ? fill : fast, isLong ? fast : fill) > maxSlipTicks) {
             revert PriceMoved();
         }
+        np.entryTick = LevLogic.worsen(fill, LevLogic.spreadTicks(r, size, liq), isLong);
+        if (isLong ? np.entryTick > limitTick : np.entryTick < limitTick) revert PriceMoved();
 
         _accrue(m, c);
-        if (LevLogic.netRoom(c, m.netCapEth, m.longs.size, m.shorts.size, isLong, liq) < stake * leverage) revert CoinFull();
+        _checkRoom(c, r, m, isLong, size, liq);
         uint256 cash = pool.cash();
         np.maxWinBps = LevLogic.maxWinBps(c, cash, isLong, leverage);
         if ((totalMaxWin + (stake * np.maxWinBps) / BPS) * BPS > cash * c.coverageBps) revert PoolFull();
+        if ((totalOpenSize + size) * BPS > cash * r.platformSizeBps) revert PoolFull();
 
         np.rugEpoch = m.rugEpoch;
         np.openedAt = uint64(block.timestamp);
@@ -220,6 +278,20 @@ contract LevExchange is LevExchangeBase {
         np.feeIndex = isLong ? m.longs.feeIndex : m.shorts.feeIndex;
         // Don't open a position that the fast price would liquidate at once.
         if (int256(stake) + LevLogic.pnl(np, fast) <= int256((stake * c.liqEquityBps) / BPS)) revert WouldLiquidate();
+    }
+
+    /// @dev The coin's caps: room on this side, and new size this hour at most hourlyGrowthBps of the coin's cap
+    ///      (Hyperliquid's "open interest increasing too quickly"), so size can't pile up before the averages move.
+    function _checkRoom(Config memory c, RiskConfig memory r, Market storage m, bool isLong, uint256 size, uint256 liq)
+        internal
+    {
+        if (LevLogic.netRoom(c, m.netCapEth, m.longs.size, m.shorts.size, isLong, liq) < size) revert CoinFull();
+        if (block.timestamp >= uint256(m.growthStart) + HOUR) {
+            m.growthStart = uint64(block.timestamp);
+            m.growthSize = 0;
+        }
+        m.growthSize += size;
+        if (m.growthSize * BPS > LevLogic.coinCap(c, m.netCapEth, liq) * r.hourlyGrowthBps) revert GrowingTooFast();
     }
 
     function _addPosition(Market storage m, Position memory p) internal {
@@ -233,6 +305,7 @@ contract LevExchange is LevExchangeBase {
         s.sizeIndexSum += (size * p.feeIndex) / ONE;
         if (!p.isLong) m.shortCount++;
         totalMaxWin += maxWin;
+        totalOpenSize += size;
     }
 
     function _closePosition(address trader, uint256 id, int24 limitTick, uint256 maxSlipTicks) internal {
@@ -247,20 +320,23 @@ contract LevExchange is LevExchangeBase {
             return;
         }
 
-        (bool ok, int24 spot, int24 fast, int24 slow,) = _tryRead(m);
+        RiskConfig memory r = _risk;
+        (bool ok, int24 spot, int24 fast, int24 slow, uint256 liq) = _tryRead(m);
         int24 exitTick;
         uint8 kind = EXIT_CLOSE;
         if (ok) {
             _recordGood(m, fast, slow);
             if (!p.isLong) _requireNoRug(c, spot, slow);
             exitTick = p.isLong ? _min24(spot, fast) : _max24(spot, fast);
-            if (p.isLong ? exitTick < limitTick : exitTick > limitTick) revert PriceMoved();
             if (maxSlipTicks != NO_SLIP_BOUND && _gap(p.isLong ? fast : exitTick, p.isLong ? exitTick : fast) > maxSlipTicks) {
                 revert PriceMoved();
             }
+            if (p.isLong) exitTick = LevLogic.capLongExit(r, exitTick, slow);
+            exitTick = LevLogic.worsen(exitTick, LevLogic.spreadTicks(r, uint256(p.stake) * p.leverage, liq), !p.isLong);
+            if (p.isLong ? exitTick < limitTick : exitTick > limitTick) revert PriceMoved();
         } else {
             _requireStale(m, c);
-            exitTick = m.lastGoodFast;
+            exitTick = p.isLong ? LevLogic.capLongExit(r, m.lastGoodFast, m.lastGoodTick) : m.lastGoodFast;
             kind = EXIT_STALE;
         }
         _finish(id, p, m, c, LevLogic.pnl(p, exitTick), kind, address(0));
@@ -287,7 +363,8 @@ contract LevExchange is LevExchangeBase {
         internal
     {
         Side storage s = p.isLong ? m.longs : m.shorts;
-        Outcome memory o = _outcome(p, c, pnl, LevLogic.holdFee(p, s.feeIndex, c, block.timestamp), kind, keeper);
+        uint256 held = uint256(p.stake) + marginOf[id]; // what this contract holds for the position
+        Outcome memory o = _outcome(p, c, pnl, LevLogic.holdFee(p, s.feeIndex, c, block.timestamp), kind, keeper, held);
         _removePosition(id, p, m, s);
 
         uint256 toPool = (o.fees * c.poolFeeShareBps) / BPS;
@@ -296,12 +373,13 @@ contract LevExchange is LevExchangeBase {
         if (o.reward > 0) balanceOf[keeper] += o.reward;
         // This contract held the stake. Whatever the trader, keeper and treasury don't take goes to the pool;
         // if they take more, the pool pays the difference.
-        int256 poolDelta = int256(uint256(p.stake)) - int256(o.payout) - int256(o.reward) - int256(o.fees - toPool);
+        int256 poolDelta = int256(held) - int256(o.payout) - int256(o.reward) - int256(o.fees - toPool);
         _bookPool(c, poolDelta);
         emit Closed(id, p.owner, p.marketId, o.kind, pnl, o.hold, o.fees, o.payout, keeper, o.reward);
     }
 
-    function _outcome(Position memory p, Config memory c, int256 pnl, uint256 hold, uint8 kind, address keeper)
+    /// @param held The stake plus any margin added later.
+    function _outcome(Position memory p, Config memory c, int256 pnl, uint256 hold, uint8 kind, address keeper, uint256 held)
         internal
         pure
         returns (Outcome memory o)
@@ -309,7 +387,7 @@ contract LevExchange is LevExchangeBase {
         o.hold = hold;
         o.kind = kind;
         uint256 stake = p.stake;
-        int256 equity = int256(stake) + pnl - int256(hold);
+        int256 equity = int256(held) + pnl - int256(hold);
         // Only liquidate() books a loss with leftover equity as a liquidation. A position the trader or keeper
         // closes any other way is paid what is left, unless nothing is.
         if (equity <= 0 || kind == EXIT_LIQUIDATION) {
@@ -325,7 +403,7 @@ contract LevExchange is LevExchangeBase {
             if (o.fees > eq) o.fees = eq;
             o.payout = eq - o.fees;
             // Pay whoever clears a max win a share of its fees, so it doesn't wait for our own keeper.
-            if (kind == EXIT_MAX_WIN && keeper != address(0)) {
+            if ((kind == EXIT_MAX_WIN || kind == EXIT_TRIGGER) && keeper != address(0)) {
                 o.reward = (o.fees * c.keeperRewardBps) / BPS;
                 o.fees -= o.reward;
             }
@@ -338,6 +416,9 @@ contract LevExchange is LevExchangeBase {
         uint256 maxWin = (stake * p.maxWinBps) / BPS;
         s.size -= size;
         s.stake -= stake;
+        s.margin -= marginOf[id];
+        // a position opened this hour gives its share of the hourly new-size limit back
+        if (p.openedAt >= m.growthStart) m.growthSize = m.growthSize > size ? m.growthSize - size : 0;
         s.maxWin -= maxWin;
         s.expo -= LevLogic.expoOf(m.refTick, p.entryTick, size);
         s.sizeIndexSum -= (size * p.feeIndex) / ONE;
@@ -347,6 +428,9 @@ contract LevExchange is LevExchangeBase {
         }
         openStakeOf[p.owner] -= stake;
         totalMaxWin -= maxWin;
+        totalOpenSize -= size;
+        delete marginOf[id];
+        delete _triggers[id];
         _openIds.remove(id);
         _byOwner[p.owner].remove(id);
         delete _positions[id];
@@ -365,16 +449,18 @@ contract LevExchange is LevExchangeBase {
         else if (poolDelta < 0) pool.payToExchange(uint256(-poolDelta));
     }
 
+    /// @notice The fast and slow price and the coin's liquidity, or the last good prices (liquidity 0) once a
+    ///         failing feed has gone stale.
     /// @param checkRug For shorts: refuse while the live price shows a rug the guard hasn't caught yet.
-    function _markTick(Market storage m, Config memory c, bool checkRug) internal returns (int24) {
-        (bool ok, int24 spot, int24 fast, int24 slow,) = _tryRead(m);
+    function _readMark(Market storage m, Config memory c, bool checkRug) internal returns (int24, int24, uint256) {
+        (bool ok, int24 spot, int24 fast, int24 slow, uint256 liq) = _tryRead(m);
         if (ok) {
             _recordGood(m, fast, slow);
             if (checkRug) _requireNoRug(c, spot, slow);
-            return fast;
+            return (fast, slow, liq);
         }
         _requireStale(m, c);
-        return m.lastGoodFast;
+        return (m.lastGoodFast, m.lastGoodTick, 0);
     }
 
     /// @dev Stale settlement needs an unbroken run of failed reads, still going, that started after the last

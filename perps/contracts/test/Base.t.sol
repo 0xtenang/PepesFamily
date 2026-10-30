@@ -7,7 +7,7 @@ import {LevExchangeAdmin} from "../src/LevExchangeAdmin.sol";
 import {LevPool} from "../src/LevPool.sol";
 import {LevLens} from "../src/LevLens.sol";
 import {LevRouter, ILevExchangeForRouter} from "../src/LevRouter.sol";
-import {Config} from "../src/LevTypes.sol";
+import {Config, RiskConfig} from "../src/LevTypes.sol";
 import {ILevPool, ILevExchange, ILevNav} from "../src/interfaces/ILevPool.sol";
 import {IPriceOracle} from "../src/interfaces/IPriceOracle.sol";
 import {TickRatio} from "../src/libraries/TickRatio.sol";
@@ -52,6 +52,8 @@ abstract contract Base is Test {
         pool.setExchange(ILevExchange(address(ex)));
         pool.setNavSource(ILevNav(address(lens)));
         exa.setRouter(address(router));
+        // The original mechanics are tested without the 2026-10-30 risk rules (RiskRules.t.sol tests those).
+        exa.setRiskConfig(_neutralRisk());
         vm.stopPrank();
 
         o0 = new MockOracle(0, 400 ether);
@@ -74,6 +76,37 @@ abstract contract Base is Test {
         ex.deposit{value: 10 ether}();
         vm.prank(bob);
         ex.deposit{value: 10 ether}();
+    }
+
+    /// @dev No spread, the widest bands and tiers the limits allow.
+    function _neutralRisk() internal pure returns (RiskConfig memory) {
+        return RiskConfig({
+            openBandSpotTicks: 30_000,
+            openBandTrendTicks: 30_000,
+            pumpBandTicks: 30_000,
+            spreadBaseBps: 0,
+            spreadImpactBps: 0,
+            spreadMaxBps: 0,
+            sizeTier5xBps: 500,
+            sizeTier2xBps: 500,
+            hourlyGrowthBps: 60_000,
+            platformSizeBps: 100_000
+        });
+    }
+
+    function _defaultRisk() internal pure returns (RiskConfig memory) {
+        return RiskConfig({
+            openBandSpotTicks: 488,
+            openBandTrendTicks: 1823,
+            pumpBandTicks: 4055,
+            spreadBaseBps: 10,
+            spreadImpactBps: 20_000,
+            spreadMaxBps: 300,
+            sizeTier5xBps: 10,
+            sizeTier2xBps: 25,
+            hourlyGrowthBps: 5000,
+            platformSizeBps: 30_000
+        });
     }
 
     /// @dev Reads the cheatcode clock: via-IR can cache block.timestamp inside one test function.
@@ -114,6 +147,6 @@ abstract contract Base is Test {
     function _assertSolvent() internal view {
         assertEq(address(pool).balance, pool.cash(), "pool cash");
         uint256 bals = ex.balanceOf(alice) + ex.balanceOf(bob) + ex.balanceOf(keeper) + ex.balanceOf(lp);
-        assertEq(address(ex).balance, bals + lens.totalOpenStake() + ex.treasuryBalance(), "exchange books");
+        assertEq(address(ex).balance, bals + lens.totalOpenStake() + ex.treasuryBalance() + ex.orderEscrow(), "exchange books");
     }
 }

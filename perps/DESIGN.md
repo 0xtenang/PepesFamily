@@ -56,7 +56,7 @@ Learned from Veranta (formerly Avantis), adapted for an on-chain book with ETH b
    - the session's generation, so revoking a key and approving it again can't bring its old messages back
 3. **Submission.** The relayer simulates the call, sends it and pays the gas. There is no relay fee. Anyone may submit a signed message, so a backup relayer or the trader can submit it if ours is down.
 4. **What a stolen session key can do.** Only what the limits allow:
-   - open and close within them, at fills no worse than the slippage bound from the fast price, so it can't force a fill at a pushed price
+   - open and close within them, at fills no worse than the slippage bound from the fast price (before the size-based spread, which is deterministic and goes to the pool), so it can't force a fill at a pushed price
    - lose at most the daily budget
    - withdraw only to the owner's own wallet
 
@@ -89,6 +89,29 @@ Two more things keep the price fair between LPs:
 
 Creator fees that arrive before any LP joins become house shares, held by a dead address at the current price. They stay in the pool for good and earn their share like any LP.
 
+## Risk rules (2026-10-30)
+
+Learned from Hyperliquid, Veranta and Inverse. Owner-settable (`setRiskConfig`) within hard limits in `ConfigCheck.isValidRisk`. 100 ticks is about 1%.
+
+| Rule | Default | From | What it stops |
+|---|---|---|---|
+| Open bands | no new positions while spot and fast differ by more than 488 ticks (5%), or fast and slow by more than 1823 (20%) | Hyperliquid price bands, Veranta oracle cross-check | betting on a coin while its pool is being pushed |
+| Pump band | a long's exit is priced at most 4055 ticks (+50%) above the slow price: closes, max-win closes, take-profits, stale exits | Hyperliquid's hyperp mark cap | pump the coin's pool, then cash a long against the LPs: the pump must now last a slow window |
+| Size-based spread | opens and trader or trigger closes fill 10 bps + 2 × size/liquidity worse, capped at 3%. Not on liquidations, max-win closes or rug settlement | Veranta's dynamic spread | positions filling far better than the coin's own pool would fill them |
+| Size tiers | a position over 0.1% of the coin's liquidity gets at most 5x, over 0.25% at most 2x | Hyperliquid margin tiers | big positions at high leverage on thin coins |
+| Hourly growth | new size per coin per hour at most 50% of its cap. A position opened this hour gives its share back when it closes | Hyperliquid "open interest increasing too quickly" | size piling up before the averages move |
+| Platform cap | open size across all coins at most 3× pool cash | Hyperliquid DEX-wide caps | stacking across coins |
+| LP stress fee | withdrawals pay 0.5% / 1.5% / 2.5% while pool value at the worst price is under 100% / 95% / 90% of cash; it stays in the pool | Veranta buffer-ratio fee | a run on the pool while traders are winning |
+
+## Trader tools (2026-10-30)
+
+- **Take-profit and stop-loss** (`setTriggers`): levels of the fast price, stored on-chain. Anyone may call `closeByTrigger` once one is reached and is paid 25% of the position's fees (not the owner). The exit is priced like a close (worse of spot and fast, the live price counted at most the 5% open band past fast, pump band, spread). Levels already reached are refused, so a trigger can't be used as a close at the lagging average.
+- **Orders that open at a price** (`placeOrder` / `fillOrder` / `cancelOrder`): stake and open fee in escrow (`orderEscrow`), filled by anyone once the fast price reaches the trigger, at most `slipTicks` past it, with every open check. Expired orders (at most 30 days) can be cancelled by anyone; the escrow returns to the owner's balance. The page places them by market cap.
+- **Add margin** (`addMargin`): collateral on an open position moves its liquidation price away; size and max win stay the same, and it is paid back on close. It counts toward deposit pricing but not toward the value LPs withdraw at.
+- One-click (session key) trading doesn't cover these three yet: they go straight from the wallet.
+
+The exchange books: `address(exchange).balance == sum(balanceOf) + open stakes + margin + treasuryBalance + orderEscrow`.
+
 ## Contracts
 
 | Contract | Job |
@@ -113,7 +136,6 @@ Creator fees that arrive before any LP joins become house shares, held by a dead
   - how the sequencer orders transactions
 - **Legal.** Leveraged trading for the public is regulated in most countries, and so may be running a relayer that submits trades. Get advice before launch.
 - **Wallet-age rule** from Inverse can't be checked on-chain and is not included.
-- **Take-profit and stop-loss orders** are not built yet. Stops belong on-chain and should fire on the fast average, as liquidations do.
 
 ## Known limits
 
@@ -122,4 +144,4 @@ Creator fees that arrive before any LP joins become house shares, held by a dead
 - **Config changes apply at once**, within the contract's hard limits, including to messages already signed. Put the owner behind a multisig with a timelock.
 - **Curator trust.** Listing a coin means trusting its price feed.
 - **Capped winners in pool value (open).** Pool value caps each side's winnings as a whole, not per position. A winner past its own max win therefore counts above its cap until someone calls `closeAtMaxWin`. A depositor can buy in at that low value and close the winner in the same transaction. Paying the closer makes keepers clear such positions within a pass, but doesn't stop the same-transaction version. See the critic's medium finding in SECURITY_REVIEW.md.
-- **Exchange size.** The exchange is split in two to stay under the 24,576-byte limit: `LevExchange` is 15,609 bytes and `LevExchangeAdmin` 9,814. Trade paths belong in `LevExchange`; owner, keeper and view calls in `LevExchangeAdmin`, with any new state added to `LevExchangeBase` so the two layouts stay the same.
+- **Exchange size.** The exchange is split in two to stay under the 24,576-byte limit: `LevExchange` is 19,473 bytes and `LevExchangeAdmin` 15,280 (2026-10-30). Trade paths belong in `LevExchange`; owner, keeper and view calls in `LevExchangeAdmin`, with any new state added to `LevExchangeBase` so the two layouts stay the same.

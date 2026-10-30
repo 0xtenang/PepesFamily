@@ -100,6 +100,19 @@
  },
  {
   "type": "function",
+  "name": "EXIT_TRIGGER",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint8",
+    "internalType": "uint8"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "MAX_MARKETS",
   "inputs": [],
   "outputs": [
@@ -209,6 +222,19 @@
  },
  {
   "type": "function",
+  "name": "closeByTrigger",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "closeFor",
   "inputs": [
    {
@@ -254,6 +280,25 @@
   ],
   "outputs": [],
   "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "fillOrder",
+  "inputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -319,6 +364,38 @@
   ],
   "outputs": [],
   "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "marginOf",
+  "inputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "nextOrderId",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
  },
  {
   "type": "function",
@@ -455,6 +532,19 @@
  },
  {
   "type": "function",
+  "name": "orderEscrow",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "owner",
   "inputs": [],
   "outputs": [
@@ -552,6 +642,19 @@
  {
   "type": "function",
   "name": "totalMaxWin",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "totalOpenSize",
   "inputs": [],
   "outputs": [
    {
@@ -745,6 +848,25 @@
  },
  {
   "type": "event",
+  "name": "MarginAdded",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "MarketListed",
   "inputs": [
    {
@@ -887,6 +1009,121 @@
  },
  {
   "type": "event",
+  "name": "OrderCancelled",
+  "inputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OrderFilled",
+  "inputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "positionId",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OrderPlaced",
+  "inputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "owner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "order",
+    "type": "tuple",
+    "indexed": false,
+    "internalType": "struct Order",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "above",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "triggerTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "slipTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "expiresAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "escrow",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "OwnershipTransferStarted",
   "inputs": [
    {
@@ -921,6 +1158,12 @@
     "internalType": "address"
    }
   ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "RiskConfigUpdated",
+  "inputs": [],
   "anonymous": false
  },
  {
@@ -988,6 +1231,43 @@
  },
  {
   "type": "event",
+  "name": "TriggersSet",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "hasTakeProfit",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   },
+   {
+    "name": "takeProfit",
+    "type": "int24",
+    "indexed": false,
+    "internalType": "int24"
+   },
+   {
+    "name": "hasStopLoss",
+    "type": "bool",
+    "indexed": false,
+    "internalType": "bool"
+   },
+   {
+    "name": "stopLoss",
+    "type": "int24",
+    "indexed": false,
+    "internalType": "int24"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
   "name": "Withdrawn",
   "inputs": [
    {
@@ -1027,6 +1307,11 @@
  },
  {
   "type": "error",
+  "name": "GrowingTooFast",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "InsufficientBalance",
   "inputs": []
  },
@@ -1048,6 +1333,11 @@
  {
   "type": "error",
   "name": "MarketLocked",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NoOrder",
   "inputs": []
  },
  {
@@ -1082,7 +1372,17 @@
  },
  {
   "type": "error",
+  "name": "NotTriggered",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "OracleDown",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "OrderExpired",
   "inputs": []
  },
  {
@@ -1110,6 +1410,11 @@
  {
   "type": "error",
   "name": "PoolFull",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "PriceBand",
   "inputs": []
  },
  {
@@ -1156,6 +1461,37 @@
   "type": "error",
   "name": "WouldLiquidate",
   "inputs": []
+ },
+ {
+  "type": "function",
+  "name": "addMargin",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "payable"
+ },
+ {
+  "type": "function",
+  "name": "cancelOrder",
+  "inputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
  },
  {
   "type": "function",
@@ -1313,6 +1649,71 @@
       "name": "minStake",
       "type": "uint96",
       "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "getRiskConfig",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct RiskConfig",
+    "components": [
+     {
+      "name": "openBandSpotTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "openBandTrendTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "pumpBandTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "spreadBaseBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "spreadImpactBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "spreadMaxBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "sizeTier5xBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "sizeTier2xBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "hourlyGrowthBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "platformSizeBps",
+      "type": "uint32",
+      "internalType": "uint32"
      }
     ]
    }
@@ -1525,8 +1926,55 @@
         "internalType": "uint256"
        }
       ]
+     },
+     {
+      "name": "growthStart",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "growthSize",
+      "type": "uint256",
+      "internalType": "uint256"
      }
     ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "openOrderCount",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "openOrderIds",
+  "inputs": [
+   {
+    "name": "offset",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limit",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ids",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
    }
   ],
   "stateMutability": "view"
@@ -1567,6 +2015,150 @@
    }
   ],
   "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "orderData",
+  "inputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct Order",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "above",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "triggerTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "slipTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "expiresAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "escrow",
+      "type": "uint96",
+      "internalType": "uint96"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "orderIdsOf",
+  "inputs": [
+   {
+    "name": "owner_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "placeOrder",
+  "inputs": [
+   {
+    "name": "marketId",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "isLong",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "leverage",
+    "type": "uint8",
+    "internalType": "uint8"
+   },
+   {
+    "name": "stake",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "triggerTick",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "above",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "slipTicks",
+    "type": "uint24",
+    "internalType": "uint24"
+   },
+   {
+    "name": "expiresAt",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "orderId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "payable"
  },
  {
   "type": "function",
@@ -1882,6 +2474,71 @@
  },
  {
   "type": "function",
+  "name": "setRiskConfig",
+  "inputs": [
+   {
+    "name": "r",
+    "type": "tuple",
+    "internalType": "struct RiskConfig",
+    "components": [
+     {
+      "name": "openBandSpotTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "openBandTrendTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "pumpBandTicks",
+      "type": "uint24",
+      "internalType": "uint24"
+     },
+     {
+      "name": "spreadBaseBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "spreadImpactBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "spreadMaxBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "sizeTier5xBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "sizeTier2xBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "hourlyGrowthBps",
+      "type": "uint16",
+      "internalType": "uint16"
+     },
+     {
+      "name": "platformSizeBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     }
+    ]
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
   "name": "setRouter",
   "inputs": [
    {
@@ -1905,6 +2562,80 @@
   ],
   "outputs": [],
   "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "setTriggers",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "hasTakeProfit",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "takeProfit",
+    "type": "int24",
+    "internalType": "int24"
+   },
+   {
+    "name": "hasStopLoss",
+    "type": "bool",
+    "internalType": "bool"
+   },
+   {
+    "name": "stopLoss",
+    "type": "int24",
+    "internalType": "int24"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "triggerOf",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct Trigger",
+    "components": [
+     {
+      "name": "takeProfit",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "stopLoss",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "hasTakeProfit",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "hasStopLoss",
+      "type": "bool",
+      "internalType": "bool"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
  },
  {
   "type": "function",

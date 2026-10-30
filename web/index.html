@@ -2241,12 +2241,22 @@ const PERP_EX_ABI = [
   "function close(uint256 id, int24 limitTick)",
   "function balanceOf(address) view returns (uint256)",
   "function positionIdsOf(address) view returns (uint256[])",
+  "function setTriggers(uint256 id, bool hasTakeProfit, int24 takeProfit, bool hasStopLoss, int24 stopLoss)",
+  "function triggerOf(uint256 id) view returns (tuple(int24 takeProfit, int24 stopLoss, bool hasTakeProfit, bool hasStopLoss))",
+  "function addMargin(uint256 id, uint256 amount) payable",
+  "function marginOf(uint256 id) view returns (uint256)",
+  "function placeOrder(uint256 marketId, bool isLong, uint8 leverage, uint256 stake, int24 triggerTick, bool above, uint24 slipTicks, uint64 expiresAt) payable returns (uint256)",
+  "function cancelOrder(uint256 orderId)",
 ];
 const PERP_LENS_ABI = [
   "function getMarket(uint256 id) view returns (tuple(address oracle, bool active, uint8 maxLeverage, uint256 netCapEth, int24 refTick, int24 lastGoodTick, uint64 lastGoodAt, uint64 downSince, uint32 rugEpoch, uint64 rugAt, uint256 longSize, uint256 shortSize, uint256 longStake, uint256 shortStake, uint256 longMaxWin, uint256 shortMaxWin))",
   "function quoteOpen(uint256 marketId, bool isLong, uint8 leverage, uint256 stake) view returns (tuple(uint8 reason, int24 spotTick, int24 fastTick, int24 slowTick, int24 entryTick, uint256 liquidityEth, uint8 maxLeverage, uint256 fee, uint32 maxWinBps, uint256 netRoom, uint256 poolRoomStake))",
   "function positionsOf(address owner) view returns (tuple(tuple(address owner, uint32 marketId, uint32 rugEpoch, uint64 openedAt, bool isLong, uint8 leverage, int24 entryTick, uint32 maxWinBps, uint96 stake, uint256 feeIndex) position, uint256 size, int24 markTick, int256 pnl, uint256 holdFee, int256 equity, uint8 action)[])",
+  "function quoteClose(uint256 id) view returns (bool ok, int24 exitTick)",
+  "function ordersOf(address owner) view returns (uint256[] ids, tuple(address owner, uint32 marketId, bool isLong, bool above, uint8 leverage, int24 triggerTick, uint24 slipTicks, uint64 expiresAt, uint96 stake, uint96 escrow)[] orders)",
 ];
+const PERP_ORDER_SLIP_TICKS = 200; // a limit order fills at most ~2% past its market cap
+const PERP_ORDER_DAYS = 7;
 const PERP_SLIP_TICKS = 100; // 1%: the worst fill a trade accepts beyond the price on screen
 const PERP_LEVS = [1, 2, 3, 5, 10];
 const PERP_WHY = { // {c} is the coin
@@ -2254,7 +2264,10 @@ const PERP_WHY = { // {c} is the coin
   4: "{c} doesn't have enough liquidity for new positions right now.", 6: "{c} is full on this side right now. Try a smaller amount.",
   7: "The pool can't cover a win that size right now. Try a smaller amount.", 8: "The smallest position is 0.001 ETH.",
   9: "New positions pause for an hour after the pool loses 10% in an hour.", 10: "This would be liquidated as soon as it opened. Lower the leverage.",
+  11: "{c}'s price is moving too fast right now: new positions wait until the live and average prices agree again.",
+  12: "{c} has taken its share of new positions this hour. Try a smaller amount, or again later.",
 };
+const pctTicks = (pct) => Math.round(Math.log(1 + pct / 100) / Math.log(1.0001)); // a price move of pct% in ticks
 // Testing on this computer only: a deployment on a local chain, from localStorage "pf-perps-dev"
 // ({ "exchange", "lens", "pool", "rpc" }). Ignored on any other host.
 let PERP_DEV = null;
@@ -2302,27 +2315,36 @@ async function renderPerps(sym) {
         </div>
         <div class="cbox" id="cbox"></div>
         <div style="margin-top:18px"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Your positions</h2><span class="stat" id="pbal"></span></div>
-          <div id="ppos" style="margin-top:10px"><div class="stat">${live ? "Connect your wallet to see your positions." : "Positions show here once trading opens."}</div></div></div>
+          <div id="ppos" style="margin-top:10px"><div class="stat">${live ? "Connect your wallet to see your positions." : "Positions show here once trading opens."}</div></div>
+          <div id="pordersw" hidden><h2 style="margin:18px 0 0">Your orders</h2><div id="porders" style="margin-top:10px"></div></div></div>
       </div>
     </div>
     <div class="mside">
       <div class="card">
         <div class="tabs"><button class="buy" data-s="long">Long</button><button class="sell" data-s="short">Short</button></div>
-        <label for="pamt" style="margin-top:0">Amount (USD)</label>
+        <div class="seg" id="ptype" style="margin:12px 0 2px"><button type="button" data-t="market">Market</button><button type="button" data-t="limit">At a market cap</button></div>
+        <div id="plimit" hidden><label for="ptrig">Open when the market cap reaches (USD)</label>
+          <input id="ptrig" inputmode="decimal" placeholder="${t?.mc ? "$" + compact(t.mc) + " now" : "$"}" autocomplete="off" /></div>
+        <label for="pamt">Amount (USD)</label>
         <input id="pamt" inputmode="decimal" placeholder="$0" autocomplete="off" />
         <div class="quick" id="pquick">${[5, 20, 50, 100].map((v) => `<button type="button" data-v="${v}">$${v}</button>`).join("")}</div>
         <label style="margin-top:14px">Leverage</label>
         <div class="quick" id="plev">${PERP_LEVS.map((v) => `<button type="button" data-v="${v}">${v}x</button>`).join("")}</div>
+        <div class="row" id="ptpsl" style="gap:8px;margin-top:12px">
+          <div style="flex:1"><label for="ptp" style="margin:0 0 4px">Take profit (price %)</label><input id="ptp" inputmode="decimal" placeholder="+50%" autocomplete="off" /></div>
+          <div style="flex:1"><label for="psl" style="margin:0 0 4px">Stop loss (price %)</label><input id="psl" inputmode="decimal" placeholder="−20%" autocomplete="off" /></div>
+        </div>
         <div class="stat" id="pcash" style="margin-top:10px"></div>
         <div class="preview" id="ppv">&nbsp;</div>
         <button class="primary full tradebtn buy" id="pgo" style="margin-top:6px"></button>
         <div class="tradewarn" id="pwarn" hidden></div>
-        <div class="stat" style="margin-top:12px;font-size:12px">You win or lose your amount × leverage times the price move. A position is closed for you if it loses 85% of its amount; wins are capped (longs up to +400%, shorts +100%). Fees: 1% to open and to close, 10% of profit.</div>
+        <div class="stat" style="margin-top:12px;font-size:12px">You win or lose your amount × leverage times the price move. A position is closed for you if it loses 85% of its amount; wins are capped (longs up to +400%, shorts +100%). Fees: 1% to open and to close, 10% of profit, and a small spread that grows with the position's size. Larger positions get less leverage.</div>
       </div>
     </div></div>`;
   candleChart($("#cbox"), { load: (sec) => gtCandles(ch, mk.coin, sec), mcap: (k) => k * (t?.price ? t.mc / t.price : 0), every: 30_000 }).catch(() => {});
 
-  let side = "long", lev = 2, seq = 0, timer = 0, q = null, mkt = null, bal = 0n, views = [], ids = [];
+  let side = "long", lev = 2, kind = "market", seq = 0, timer = 0, q = null, mkt = null, bal = 0n, views = [], ids = [], extras = [], orders = [];
+  let editing = null; // { id, what: "tpsl" | "margin" } while a position's editor is open
   try { const v = Number(localStorage.getItem("pf-perp-lev")); if (PERP_LEVS.includes(v)) lev = v; } catch {}
   const usdIn = () => { const v = Number($("#pamt").value.trim().replace(/^\$/, "")); return v > 0 ? v : 0; };
   const ethUsd = () => prices.ethUsd || 0;
@@ -2331,9 +2353,20 @@ async function renderPerps(sym) {
   const stakeWei = () => { const u = usdIn(), px = ethUsd(); return u && px ? ethers.parseEther((u / px).toFixed(15)) : 0n; };
   const maxLev = () => Math.min(mkt ? Number(mkt.maxLeverage) : 10, side === "short" ? 5 : 10, q && q.reason !== 5 ? Number(q.maxLeverage) || 10 : 10);
   const why = (r) => (PERP_WHY[r] || "").replace("{c}", "$" + mk.symbol);
+  const pctIn = (el) => { const v = Number(String(el.value).trim().replace(/[%+\s]/g, "").replace("−", "-")); return Number.isFinite(v) && v !== 0 ? v : 0; };
+  // a market cap in USD as a price tick (coin price in ETH): the order's trigger
+  const mcapTick = (usd) => { const supply = t?.price ? t.mc / t.price : 0, px = ethUsd(); return supply && px ? Math.round(Math.log(usd / supply / px) / Math.log(1.0001)) : null; };
+  const tickMcap = (tick) => coinUsd(tick) * (t?.price ? t.mc / t.price : 0);
+  // where a position is closed at a loss: equity falls to 15% of the stake; margin added later pushes it out
+  const liqPrice = (entryUsd, long, levX, stakeW, marginW) => {
+    const move = (0.85 * ethNum(stakeW) + ethNum(marginW)) / (ethNum(stakeW) * levX);
+    return entryUsd * (long ? Math.max(0, 1 - move) : 1 + move);
+  };
 
   function paint() {
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
+    app.querySelectorAll("#ptype button").forEach((b) => b.classList.toggle("on", b.dataset.t === kind));
+    $("#plimit").hidden = kind !== "limit";
     app.querySelectorAll("#plev button").forEach((b) => { const v = Number(b.dataset.v); b.classList.toggle("on", v === lev); b.disabled = v > maxLev(); });
     const btn = $("#pgo"), warn = $("#pwarn"), usd = usdIn();
     btn.classList.toggle("buy", side === "long"); btn.classList.toggle("sell", side === "short");
@@ -2341,7 +2374,7 @@ async function renderPerps(sym) {
     const verb = side === "long" ? "Long" : "Short";
     if (!live) { btn.textContent = "Opening soon"; btn.disabled = true; return; }
     btn.disabled = false;
-    btn.innerHTML = usd ? `${verb} ${lev}x <span class="sep"></span> ${fmtUsd(usd)} <span class="usd">(${esc(compact(ethNum(stakeWei())))} ETH)</span>` : `${verb} $${esc(mk.symbol)} ${lev}x`;
+    btn.innerHTML = usd ? `${kind === "limit" ? "Place " + verb.toLowerCase() : verb} ${lev}x <span class="sep"></span> ${fmtUsd(usd)} <span class="usd">(${esc(compact(ethNum(stakeWei())))} ETH)</span>` : `${verb} $${esc(mk.symbol)} ${lev}x`;
     if (usd && account && CASH && usd > CASH.total + usdOfWei(bal)) { warn.hidden = false; warn.textContent = "Exceeds wallet balance"; }
   }
   // the quote: what this position would get (entry, liquidation price, max win, fee), or why it can't open
@@ -2360,12 +2393,21 @@ async function renderPerps(sym) {
         q = r;
         const reason = Number(r.reason);
         if (reason === 5) { lev = Math.max(...PERP_LEVS.filter((v) => v <= Number(r.maxLeverage))); paint(); return preview(); }
-        if (reason) return ($("#ppv").textContent = why(reason));
-        const entry = coinUsd(r.entryTick), lv = lev, long = side === "long";
+        // a limit order opens later: today's crowding, bands and caps are checked when it fills
+        if (reason && !(kind === "limit" && [6, 7, 9, 11, 12].includes(reason))) return ($("#ppv").textContent = why(reason));
+        const lv = lev, long = side === "long";
+        let entry = coinUsd(r.entryTick);
+        if (kind === "limit") {
+          const target = Number($("#ptrig").value.trim().replace(/[$,\s]/g, "")) || 0;
+          if (!target) return ($("#ppv").textContent = "Enter the market cap to open at.");
+          const trig = mcapTick(target);
+          if (trig === null) return ($("#ppv").textContent = "No price for this coin right now.");
+          entry = coinUsd(trig);
+        }
         const liq = entry * (long ? 1 - 0.85 / lv : 1 + 0.85 / lv);
         const winPct = Number(r.maxWinBps) / 100;
         $("#ppv").innerHTML = `<div class="row" style="justify-content:space-between"><span class="stat">Position size</span><b>${fmtUsd(usd * lv)}</b></div>
-          <div class="row" style="justify-content:space-between"><span class="stat">Entry price</span><b>${tinyUsd(entry)}</b></div>
+          <div class="row" style="justify-content:space-between"><span class="stat">${kind === "limit" ? "Opens at about" : "Entry price"}</span><b>${tinyUsd(entry)}</b></div>
           <div class="row" style="justify-content:space-between"><span class="stat">Closed at a loss near</span><b class="neg">${tinyUsd(liq)}</b></div>
           <div class="row" style="justify-content:space-between"><span class="stat">Max win</span><b class="pos">+${winPct.toLocaleString("en-US")}% (${fmtUsd(usd * winPct / 100)})</b></div>
           <div class="row" style="justify-content:space-between"><span class="stat">Open fee</span><b>${fmtUsd(usdOfWei(r.fee))}</b></div>`;
@@ -2390,9 +2432,10 @@ async function renderPerps(sym) {
     if (!account) { $("#pcash").textContent = "Connect a wallet to trade."; return; }
     try {
       const who = account;
-      const [b, list, idl] = await Promise.all([ex.balanceOf(who), lens.positionsOf(who), ex.positionIdsOf(who)]);
+      const [b, list, idl, ords] = await Promise.all([ex.balanceOf(who), lens.positionsOf(who), ex.positionIdsOf(who), lens.ordersOf(who)]);
+      const ext = await Promise.all(idl.map((id) => Promise.all([ex.triggerOf(id), ex.marginOf(id)])));
       if (stale() || who !== account) return;
-      bal = b; views = list; ids = idl;
+      bal = b; views = list; ids = idl; extras = ext; orders = ords.ids.map((id, i) => ({ id, o: ords.orders[i] }));
       const c = await loadCash().catch(() => null);
       $("#pcash").textContent = c ? `Cash: ${fmtUsd(c.total)} across your chains` : "";
       $("#pbal").innerHTML = bal > 0n ? `Unused: ${fmtUsd(usdOfWei(bal))} <button type="button" class="sharebtn" id="pwd">Withdraw</button>` : "";
@@ -2402,21 +2445,51 @@ async function renderPerps(sym) {
     } catch (e) { console.warn("perps positions", e); }
   };
   function showPositions() {
-    const mine = views.map((v, i) => ({ v, id: ids[i] })); // every coin's: this list is the visitor's whole book
-    if (!mine.length) return ($("#ppos").innerHTML = `<div class="stat">No open positions.</div>`);
-    $("#ppos").innerHTML = mine.map(({ v, id }) => {
-      const p = v.position, long = p.isLong, stakeUsd = usdOfWei(p.stake), pnlUsd = usdOfWei(v.pnl) - usdOfWei(v.holdFee);
+    const mine = views.map((v, i) => ({ v, id: ids[i], tr: extras[i]?.[0], margin: extras[i]?.[1] || 0n })); // every coin's
+    $("#ppos").innerHTML = !mine.length ? `<div class="stat">No open positions.</div>` : mine.map(({ v, id, tr, margin }) => {
+      const p = v.position, long = p.isLong, stakeUsd = usdOfWei(p.stake) + usdOfWei(margin), pnlUsd = usdOfWei(v.pnl) - usdOfWei(v.holdFee);
       const m = markets.find((z) => z.id === Number(p.marketId));
-      const entry = coinUsd(p.entryTick), liq = entry * (long ? 1 - 0.85 / Number(p.leverage) : 1 + 0.85 / Number(p.leverage));
+      const entry = coinUsd(p.entryTick), liq = liqPrice(entry, long, Number(p.leverage), p.stake, margin);
       const pct = stakeUsd ? (pnlUsd / stakeUsd) * 100 : 0;
-      return `<div class="fi" style="align-items:center">
+      const trig = [tr?.hasTakeProfit ? `TP ${tinyUsd(coinUsd(tr.takeProfit))}` : "", tr?.hasStopLoss ? `SL ${tinyUsd(coinUsd(tr.stopLoss))}` : ""].filter(Boolean).join(" · ");
+      const ed = editing && editing.id === id ? editing.what : "";
+      return `<div class="fi" style="align-items:center;flex-wrap:wrap">
         <div class="avatar" style="font-size:12px;color:${long ? "var(--positive)" : "var(--negative)"}">${long ? "L" : "S"}</div>
-        <div style="min-width:0"><div class="t"><b>${long ? "Long" : "Short"} $${esc(m?.symbol || "?")} ${p.leverage}x</b></div>
-          <div class="w">${fmtUsd(stakeUsd)} · entry ${tinyUsd(entry)} · now ${tinyUsd(coinUsd(v.markTick))} · closes near ${tinyUsd(liq)}</div></div>
+        <div style="min-width:0;flex:1"><div class="t"><b>${long ? "Long" : "Short"} $${esc(m?.symbol || "?")} ${p.leverage}x</b>${margin > 0n ? ` <span class="stat">+${fmtUsd(usdOfWei(margin))} margin</span>` : ""}</div>
+          <div class="w">${fmtUsd(usdOfWei(p.stake))} · entry ${tinyUsd(entry)} · now ${tinyUsd(coinUsd(v.markTick))} · closes near ${tinyUsd(liq)}${trig ? " · " + trig : ""}</div></div>
         <div class="amt"><span class="${pnlUsd >= 0 ? "pos" : "neg"}">${pnlUsd >= 0 ? "+" : "−"}${fmtUsd(Math.abs(pnlUsd))}</span><div class="w">${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%</div></div>
-        ${Number(v.action) ? `<span class="stat" style="margin-left:10px">Settling…</span>` : `<button type="button" class="pclose" data-id="${id}" style="margin-left:10px">Close</button>`}</div>`;
+        ${Number(v.action) ? `<span class="stat" style="margin-left:10px">Settling…</span>` : `<div class="row" style="gap:6px;margin-left:10px">
+          <button type="button" class="sharebtn ped" data-id="${id}" data-w="tpsl">TP/SL</button><button type="button" class="sharebtn ped" data-id="${id}" data-w="margin">+ Margin</button>
+          <button type="button" class="pclose" data-id="${id}">Close</button></div>`}
+        ${ed === "tpsl" ? `<div class="row" style="gap:8px;width:100%;margin-top:10px">
+            <input id="etp" inputmode="decimal" placeholder="Take profit, price % from entry" value="${tr?.hasTakeProfit ? ((tickEth(tr.takeProfit - p.entryTick) - 1) * 100).toFixed(1) : ""}" style="flex:1" />
+            <input id="esl" inputmode="decimal" placeholder="Stop loss, price % from entry" value="${tr?.hasStopLoss ? ((tickEth(tr.stopLoss - p.entryTick) - 1) * 100).toFixed(1) : ""}" style="flex:1" />
+            <button type="button" class="primary" id="esave" data-id="${id}">Save</button></div>` : ""}
+        ${ed === "margin" ? `<div class="row" style="gap:8px;width:100%;margin-top:10px">
+            <input id="emar" inputmode="decimal" placeholder="Add margin (USD)" style="flex:1" />
+            <button type="button" class="primary" id="eadd" data-id="${id}">Add</button></div>
+            <div class="stat" style="width:100%;margin-top:6px">Margin moves the loss-close price away. It doesn't change the size or the max win, and comes back when you close.</div>` : ""}</div>`;
     }).join("");
     app.querySelectorAll(".pclose").forEach((b) => b.onclick = () => closePos(BigInt(b.dataset.id), b).catch((e) => { toast(errMsg(e), 7000); b.disabled = false; }));
+    app.querySelectorAll(".ped").forEach((b) => b.onclick = () => {
+      const id = BigInt(b.dataset.id);
+      editing = editing && editing.id === id && editing.what === b.dataset.w ? null : { id, what: b.dataset.w };
+      showPositions();
+    });
+    if ($("#esave")) $("#esave").onclick = () => saveTriggers(BigInt($("#esave").dataset.id)).catch((e) => toast(errMsg(e), 7000));
+    if ($("#eadd")) $("#eadd").onclick = () => addMargin(BigInt($("#eadd").dataset.id)).catch((e) => toast(errMsg(e), 7000));
+    // waiting orders
+    $("#pordersw").hidden = !orders.length;
+    $("#porders").innerHTML = orders.map(({ id, o }) => {
+      const m = markets.find((z) => z.id === Number(o.marketId));
+      const days = Math.max(0, (Number(o.expiresAt) - Date.now() / 1000) / 86400);
+      return `<div class="fi" style="align-items:center">
+        <div class="avatar" style="font-size:12px;color:${o.isLong ? "var(--positive)" : "var(--negative)"}">${o.isLong ? "L" : "S"}</div>
+        <div style="min-width:0;flex:1"><div class="t"><b>${o.isLong ? "Long" : "Short"} $${esc(m?.symbol || "?")} ${o.leverage}x · ${fmtUsd(usdOfWei(o.stake))}</b></div>
+          <div class="w">opens when the market cap ${o.above ? "rises to" : "falls to"} $${compact(tickMcap(o.triggerTick))} · ${days >= 1 ? `${Math.ceil(days)}d` : `${Math.ceil(days * 24)}h`} left</div></div>
+        <button type="button" class="pcancel" data-id="${id}" style="margin-left:10px">Cancel</button></div>`;
+    }).join("");
+    app.querySelectorAll(".pcancel").forEach((b) => b.onclick = () => cancelOrder(BigInt(b.dataset.id), b).catch((e) => { toast(errMsg(e), 7000); b.disabled = false; }));
   }
   const exW = () => new ethers.Contract(perpCfg().exchange, PERP_EX_ABI, signer);
   async function withdrawAll() {
@@ -2434,9 +2507,9 @@ async function renderPerps(sym) {
     b.disabled = true;
     await requireWallet(ch);
     const v = views[ids.findIndex((z) => z === id)];
-    const r = await lens.quoteOpen(Number(v.position.marketId), v.position.isLong, 1, 0n).catch(() => null);
-    // the exit fills at the worse of the live and the 1-minute price: the limit allows 1% beyond that
-    const fill = r ? (v.position.isLong ? Math.min(Number(r.spotTick), Number(r.fastTick)) : Math.max(Number(r.spotTick), Number(r.fastTick))) : Number(v.markTick);
+    // the exit the exchange would give now (worse of live and 1-minute price, pump band, spread); 1% beyond it
+    const [ok, exitTick] = await lens.quoteClose(id).catch(() => [false, 0]);
+    const fill = ok ? Number(exitTick) : Number(v.markTick);
     const limit = v.position.isLong ? fill - PERP_SLIP_TICKS : fill + PERP_SLIP_TICKS;
     toast(WALLET_KIND === "privy" ? "Closing…" : "Confirm in your wallet…", 15000);
     const t0 = Date.now();
@@ -2448,7 +2521,78 @@ async function renderPerps(sym) {
     await loadCash(true).catch(() => {});
     refresh();
   }
+  // ETH to send with a trade: what `wei` needs beyond the trading balance, brought to Robinhood Chain first if needed
+  async function topUp(wei) {
+    const have = await ex.balanceOf(account);
+    const need = wei > have ? wei - have : 0n;
+    if (need > 0n) {
+      const wallet = await pch.reader.getBalance(account);
+      const gas = ethers.parseEther("0.00003");
+      if (wallet < need + gas) await gatherCash(ch, usdOfWei(need + gas - wallet) + 0.05, (m) => toast(m, 30000));
+    }
+    return need;
+  }
+  async function placeLimit() {
+    const usd = usdIn(), long = side === "long";
+    const target = Number($("#ptrig").value.trim().replace(/[$,\s]/g, "")) || 0;
+    if (!usd || !target) return toast(!usd ? "Enter an amount" : "Enter the market cap to open at");
+    const trig = mcapTick(target);
+    if (trig === null) throw new Error("No price for this coin right now. Try again in a moment.");
+    await requireWallet(ch);
+    const stake = stakeWei();
+    const r = await lens.quoteOpen(mk.id, long, lev, stake);
+    if ([1, 2, 3, 4, 5, 8, 10].includes(Number(r.reason))) throw new Error(why(Number(r.reason)) || "This order can't be placed right now.");
+    const above = trig > Number(r.fastTick);
+    const value = await topUp(stake + r.fee);
+    toast(WALLET_KIND === "privy" ? "Placing the order…" : "Confirm in your wallet…", 15000);
+    const tx = await exW().placeOrder(mk.id, long, lev, stake, trig, above, PERP_ORDER_SLIP_TICKS, BigInt(Math.floor(Date.now() / 1000) + PERP_ORDER_DAYS * 86400), { value });
+    await waitReceipt(pch, tx.hash);
+    toast(`Order placed: ${long ? "long" : "short"} ${lev}x opens when $${mk.symbol}'s market cap ${above ? "rises" : "falls"} to $${compact(target)}`, 6000);
+    $("#pamt").value = ""; $("#ptrig").value = "";
+    await loadCash(true).catch(() => {});
+    refresh(); preview();
+  }
+  async function cancelOrder(id, b) {
+    b.disabled = true;
+    await requireWallet(ch);
+    toast(WALLET_KIND === "privy" ? "Cancelling…" : "Confirm in your wallet…", 15000);
+    await waitReceipt(pch, (await exW().cancelOrder(id)).hash);
+    const out = await ex.balanceOf(account);
+    if (out > 0n) await waitReceipt(pch, (await exW().withdraw(out)).hash);
+    toast(`Order cancelled: ${fmtUsd(usdOfWei(out))} back in your wallet`);
+    await loadCash(true).catch(() => {});
+    refresh();
+  }
+  // take-profit and stop-loss as price moves from entry (+50 = 50% up), stored on-chain as 1-minute-price levels
+  async function setTriggersFor(id, entryTick, tpPct, slPct) {
+    const tp = tpPct ? entryTick + pctTicks(tpPct) : 0, sl = slPct ? entryTick + pctTicks(slPct) : 0;
+    await waitReceipt(pch, (await exW().setTriggers(id, !!tpPct, tp, !!slPct, sl)).hash);
+  }
+  async function saveTriggers(id) {
+    await requireWallet(ch);
+    const v = views[ids.findIndex((z) => z === id)];
+    toast(WALLET_KIND === "privy" ? "Saving…" : "Confirm in your wallet…", 15000);
+    try { await setTriggersFor(id, Number(v.position.entryTick), pctIn($("#etp")), pctIn($("#esl"))); }
+    catch (e) { throw /BadConfig/.test(errMsg(e) + String(e?.data || "")) ? new Error("The price is already past that level. Close the position instead, or pick another level.") : e; }
+    editing = null;
+    toast("Take-profit and stop-loss saved");
+    refresh();
+  }
+  async function addMargin(id) {
+    const usdM = pctIn($("#emar"));
+    if (!(usdM > 0) || !ethUsd()) return toast("Enter an amount");
+    await requireWallet(ch);
+    const wei = ethers.parseEther((usdM / ethUsd()).toFixed(15));
+    const value = await topUp(wei);
+    toast(WALLET_KIND === "privy" ? "Adding margin…" : "Confirm in your wallet…", 15000);
+    await waitReceipt(pch, (await exW().addMargin(id, wei, { value })).hash);
+    editing = null;
+    toast(`${fmtUsd(usdM)} of margin added`);
+    await loadCash(true).catch(() => {});
+    refresh();
+  }
   async function openPos() {
+    if (kind === "limit") return placeLimit();
     const usd = usdIn();
     if (!usd) return toast("Enter an amount");
     await requireWallet(ch);
@@ -2469,7 +2613,16 @@ async function renderPerps(sym) {
     const tx = await exW().open(mk.id, long, lev, stake, limit, { value: need });
     await waitReceipt(pch, tx.hash);
     toast(`${long ? "Long" : "Short"} ${lev}x opened in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
-    $("#pamt").value = "";
+    const tpPct = pctIn($("#ptp")), slPct = pctIn($("#psl"));
+    if (tpPct || slPct) {
+      const mine = await ex.positionIdsOf(account);
+      const id = mine.reduce((a, b) => (b > a ? b : a), 0n);
+      const pv = (await lens.positionsOf(account))[mine.findIndex((z) => z === id)];
+      await setTriggersFor(id, Number(pv.position.entryTick), tpPct, slPct)
+        .then(() => toast(`${long ? "Long" : "Short"} ${lev}x opened with ${[tpPct ? "take-profit" : "", slPct ? "stop-loss" : ""].filter(Boolean).join(" and ")}`))
+        .catch((e) => toast(`Opened, but the take-profit/stop-loss wasn't saved: ${errMsg(e)}. Set it from your position.`, 8000));
+    }
+    $("#pamt").value = ""; $("#ptp").value = ""; $("#psl").value = "";
     await loadCash(true).catch(() => {});
     refresh(); preview();
   }
@@ -2477,7 +2630,9 @@ async function renderPerps(sym) {
   app.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => { side = b.dataset.s; if (lev > maxLev()) lev = Math.max(...PERP_LEVS.filter((v) => v <= maxLev())); preview(); });
   app.querySelectorAll("#plev button").forEach((b) => b.onclick = () => { lev = Number(b.dataset.v); try { localStorage.setItem("pf-perp-lev", lev); } catch {} preview(); });
   app.querySelectorAll("#pquick button").forEach((b) => b.onclick = () => { $("#pamt").value = b.dataset.v; preview(); });
+  app.querySelectorAll("#ptype button").forEach((b) => b.onclick = () => { kind = b.dataset.t; preview(); });
   $("#pamt").addEventListener("input", preview);
+  $("#ptrig").addEventListener("input", preview);
   $("#pgo").onclick = async () => {
     const btn = $("#pgo");
     btn.disabled = true;

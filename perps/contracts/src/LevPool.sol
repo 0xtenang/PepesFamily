@@ -44,6 +44,7 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
     event WithdrawRequested(address indexed lp, uint256 shares, uint64 unlockAt);
     event WithdrawCancelled(address indexed lp, uint256 shares);
     event Withdrawn(address indexed lp, uint256 shares, uint256 assets);
+    event WithdrawFeeKept(address indexed lp, uint256 fee);
 
     error AlreadySet();
     error OnlyExchange();
@@ -122,11 +123,14 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
         _requireValuation();
         assets = previewRedeem(r.shares);
         if (assets > r.assets) assets = r.assets;
+        uint256 fee = (assets * withdrawFeeBps()) / BPS;
+        assets -= fee;
         if (assets > freeCash()) revert NotEnoughFreeCash();
         delete withdrawRequests[msg.sender];
         _burn(address(this), r.shares);
         cash -= assets;
         _send(msg.sender, assets);
+        if (fee > 0) emit WithdrawFeeKept(msg.sender, fee);
         emit Withdrawn(msg.sender, r.shares, assets);
     }
 
@@ -173,6 +177,16 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
     function previewRedeem(uint256 shares) public view returns (uint256) {
         (uint256 low,) = navRange();
         return (shares * low) / totalSupply();
+    }
+
+    /// @notice Fee on withdrawals while traders are winning against the pool, kept by the pool for the LPs who
+    ///         stay (Veranta's buffer-ratio fee). Ratio = pool value at the worst price / cash: 1.0 or more is free,
+    ///         0.5% down to 0.95, 1.5% down to 0.90, 2.5% below. It slows a run on the pool when it can least afford one.
+    function withdrawFeeBps() public view returns (uint256) {
+        if (cash == 0) return 0;
+        (uint256 low,) = navRange();
+        uint256 ratio = (low * BPS) / cash;
+        return ratio >= BPS ? 0 : ratio >= 9500 ? 50 : ratio >= 9000 ? 150 : 250;
     }
 
     /// @notice ETH per 1e18 shares.
