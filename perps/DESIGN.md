@@ -34,7 +34,7 @@ All numbers are owner-settable within hard limits written into the contract.
 | Rug guard | fast price 80% under slow price: shorts settle at most +20%, new bets locked 1 hour | same | Anyone can trigger it when the condition holds. While the live price shows a rug the averages haven't caught yet, shorts can't close or take a max win |
 | Loss breaker | new bets pause for a full hour after the pool loses 10% in trading within an hour | "protection engine" | LP deposits and withdrawals don't count |
 | Stale price | price feed failing for 10 minutes without a break: positions close at the last good fast price | same idea | Nothing gets stuck. The failures must be recorded at least every 2 minutes, so a feed that recovered quietly can't be settled at an old price |
-| LP withdrawal | 24-hour cooldown (never under 1 hour), then a 2-day window; pays the lower of the value at request and at withdrawal; only from cash not reserved for max wins | n/a | Deposits and withdraw requests wait while a rug is being settled |
+| LP withdrawal | 24-hour cooldown (never under 1 hour), then a 2-day window; pays the lower of the value at request and at withdrawal, never below the minimum the LP sets (`withdraw(minAssets)`); only from cash not reserved for max wins | n/a | Deposits and withdraw requests wait while a rug is being settled |
 | **On-chain book** | **all positions and P&L on-chain, no co-signer** | off-chain engine | Improvement 5 |
 | One-click trading | session key with expiry, limits and a daily budget; relayer pays gas | one-click trading for 24 h | See below |
 

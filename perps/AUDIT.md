@@ -2,7 +2,7 @@
 
 What the long/short contracts do, what they must guarantee, the admin powers, and the limits we already know about. Rules and reasoning in more detail: [DESIGN.md](DESIGN.md). Earlier internal reviews and their fixes: [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
-**Audited:** IMD Swarm, 2026-10-30, commit 19ac59a ([report](https://explorer.imd.fun/jobs/1425b92e-2a79-4c8e-9ba8-fa2163df4825)): 1 high, 2 medium, 1 low, all fixed with tests (SECURITY_REVIEW.md).
+**Audited:** IMD Swarm, 2026-10-30, commit 7379f64 ([report](https://explorer.imd.fun/jobs/964f33f1-8840-4eec-9489-b908591ddbeb)): Long/Short medium and low fixed with tests. Earlier: IMD Swarm, 2026-10-30, commit 19ac59a ([report](https://explorer.imd.fun/jobs/1425b92e-2a79-4c8e-9ba8-fa2163df4825)): 1 high, 2 medium, 1 low, all fixed with tests (SECURITY_REVIEW.md).
 
 ## 1. What the system is
 
@@ -47,7 +47,7 @@ cd perps/contracts
 forge test
 ```
 
-That runs 219 tests offline. The fork tests skip unless `FORK_URL` is set:
+That runs 222 tests offline. The fork tests skip unless `FORK_URL` is set:
 
 ```bash
 FORK_URL=https://robinhood.drpc.org forge test --match-path 'test/fork/*'

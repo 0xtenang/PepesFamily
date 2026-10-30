@@ -88,7 +88,7 @@ contract Review2RegressionTest is Base {
         pool.requestWithdraw(shares);
         _wait(1 days);
         vm.prank(lp);
-        pool.withdraw();
+        pool.withdraw(0);
         assertGe(pool.cash(), ex.totalMaxWin(), "every reserved max win stays payable");
     }
 

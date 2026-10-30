@@ -21,6 +21,9 @@ interface IRemotePad {
         returns (address token);
     function collectCreatorFees(address token) external;
     function setCreatorPayout(address token, address payout) external;
+    function acceptCreatorPayout(address token) external;
+    function creatorPayout(address token) external view returns (address);
+    function pendingCreatorPayout(address token) external view returns (address);
 }
 
 interface IRemoteEthRouter {
@@ -32,15 +35,57 @@ interface IRemoteToken {
     function balanceOf(address account) external view returns (uint256);
 }
 
+/// @title RemoteCreatorVault
+/// @notice The launchpad's creator payout for one token launched through PepesFamilyRemote. Every creator fee of that
+///         token lands here, whoever triggers the collection (the launchpad's `collectCreatorFees` is public), so
+///         it always belongs to that token's creator, and the Remote sends it on (IMD audit 964f33f1, H-1).
+/// @dev The Remote deploys one of these and gives each token a minimal clone of it (EIP-1167, ~45k gas, so a
+///      cross-chain launch stays inside HyperEVM's 3M-gas fast blocks). A clone keeps no storage: only the Remote
+///      (this implementation's immutable) can call it, naming the launchpad and token each time.
+contract RemoteCreatorVault {
+    using SafeTransfer for address;
+
+    error NotRemote();
+
+    address public immutable remote;
+
+    constructor() {
+        remote = msg.sender;
+    }
+
+    modifier onlyRemote() {
+        if (msg.sender != remote) revert NotRemote();
+        _;
+    }
+
+    /// @notice Takes the payout role the Remote proposed for this vault.
+    function accept(address pad, address token) external onlyRemote {
+        IRemotePad(pad).acceptCreatorPayout(token);
+    }
+
+    /// @notice Proposes `payout` as the token's creator payout on the launchpad (address(0) cancels a proposal).
+    function propose(address pad, address token, address payout) external onlyRemote {
+        IRemotePad(pad).setCreatorPayout(token, payout);
+    }
+
+    /// @notice Collects the token's waiting creator fees and sends everything this vault holds of `quote` to `to`.
+    function forward(address pad, address token, address quote, address to) external onlyRemote returns (uint256 amount) {
+        if (IRemotePad(pad).creatorPayout(token) == address(this)) IRemotePad(pad).collectCreatorFees(token);
+        amount = IRemoteToken(quote).balanceOf(address(this));
+        if (amount != 0) quote.transferOut(to, amount);
+    }
+}
+
 /// @title PepesFamilyRemote
 /// @notice Launch and buy PepesFamily tokens for someone else, paid in the chain's coin: the entry point for
 ///         cross-chain actions. A filler such as Relay or Across delivers the coin here from a payment the user made on
 ///         another chain and calls `launchFor` or `buyFor` with the user's address, in the same transaction.
 ///         - Tokens bought go straight to the user; nothing is kept here between transactions.
 ///         - A token launched here has this contract as its creator on the launchpad, so it records the real creator
-///           (`creatorOf`) and passes them every creator fee (`collectCreatorFees`, callable by anyone). The creator
-///           can also take the creator fees over directly on the launchpad (`handOver`, then the launchpad's
-///           `acceptCreatorPayout`), or pass the role to another address (`transferCreator`).
+///           (`creatorOf`). Its creator fees are paid to a vault of its own (`vaultOf`), and this contract passes
+///           them to the creator (`collectCreatorFees`, callable by anyone). The creator can also take the creator
+///           fees over directly on the launchpad (`handOver`, then the launchpad's `acceptCreatorPayout`), or pass
+///           the role to another address (`transferCreator`) while the vault still holds it.
 ///         - `gasDrop` leaves the user a little of the chain's coin, so they can claim and sell there later.
 ///         Only launchpads on the allowlist are used (the owner adds them: PepesFamily v5 launchpads only), so a fake
 ///         launchpad can never be used to claim another token's creator role.
@@ -55,6 +100,7 @@ contract PepesFamilyRemote {
     error Reentered();
     error AlreadyRecorded();
     error DropFailed();
+    error HandedOverAlready();
 
     event LaunchedFor(address indexed pad, address indexed token, address indexed creator, uint256 spent, uint256 tokens);
     event BoughtFor(address indexed pad, address indexed token, address indexed buyer, uint256 spent, uint256 tokens);
@@ -74,6 +120,10 @@ contract PepesFamilyRemote {
     mapping(address token => address) public creatorOf;
     /// @notice The launchpad of a token launched here.
     mapping(address token => address) public padOf;
+    /// @notice The launchpad's creator payout for a token launched here, until the creator takes it over.
+    mapping(address token => RemoteCreatorVault) public vaultOf;
+    /// @notice The vault code every token's vault is a clone of.
+    address public immutable vaultImplementation;
 
     uint256 private locked = 1;
 
@@ -92,6 +142,7 @@ contract PepesFamilyRemote {
     constructor(address owner_, address[] memory pads) {
         if (owner_ == address(0)) revert ZeroAddress();
         owner = owner_;
+        vaultImplementation = address(new RemoteCreatorVault());
         emit OwnershipTransferred(address(0), owner_);
         for (uint256 i; i < pads.length; i++) {
             isPad[pads[i]] = true;
@@ -126,6 +177,10 @@ contract PepesFamilyRemote {
         if (creatorOf[token] != address(0)) revert AlreadyRecorded();
         creatorOf[token] = creator;
         padOf[token] = pad;
+        RemoteCreatorVault vault = RemoteCreatorVault(_clone(vaultImplementation));
+        vaultOf[token] = vault;
+        IRemotePad(pad).setCreatorPayout(token, address(vault));
+        vault.accept(pad, token);
         if (buyValue != 0) tokens = _buy(pad, token, creator, buyValue, minTokens);
         _drop(creator, gasDrop);
         emit LaunchedFor(pad, token, creator, buyValue, tokens);
@@ -147,18 +202,11 @@ contract PepesFamilyRemote {
         emit BoughtFor(pad, token, buyer, msg.value - gasDrop, tokens);
     }
 
-    /// @notice Sends `token`'s waiting creator fees to its creator. Callable by anyone. (After `handOver` the
-    ///         launchpad pays the creator directly instead.)
+    /// @notice Sends `token`'s creator fees to its creator: those waiting on the launchpad and any already
+    ///         collected into the token's vault. Callable by anyone. (After `handOver` the launchpad pays the
+    ///         creator directly; this still sends on anything the vault received before.)
     function collectCreatorFees(address token) external nonReentrant returns (uint256 amount) {
-        address creator = creatorOf[token];
-        if (creator == address(0)) revert NotCreator();
-        address pad = padOf[token];
-        (address quote,,,,) = IRemotePad(pad).launches(token);
-        uint256 before = IRemoteToken(quote).balanceOf(address(this));
-        IRemotePad(pad).collectCreatorFees(token);
-        amount = IRemoteToken(quote).balanceOf(address(this)) - before;
-        if (amount != 0) quote.transferOut(creator, amount);
-        emit CreatorFeesForwarded(token, creator, amount);
+        amount = _forward(token);
     }
 
     /// @notice The creator proposes themselves as the launchpad's creator payout for `token`; they then call the
@@ -166,14 +214,22 @@ contract PepesFamilyRemote {
     function handOver(address token) external nonReentrant {
         address creator = creatorOf[token];
         if (msg.sender != creator) revert NotCreator();
-        IRemotePad(padOf[token]).setCreatorPayout(token, creator);
+        _requireVaultPays(token);
+        vaultOf[token].propose(padOf[token], token, creator);
         emit HandedOver(token, creator);
     }
 
-    /// @notice The creator passes the creator role of `token` to `to`.
-    function transferCreator(address token, address to) external {
+    /// @notice The creator passes the creator role of `token` to `to`. Fees earned so far go to the current creator
+    ///         first, and a handover the current creator proposed is cancelled, so it can't be accepted after the
+    ///         role has passed on (IMD audit 964f33f1, L-5). Once the creator has taken the payout over on the
+    ///         launchpad, the role lives there: pass it with the launchpad's `setCreatorPayout` instead.
+    function transferCreator(address token, address to) external nonReentrant {
         if (msg.sender != creatorOf[token]) revert NotCreator();
         if (to == address(0)) revert ZeroAddress();
+        _requireVaultPays(token);
+        _forward(token);
+        address pad = padOf[token];
+        if (IRemotePad(pad).pendingCreatorPayout(token) != address(0)) vaultOf[token].propose(pad, token, address(0));
         creatorOf[token] = to;
         emit CreatorTransferred(token, msg.sender, to);
     }
@@ -208,6 +264,29 @@ contract PepesFamilyRemote {
         token.transferOut(to, tokens);
         uint256 refund = address(this).balance - coinBefore;
         if (refund != 0) address(0).transferOut(to, refund);
+    }
+
+    function _forward(address token) internal returns (uint256 amount) {
+        address creator = creatorOf[token];
+        if (creator == address(0)) revert NotCreator();
+        address pad = padOf[token];
+        (address quote,,,,) = IRemotePad(pad).launches(token);
+        amount = vaultOf[token].forward(pad, token, quote, creator);
+        emit CreatorFeesForwarded(token, creator, amount);
+    }
+
+    /// @dev EIP-1167 minimal proxy of `impl`.
+    function _clone(address impl) internal returns (address instance) {
+        assembly ("memory-safe") {
+            mstore(0x00, or(shr(0xe8, shl(0x60, impl)), 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000))
+            mstore(0x20, or(shl(0x78, impl), 0x5af43d82803e903d91602b57fd5bf3))
+            instance := create(0, 0x09, 0x37)
+        }
+        if (instance == address(0)) revert ZeroAddress();
+    }
+
+    function _requireVaultPays(address token) internal view {
+        if (IRemotePad(padOf[token]).creatorPayout(token) != address(vaultOf[token])) revert HandedOverAlready();
     }
 
     function _drop(address to, uint256 amount) internal {

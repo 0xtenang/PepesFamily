@@ -618,7 +618,13 @@
  {
   "type": "function",
   "name": "withdraw",
-  "inputs": [],
+  "inputs": [
+   {
+    "name": "minAssets",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
   "outputs": [
    {
     "name": "assets",
@@ -924,6 +930,11 @@
  {
   "type": "error",
   "name": "BadValue",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "BelowMinimum",
   "inputs": []
  },
  {

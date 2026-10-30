@@ -57,6 +57,7 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
     error PoolEmpty();
     error ValuationPaused();
     error RequestExpired();
+    error BelowMinimum();
 
     modifier onlyExchange() {
         if (msg.sender != address(exchange)) revert OnlyExchange();
@@ -116,7 +117,11 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
         emit WithdrawCancelled(msg.sender, shares);
     }
 
-    function withdraw() external nonReentrant returns (uint256 assets) {
+    /// @notice Withdraw a matured request, at the lower of its value then and now, less the stress fee.
+    /// @param minAssets The least the LP accepts. The value now marks open positions at the coin's live price too,
+    ///        so a price pushed in this block could lower it: the LP's floor makes such a withdrawal fail instead
+    ///        (IMD audit 964f33f1, M-3). Pass about the quoted payout less the stress fee and a little slack.
+    function withdraw(uint256 minAssets) external nonReentrant returns (uint256 assets) {
         WithdrawRequest memory r = withdrawRequests[msg.sender];
         if (r.shares == 0) revert NoRequest();
         if (block.timestamp < r.unlockAt) revert StillLocked();
@@ -126,6 +131,7 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
         if (assets > r.assets) assets = r.assets;
         uint256 fee = (assets * _withdrawFeeBps(low)) / BPS;
         assets -= fee;
+        if (assets < minAssets) revert BelowMinimum();
         if (assets > freeCash()) revert NotEnoughFreeCash();
         delete withdrawRequests[msg.sender];
         _burn(address(this), r.shares);

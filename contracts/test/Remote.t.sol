@@ -191,4 +191,88 @@ contract RemoteTest is Test {
         assertEq(bob.balance - b0, drop);
         _empty();
     }
+
+    // ------------------------------------------------ IMD Swarm audit 964f33f1
+
+    /// H-1: anyone calling the launchpad's public collector used to strand the creator's fees in the Remote. Now
+    /// they land in the token's own vault, and the Remote sends them on.
+    function test_IMD_H1_directCollectionCantStrandCreatorFees() public {
+        (PadToken t,) = _launchFor(0, 0);
+        address token = address(t);
+        assertEq(pad.creatorPayout(token), address(remote.vaultOf(token)), "the vault is the launchpad payout");
+        vm.prank(bob);
+        router.buy(token, 10 ether, 1, block.timestamp);
+        vm.prank(makeAddr("griefer"));
+        pad.collectCreatorFees(token);
+        uint256 a0 = weth.balanceOf(alice);
+        uint256 fwd = remote.collectCreatorFees(token);
+        assertEq(fwd, 0.1 ether, "forwarded amount");
+        assertEq(weth.balanceOf(alice) - a0, 0.1 ether, "creator paid");
+        assertEq(weth.balanceOf(address(remote.vaultOf(token))), 0, "vault keeps nothing");
+        _empty();
+    }
+
+    /// Fees of two tokens collected directly never mix: each goes to its own creator.
+    function test_IMD_H1_feesStayWithTheirToken() public {
+        (PadToken t1,) = _launchFor(0, 0);
+        vm.prank(filler);
+        (address t2,) = remote.launchFor(address(pad), bob, "Two", "TWO", "{}", _split(100, 100, 100), 0, 1, 0);
+        vm.startPrank(bob);
+        router.buy(address(t1), 10 ether, 1, block.timestamp);
+        router.buy(t2, 20 ether, 1, block.timestamp);
+        vm.stopPrank();
+        pad.collectCreatorFees(address(t1));
+        pad.collectCreatorFees(t2);
+        uint256 a0 = weth.balanceOf(alice);
+        uint256 b0 = weth.balanceOf(bob);
+        remote.collectCreatorFees(t2);
+        remote.collectCreatorFees(address(t1));
+        assertEq(weth.balanceOf(alice) - a0, 0.1 ether);
+        assertEq(weth.balanceOf(bob) - b0, 0.2 ether);
+    }
+
+    /// L-5: passing the role on cancels the old creator's pending handover, and the old creator's fees go to them.
+    function test_IMD_L5_transferCancelsAPendingHandover() public {
+        (PadToken t,) = _launchFor(0, 0);
+        address token = address(t);
+        vm.prank(bob);
+        router.buy(token, 10 ether, 1, block.timestamp);
+        vm.prank(alice);
+        remote.handOver(token);
+        assertEq(pad.pendingCreatorPayout(token), alice);
+        uint256 a0 = weth.balanceOf(alice);
+        vm.prank(alice);
+        remote.transferCreator(token, bob);
+        assertEq(weth.balanceOf(alice) - a0, 0.1 ether, "fees earned before the transfer went to alice");
+        assertEq(pad.pendingCreatorPayout(token), address(0), "handover cancelled");
+        vm.prank(alice);
+        vm.expectRevert();
+        pad.acceptCreatorPayout(token);
+        // bob now holds the role, and can hand it over himself
+        vm.prank(bob);
+        router.buy(token, 10 ether, 1, block.timestamp);
+        uint256 b0 = weth.balanceOf(bob);
+        remote.collectCreatorFees(token);
+        assertEq(weth.balanceOf(bob) - b0, 0.1 ether);
+        vm.prank(bob);
+        remote.handOver(token);
+        vm.prank(bob);
+        pad.acceptCreatorPayout(token);
+        assertEq(pad.creatorPayout(token), bob);
+    }
+
+    /// After the creator took the payout over on the launchpad, the Remote no longer moves the role.
+    function test_IMD_L5_noTransferAfterHandover() public {
+        (PadToken t,) = _launchFor(0, 0);
+        vm.prank(alice);
+        remote.handOver(address(t));
+        vm.prank(alice);
+        pad.acceptCreatorPayout(address(t));
+        vm.prank(alice);
+        vm.expectRevert(PepesFamilyRemote.HandedOverAlready.selector);
+        remote.transferCreator(address(t), bob);
+        vm.prank(alice);
+        vm.expectRevert(PepesFamilyRemote.HandedOverAlready.selector);
+        remote.handOver(address(t));
+    }
 }

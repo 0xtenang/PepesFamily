@@ -187,7 +187,12 @@ export function Pool({ pool, config, account, now, busy, run }: Props) {
               type="button"
               className="btn btn-primary"
               disabled={!account || busy || !ready}
-              onClick={() => run('Withdraw from the pool', { ...poolContract, functionName: 'withdraw' })}
+              onClick={() =>
+                req &&
+                // floor: the quoted payout less the largest stress fee (2.5%) and 0.5% slack, so a price pushed in the
+                // withdrawal's block makes it fail instead of paying less
+                run('Withdraw from the pool', { ...poolContract, functionName: 'withdraw', args: [(req.payout * 97n) / 100n] })
+              }
             >
               Withdraw
             </button>

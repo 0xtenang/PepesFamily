@@ -98,10 +98,13 @@ contract LevLens {
     ///         its stake and winning its own max win (IMD audit M-1: a bankrupt loser's extra loss never offsets
     ///         another trader's win, and a winner never counts past its own cap).
     /// @return owedLow  The lowest plausible value: at whichever of spot, fast and slow price is best for the
-    ///                  pool, margin counted toward what losers lose, minus holding fees and pool fee shares
-    ///                  already owed. Deposits buy in at cash - owedLow, the highest pool value.
-    /// @return owedHigh The highest plausible value, at whichever price is worst for the pool, with no credit for
-    ///                  margin or fees owed. Withdrawals pay out at cash - owedHigh.
+    ///                  pool, less each position's holding fee and the pool's smallest share of its close fee, but
+    ///                  never more than the position can still pay (its stake plus margin; a bankrupt position pays
+    ///                  no fees: IMD audit 964f33f1, L-4). Deposits buy in at cash - owedLow, the highest pool value.
+    /// @return owedHigh The highest plausible value, at whichever of spot, fast and slow price is worst for the
+    ///                  pool, with no credit for margin or fees owed. Withdrawals pay out at cash - owedHigh; the
+    ///                  live price counts so an LP can't leave at the old price during a real move, and
+    ///                  `LevPool.withdraw(minAssets)` lets the LP refuse a payout a pushed live price lowered.
     /// @return blocked  True while the valuation can't be trusted: a feed is down and not yet stale, a rug is
     ///                  unfolding or a rug hasn't been fully settled. LP deposits and withdrawals wait until it
     ///                  clears. A feed that has gone stale counts at its last good prices, as the exchange settles
@@ -110,6 +113,7 @@ contract LevLens {
         Config memory c = exchange.getConfig();
         uint256 n = exchange.marketCount();
         int24[3][] memory ticks = new int24[3][](n);
+        uint256[2][] memory index = new uint256[2][](n); // holding-fee index now: longs, shorts
         for (uint256 i; i < n; ++i) {
             Market memory m = exchange.marketData(i);
             if (m.longs.size == 0 && m.shorts.size == 0) continue;
@@ -123,19 +127,22 @@ contract LevLens {
                 slow = m.lastGoodTick;
             }
             ticks[i] = [spot, fast, slow];
-            owedLow -= int256(_feesOwedLowerBound(c, m, m.longs, m.shorts) + _feesOwedLowerBound(c, m, m.shorts, m.longs));
+            (uint256 gl, uint256 gs) = LevLogic.feeGrowth(c, block.timestamp - m.lastFeeUpdate, m.longs.size, m.shorts.size);
+            index[i] = [m.longs.feeIndex + gl, m.shorts.feeIndex + gs];
         }
         (Position[] memory ps, uint256[] memory margins) = exchange.openPositionsData(0, exchange.openPositionCount());
         int256[3][] memory lo = new int256[3][](n);
         int256[3][] memory hi = new int256[3][](n);
         for (uint256 j; j < ps.length; ++j) {
             Position memory p = ps[j];
+            uint256 mi = p.marketId;
             int256 stake = int256(uint256(p.stake));
-            int256 withMargin = stake + int256(margins[j]);
+            int256 held = stake + int256(margins[j]);
+            int256 hold = int256(LevLogic.holdFee(p, index[mi][p.isLong ? 0 : 1], c, block.timestamp));
             for (uint256 k; k < 3; ++k) {
-                int256 v = LevLogic.pnl(p, ticks[p.marketId][k]); // capped at the position's max win
-                hi[p.marketId][k] += v < -stake ? -stake : v;
-                lo[p.marketId][k] += v < -withMargin ? -withMargin : v;
+                int256 v = LevLogic.pnl(p, ticks[mi][k]); // capped at the position's max win
+                hi[mi][k] += v < -stake ? -stake : v;
+                lo[mi][k] += _owedLow(c, p, v, hold, held);
             }
         }
         for (uint256 i; i < n; ++i) {
@@ -144,25 +151,18 @@ contract LevLens {
         }
     }
 
-    /// @dev Holding fees one side already owes the pool, less the most the free first hour could waive, plus the
-    ///      pool's share of the smallest close fee each position will pay. A floor, so deposits never pay for fees
-    ///      that might not arrive.
-    function _feesOwedLowerBound(Config memory c, Market memory m, Side memory s, Side memory other)
-        internal
-        view
-        returns (uint256)
-    {
-        if (s.size == 0) return 0;
-        // feeGrowth's first side is this one, so its first result is this side's pending growth.
-        (uint256 grown,) = LevLogic.feeGrowth(c, block.timestamp - m.lastFeeUpdate, s.size, other.size);
-        uint256 indexNow = s.feeIndex + grown;
-        uint256 accrued = (s.size * indexNow) / ONE;
-        accrued = accrued > s.sizeIndexSum ? accrued - s.sizeIndexSum : 0;
-        uint256 freeWaiver = (s.size * c.holdRateBpsPerHour * c.crowdMultBps * c.freeHoldSeconds) / (BPS * BPS * HOUR);
-        uint256 hold = accrued > freeWaiver ? accrued - freeWaiver : 0;
-        uint256 closeFeeShare = (s.size * c.openFeeSizeBps * c.poolFeeShareBps) / (BPS * BPS);
-        return hold + closeFeeShare;
+    /// @dev The least a position can take from the pool when it closes at pnl `v`: what is left to it after the
+    ///      holding fee and the pool's share of the smallest close fee (after a keeper's cut), never below losing
+    ///      everything it holds. A position with nothing left pays no fees at all.
+    function _owedLow(Config memory c, Position memory p, int256 v, int256 hold, int256 held) internal pure returns (int256) {
+        int256 left = held + v - hold;
+        if (left <= 0) return -held;
+        uint256 fee = (uint256(p.stake) * p.leverage * c.openFeeSizeBps) / BPS;
+        if (fee > uint256(left)) fee = uint256(left);
+        int256 credit = int256((fee * (BPS - c.keeperRewardBps) * c.poolFeeShareBps) / (BPS * BPS));
+        return v - hold - credit;
     }
+
 
     // ---------------------------------------------------------------- markets
 

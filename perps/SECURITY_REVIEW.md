@@ -115,3 +115,12 @@ External: four IMD Swarm agents (permissions, flow, math, economics) audited com
 | M-1 | Medium | Pool value floored each side's losses as a whole, so a bankrupt position's loss past its stake offset other positions' wins and overstated the value withdrawals pay at | `LevLens.liabilityRange` values every open position between its own stake (plus margin, for deposits) and its own max win. This also closes the old "capped winners" limit. The valuation now reads each position (~21k gas), so open positions are capped at `MAX_OPEN_POSITIONS` (600; a deposit then costs ~13.6M gas) and the pool values once per deposit or withdrawal | `test_IMD_M1_*` |
 | M-2 | Medium | One open position on a coin whose feed had died blocked every LP deposit and withdrawal, with no way to clear it | Once the feed meets the exchange's own stale condition, the pool values that coin at its last good prices, as the exchange settles it. It still pauses for the first `staleSeconds`, while keepers aren't pinging, and for rugs | `test_IMD_M2_staleMarketDoesNotFreezeThePool` |
 | L-1 | Low | `closeAtMaxWin` and `liquidate` paid the keeper share to the position's own owner | Both pay no keeper share when the caller is the owner. The owner calling from a second address still collects it: the rule is an address check, documented as a limit | `test_IMD_L1_*` |
+
+## IMD Swarm audit 2 — 2026-10-30
+
+External: the whole repo at commit 7379f64 ([job 964f33f1](https://explorer.imd.fun/jobs/964f33f1-8840-4eec-9489-b908591ddbeb)). Two findings concern Long/Short; the other three concern the launchpad's cross-chain receiver (see the main README). Long/Short proofs are kept in `contracts/test/AuditImd2Regression.t.sol`. After the fixes: 222 offline tests pass.
+
+| # | Sev | Finding | Fix | Test |
+|---|---|---|---|---|
+| M-3 | Medium | `LevPool.withdraw` priced the payout with the coin's live price in that block and had no minimum, so a one-block push could pay a leaving LP less (mark and stress fee) | `withdraw(minAssets)`: the LP sets a floor and a pushed withdrawal fails instead. The live price stays in the withdrawal mark on purpose (round 2: without it an LP could leave at the old price during a real move) | `test_IMD2_M3_minPayoutRefusesAPushedWithdrawal` |
+| L-4 | Low | The deposit price credited the close fee and holding fee of positions that would never pay them (bankrupt, liquidated, or keeper-closed) | Fees are credited per position, only from what the position still holds, after the keeper's cut | `test_IMD2_L4_*` |

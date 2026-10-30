@@ -64,6 +64,7 @@ v1 was deployed at block 76719371 and verified on Sourcify. Its token source is 
 | Scope | Code | Result | Report |
 | --- | --- | --- | --- |
 | PepesFamily launchpad (v2 contracts) | `d1ad578` | 1 medium, 3 low, 3 info | [explorer.imd.fun/jobs/a3e708e2…](https://explorer.imd.fun/jobs/a3e708e2-fb57-43ea-a163-d93b916694a2) |
+| Whole repo (launchpad cross-chain receiver, Long/Short) | `7379f64` | 1 high, 2 medium, 2 low: the high, one medium and both lows fixed with tests; the receiver-activity medium is a documented known limit | [explorer.imd.fun/jobs/964f33f1…](https://explorer.imd.fun/jobs/964f33f1-8840-4eec-9489-b908591ddbeb) |
 | Long/Short (perps contracts) | `19ac59a` | 1 high, 2 medium, 1 low: all fixed, each with a test (`perps/SECURITY_REVIEW.md`) | [explorer.imd.fun/jobs/1425b92e…](https://explorer.imd.fun/jobs/1425b92e-2a79-4c8e-9ba8-fa2163df4825) |
 | Pepes token (v1, as deployed) | `8c1869c` (branch `audit-pepes-v1`) | 1 high, 1 medium, 3 low, 6 info; the "honeypot", "owner can change balance" and "suspicious function" scanner warnings were confirmed false positives | [explorer.imd.fun/jobs/46a0c47b…](https://explorer.imd.fun/jobs/46a0c47b-d3ad-4c50-973e-369203a488ce) |
 
@@ -117,7 +118,7 @@ Ethereum v5 deployment (block 26153625, commit `490e84e`, recorded in `contracts
 
 Owner and fee recipient are `0x3c8A…691C` on both chains. Expired holder rewards on Ethereum go to the same fee address for the manual $PEPES buyback and burn. `CHAIN_ID=1 forge script script/PadDeployData.s.sol` prints Ethereum's deployment data; `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com forge test --mc EthereumForkTest` runs launch, split, quoter, ETH-router and expiry tests on Ethereum state; `CHAIN_ID=1 ./script/verify-tokens.sh` verifies Ethereum launches. Base will follow once IMD is available there.
 
-### Pay from any chain (2026-10-27, not deployed yet)
+### Pay from any chain (2026-10-27; receiver v2 2026-10-30)
 
 Launch or buy on any chain PepesFamily runs on, paying with ETH, HYPE or a dollar coin (USDC, or USDG on Robinhood
 Chain) on another, in one confirmation and without bridging. [Relay](https://relay.link) fills it: its solver
@@ -128,17 +129,24 @@ the user, records the real creator of tokens it launches (`creatorOf`) and forwa
 (`collectCreatorFees`, anyone may call), lets the creator take the fees over on the launchpad (`handOver`) or pass the
 role on (`transferCreator`), and can leave a little native gas for the user (`gasDrop`). It only works with
 launchpads on its allowlist (set at deploy; the owner `0x3c8A…691C` can add more) and keeps nothing between
-transactions. Not audited. Tests: `forge test --mc RemoteTest`, and on forks `FORK_RPC=… FORK_RPC_BASE=…
+transactions. Each token launched through it gets its own creator-fee vault (a tiny clone) as the launchpad's
+creator payout, so creator fees always reach that token's creator however they are collected. Audited by IMD Swarm
+([964f33f1](https://explorer.imd.fun/jobs/964f33f1-8840-4eec-9489-b908591ddbeb), 2026-10-30): the high and low findings are fixed in v2 (the addresses below; the first
+receivers, never used for a launch, are retired). **Known limit (finding 2, medium):** a buy through the receiver
+counts as the receiver's activity, not the buyer's, because the launchpad's routers report their caller. A holder who
+only ever buys cross-chain, and never claims or sends, can have rewards older than 7 days expire. Claiming once a week
+(the gas drop covers it) keeps them. Fixing it needs new routers, so a new launchpad version. Tests: `forge test --mc RemoteTest`, and on forks `FORK_RPC=… FORK_RPC_BASE=…
 FORK_RPC_HYPER=… forge test --mc RemoteForkTest` (Robinhood's live IMD launchpad, Base ETH, HyperEVM HYPE).
 Deployment data: `PADS=… forge script script/RemoteDeployData.s.sol`. The website's quotes go through `web/api/relay.js`
 (adds the Relay API key from the Vercel variable `RELAY_API_KEY` when set) or straight to Relay.
 
 | Chain | PepesFamilyRemote | Launchpads it works with |
 | --- | --- | --- |
-| ethereum | `0x7323D7c8da32c7c36ac9E9084dc1233daBE78d1F` | `0xa89083083119B70c06b372dC85Dc6155a8F568CC`, `0x4130878d0f1efEfB84e424829bd35Aa83201A8cC`, `0x5095D9b943F951769a528212f50a41FB7CF568CC` |
-| robinhood | `0x54AAf9060067E43c92164894232dFd59C90F0178` | `0xC26003787503b978033427F77047fAF5551Ca8CC`, `0xf41b697c584F0dD38b9E65D72D49F768388d28CC`, `0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC` |
-| base | `0x4889969aE82f44375320c61ad647AAc820155A10` | `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc` |
-| hyperevm | `0xf268298cCeF5c2906667E1861B0316e06f9137e4` | `0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC` |
+| ethereum | `0x8ec13A6E998000175fCf20A77B90562fe8127252` | `0xa89083083119B70c06b372dC85Dc6155a8F568CC`, `0x4130878d0f1efEfB84e424829bd35Aa83201A8cC`, `0x5095D9b943F951769a528212f50a41FB7CF568CC` |
+| robinhood | `0xC6A3C9C80242745B795aE94afe8667a0eF3ec827` | `0xC26003787503b978033427F77047fAF5551Ca8CC`, `0xf41b697c584F0dD38b9E65D72D49F768388d28CC`, `0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC` |
+| base | `0xAf760F137D9785A14a2f7b0f0cf4b6fD943589a4` | `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc` |
+| hyperevm | `0x3e7dcCdE57953495396A0714b85B419D59F57A29` | `0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC` |
+| bsc | `0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B` | `0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC` |
 
 New launchpads for it: Base, paired with ETH (WETH, `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc`), and HyperEVM, paired with HYPE (WHYPE,
 `0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC`; deploying it needs the deploying address on HyperEVM big blocks).

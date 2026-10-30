@@ -537,7 +537,7 @@ const CHAINS = {
     key: "robinhood", gt: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
     explorer: CONFIG.explorer, blockscoutApi: CONFIG.blockscoutApi, quoter: CONFIG.quoter, imd: CONFIG.imd, imdEthKey: CONFIG.imdEthKey,
     gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, stateView: CONFIG.stateView,
-    remote: "0x54AAf9060067E43c92164894232dFd59C90F0178", remotePads: ["0xC26003787503b978033427F77047fAF5551Ca8CC", "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDG", "0x5fc5360D0400a0fD4F2AF552ADd042d716F1D168", 6]], blurb: "Robinhood Chain: low gas, home of $PEPES.",
+    remote: "0xC6A3C9C80242745B795aE94afe8667a0eF3ec827", remotePads: ["0xC26003787503b978033427F77047fAF5551Ca8CC", "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDG", "0x5fc5360D0400a0fD4F2AF552ADd042d716F1D168", 6]], blurb: "Robinhood Chain: low gas, home of $PEPES.",
   },
   ethereum: {
     key: "ethereum", gt: "eth", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
@@ -545,27 +545,27 @@ const CHAINS = {
     imd: "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
     gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" },
-    remote: "0x7323D7c8da32c7c36ac9E9084dc1233daBE78d1F", remotePads: ["0xa89083083119B70c06b372dC85Dc6155a8F568CC", "0x4130878d0f1efEfB84e424829bd35Aa83201A8cC", "0x5095D9b943F951769a528212f50a41FB7CF568CC"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6]], blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
+    remote: "0x8ec13A6E998000175fCf20A77B90562fe8127252", remotePads: ["0xa89083083119B70c06b372dC85Dc6155a8F568CC", "0x4130878d0f1efEfB84e424829bd35Aa83201A8cC", "0x5095D9b943F951769a528212f50a41FB7CF568CC"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6]], blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
     stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
   },
   base: {
     key: "base", gt: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
     explorer: "https://basescan.org", blockscoutApi: "https://base.blockscout.com/api/v2", quoter: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D",
     gmgn: "base", dex: "base", native: { name: "Ether", symbol: "ETH" }, blurb: "Base: low gas, paired with ETH.",
-    remote: "0x4889969aE82f44375320c61ad647AAc820155A10", remotePads: ["0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]],
+    remote: "0xAf760F137D9785A14a2f7b0f0cf4b6fD943589a4", remotePads: ["0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]],
   },
   hyperevm: {
     key: "hyperevm", gt: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
     explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
     gmgn: "hyperevm", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
-    remote: "0xf268298cCeF5c2906667E1861B0316e06f9137e4", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
+    remote: "0x3e7dcCdE57953495396A0714b85B419D59F57A29", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
   },
   // BNB Smart Chain: Uniswap v4 (PoolManager 0x28e2…e9dF). No Blockscout there, so trade history comes from the RPC.
   bsc: {
     key: "bsc", gt: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
     gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
-    remote: "0xB18aC5C7bB28b89759Dd9c855bcD7bb5d6906BAc", remotePads: ["0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
+    remote: "0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B", remotePads: ["0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
   // own PoolManager and quoter (contracts/script/ElysiumAddrs.s.sol). Test tokens: no USD values shown.

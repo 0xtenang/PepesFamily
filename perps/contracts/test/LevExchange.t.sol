@@ -543,7 +543,7 @@ contract ReviewRegressionTest is Base {
         _wait(1 days);
         _open(alice, 0, true, 2, 0.01 ether); // starts the breaker hour
         vm.prank(lp);
-        pool.withdraw();
+        pool.withdraw(0);
         _open(bob, 1, true, 2, 0.01 ether);
     }
 

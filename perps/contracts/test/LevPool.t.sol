@@ -31,10 +31,10 @@ contract LevPoolTest is Base {
         vm.startPrank(lp);
         pool.requestWithdraw(shares);
         vm.expectRevert(LevPool.StillLocked.selector);
-        pool.withdraw();
+        pool.withdraw(0);
         _wait(1 days);
         uint256 before = lp.balance;
-        pool.withdraw();
+        pool.withdraw(0);
         vm.stopPrank();
         assertApproxEqAbs(lp.balance - before, 8 ether, 1e6);
         assertEq(pool.totalSupply(), pool.balanceOf(pool.DEAD()), "only the seed shares are left");
@@ -60,11 +60,11 @@ contract LevPoolTest is Base {
         pool.requestWithdraw(shares);
         _wait(1 days);
         vm.expectRevert(LevPool.NotEnoughFreeCash.selector);
-        pool.withdraw();
+        pool.withdraw(0);
         pool.cancelWithdraw();
         pool.requestWithdraw(shares / 10);
         _wait(1 days);
-        pool.withdraw();
+        pool.withdraw(0);
         vm.stopPrank();
     }
 
@@ -158,7 +158,7 @@ contract LpTimingTest is Base {
         pool.requestWithdraw(pool.balanceOf(lp));
         _wait(30 days);
         vm.expectRevert(LevPool.RequestExpired.selector);
-        pool.withdraw();
+        pool.withdraw(0);
         pool.cancelWithdraw();
         vm.stopPrank();
     }
@@ -171,7 +171,7 @@ contract LpTimingTest is Base {
         _wait(1 days);
         uint256 before = lp.balance;
         vm.prank(lp);
-        pool.withdraw();
+        pool.withdraw(0);
         assertApproxEqAbs(lp.balance - before, 8 ether, 1e6, "paid the value at request time");
     }
 
@@ -188,7 +188,7 @@ contract LpTimingTest is Base {
         _wait(1 days);
         uint256 before = lp2.balance;
         vm.prank(lp2);
-        pool.withdraw();
+        pool.withdraw(0);
         ex.closeAtMaxWin(id);
         uint256 lp2Got = lp2.balance - before;
         uint256 lp1Left = pool.previewRedeem(pool.balanceOf(lp));

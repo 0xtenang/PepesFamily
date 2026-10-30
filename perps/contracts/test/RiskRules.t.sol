@@ -168,7 +168,7 @@ contract RiskRulesTest is Base {
         uint256 before = lp.balance;
         uint256 cashBefore = pool.cash();
         vm.prank(lp);
-        pool.withdraw();
+        pool.withdraw(0);
         uint256 got = lp.balance - before;
         assertEq(got, value - (value * 150) / BPS);
         assertEq(cashBefore - pool.cash(), got, "the fee stays in the pool");
