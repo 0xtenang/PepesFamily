@@ -7,3 +7,9 @@
 [submodule "contracts/lib/dn404"]
 	path = contracts/lib/dn404
 	url = https://github.com/Vectorized/dn404
+[submodule "perps/contracts/lib/forge-std"]
+	path = perps/contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "perps/contracts/lib/openzeppelin-contracts"]
+	path = perps/contracts/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
