@@ -94,40 +94,54 @@ contract LevLens {
 
     // ------------------------------------------------------------ pool value
 
-    /// @notice What open positions are worth to traders, for pricing LP shares.
+    /// @notice What open positions are worth to traders, for pricing LP shares. Each position counts between losing
+    ///         its stake and winning its own max win (IMD audit M-1: a bankrupt loser's extra loss never offsets
+    ///         another trader's win, and a winner never counts past its own cap).
     /// @return owedLow  The lowest plausible value: at whichever of spot, fast and slow price is best for the
-    ///                  pool, minus holding fees and pool fee shares already owed. Deposits buy in at
-    ///                  cash - owedLow, the highest pool value.
+    ///                  pool, margin counted toward what losers lose, minus holding fees and pool fee shares
+    ///                  already owed. Deposits buy in at cash - owedLow, the highest pool value.
     /// @return owedHigh The highest plausible value, at whichever price is worst for the pool, with no credit for
-    ///                  fees owed. Withdrawals pay out at cash - owedHigh.
-    /// @return blocked  True while the valuation can't be trusted: a feed is down, a rug is unfolding or a rug
-    ///                  hasn't been fully settled. LP deposits and withdrawals wait until it clears.
+    ///                  margin or fees owed. Withdrawals pay out at cash - owedHigh.
+    /// @return blocked  True while the valuation can't be trusted: a feed is down and not yet stale, a rug is
+    ///                  unfolding or a rug hasn't been fully settled. LP deposits and withdrawals wait until it
+    ///                  clears. A feed that has gone stale counts at its last good prices, as the exchange settles
+    ///                  it (IMD audit M-2), so one dead coin can't freeze the pool.
     function liabilityRange() external view returns (int256 owedLow, int256 owedHigh, bool blocked) {
         Config memory c = exchange.getConfig();
         uint256 n = exchange.marketCount();
+        int24[3][] memory ticks = new int24[3][](n);
         for (uint256 i; i < n; ++i) {
             Market memory m = exchange.marketData(i);
             if (m.longs.size == 0 && m.shorts.size == 0) continue;
             (bool ok, int24 spot, int24 fast, int24 slow,) = _tryRead(m);
-            if (!ok || m.ruggedPending != 0 || LevLogic.isRug(c, spot, slow) || LevLogic.isRug(c, fast, slow)) {
-                blocked = true;
-            }
-            if (!ok) {
+            if (ok) {
+                if (m.ruggedPending != 0 || LevLogic.isRug(c, spot, slow) || LevLogic.isRug(c, fast, slow)) blocked = true;
+            } else {
+                if (m.ruggedPending != 0 || !_stale(c, m)) blocked = true;
                 spot = m.lastGoodFast;
                 fast = m.lastGoodFast;
                 slow = m.lastGoodTick;
             }
-            // owedLow prices deposits: margin counts toward what losers lose. owedHigh prices withdrawals: it doesn't.
-            int256 lo = _min3(_marketLiability(m, spot, true), _marketLiability(m, fast, true), _marketLiability(m, slow, true));
-            int256 hi = _max3(_marketLiability(m, spot, false), _marketLiability(m, fast, false), _marketLiability(m, slow, false));
-            owedLow += lo - int256(_feesOwedLowerBound(c, m, m.longs, m.shorts) + _feesOwedLowerBound(c, m, m.shorts, m.longs));
-            owedHigh += hi;
+            ticks[i] = [spot, fast, slow];
+            owedLow -= int256(_feesOwedLowerBound(c, m, m.longs, m.shorts) + _feesOwedLowerBound(c, m, m.shorts, m.longs));
         }
-    }
-
-    function _marketLiability(Market memory m, int24 tick, bool withMargin) internal pure returns (int256) {
-        return LevLogic.sideLiability(m.longs, true, m.refTick, tick, withMargin)
-            + LevLogic.sideLiability(m.shorts, false, m.refTick, tick, withMargin);
+        (Position[] memory ps, uint256[] memory margins) = exchange.openPositionsData(0, exchange.openPositionCount());
+        int256[3][] memory lo = new int256[3][](n);
+        int256[3][] memory hi = new int256[3][](n);
+        for (uint256 j; j < ps.length; ++j) {
+            Position memory p = ps[j];
+            int256 stake = int256(uint256(p.stake));
+            int256 withMargin = stake + int256(margins[j]);
+            for (uint256 k; k < 3; ++k) {
+                int256 v = LevLogic.pnl(p, ticks[p.marketId][k]); // capped at the position's max win
+                hi[p.marketId][k] += v < -stake ? -stake : v;
+                lo[p.marketId][k] += v < -withMargin ? -withMargin : v;
+            }
+        }
+        for (uint256 i; i < n; ++i) {
+            owedLow += _min3(lo[i][0], lo[i][1], lo[i][2]);
+            owedHigh += _max3(hi[i][0], hi[i][1], hi[i][2]);
+        }
     }
 
     /// @dev Holding fees one side already owes the pool, less the most the free first hour could waive, plus the
@@ -225,7 +239,10 @@ contract LevLens {
         if ((grown + size) * BPS > LevLogic.coinCap(c, m.netCapEth, q.liquidityEth) * r.hourlyGrowthBps) {
             return QUOTE_GROWING_TOO_FAST;
         }
-        if (stake > q.poolRoomStake || (exchange.totalOpenSize() + size) * BPS > cash * r.platformSizeBps) return QUOTE_POOL_FULL;
+        if (
+            stake > q.poolRoomStake || (exchange.totalOpenSize() + size) * BPS > cash * r.platformSizeBps
+                || exchange.openPositionCount() >= exchange.MAX_OPEN_POSITIONS()
+        ) return QUOTE_POOL_FULL;
         if (_wouldLiquidate(c, q, isLong, lev, stake)) return QUOTE_WOULD_LIQUIDATE;
         return QUOTE_OK;
     }
@@ -312,10 +329,18 @@ contract LevLens {
             if (actable) {
                 if (winPnl >= maxWin) v.action = ACTION_MAX_WIN;
                 else if (eqNow <= int256((uint256(p.stake) * c.liqEquityBps) / BPS)) v.action = ACTION_LIQUIDATE;
-                else if (block.timestamp >= uint256(p.openedAt) + c.minHoldSeconds) v.action = _triggerAction(id, p, v.markTick);
+                else if (block.timestamp >= uint256(p.openedAt) + c.minHoldSeconds && (!ok || _nearFast(spot, fast))) {
+                    v.action = _triggerAction(id, p, v.markTick);
+                }
             }
         }
         v.equity = stake + margin + v.pnl - int256(v.holdFee);
+    }
+
+    /// @dev closeByTrigger waits while the live price is more than openBandSpotTicks from the fast one.
+    function _nearFast(int24 spot, int24 fast) internal view returns (bool) {
+        int256 d = int256(spot) - int256(fast);
+        return (d < 0 ? -d : d) <= int256(uint256(exchange.getRiskConfig().openBandSpotTicks));
     }
 
     function _triggerAction(uint256 id, Position memory p, int24 fast) internal view returns (uint8) {

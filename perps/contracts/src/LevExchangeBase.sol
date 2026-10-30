@@ -25,6 +25,9 @@ abstract contract LevExchangeBase is Ownable2Step, ReentrancyGuard {
     uint256 public constant MAX_MARKETS = 64;
     /// @dev Failed reads must keep coming at most this far apart for the stale clock to keep running.
     uint256 public constant STALE_PING_GAP = 120;
+    /// @dev The pool values every open position on each LP deposit and withdrawal (~21k gas each), so their number
+    ///      is capped to keep that well inside a block.
+    uint256 public constant MAX_OPEN_POSITIONS = 600;
 
     uint8 public constant EXIT_CLOSE = 0;
     uint8 public constant EXIT_LIQUIDATION = 1;

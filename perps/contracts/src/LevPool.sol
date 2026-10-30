@@ -83,8 +83,9 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
     function deposit() external payable nonReentrant returns (uint256 shares) {
         if (msg.value < minDeposit) revert DepositTooSmall();
         _harvest();
-        _requireValuation();
-        shares = previewDeposit(msg.value);
+        (, uint256 high) = _valuation();
+        if (high == 0) revert PoolEmpty();
+        shares = (msg.value * totalSupply()) / high;
         if (shares == 0) revert DepositTooSmall();
         cash += msg.value;
         _mint(msg.sender, shares);
@@ -97,8 +98,8 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
     function requestWithdraw(uint256 shares) external {
         if (shares == 0) revert BadValue();
         _harvest();
-        _requireValuation();
-        uint256 value = previewRedeem(shares);
+        (uint256 low,) = _valuation();
+        uint256 value = (shares * low) / totalSupply();
         _transfer(msg.sender, address(this), shares);
         WithdrawRequest storage r = withdrawRequests[msg.sender];
         r.shares += shares;
@@ -120,10 +121,10 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
         if (r.shares == 0) revert NoRequest();
         if (block.timestamp < r.unlockAt) revert StillLocked();
         if (block.timestamp > uint256(r.unlockAt) + withdrawWindow) revert RequestExpired();
-        _requireValuation();
-        assets = previewRedeem(r.shares);
+        (uint256 low,) = _valuation();
+        assets = (r.shares * low) / totalSupply();
         if (assets > r.assets) assets = r.assets;
-        uint256 fee = (assets * withdrawFeeBps()) / BPS;
+        uint256 fee = (assets * _withdrawFeeBps(low)) / BPS;
         assets -= fee;
         if (assets > freeCash()) revert NotEnoughFreeCash();
         delete withdrawRequests[msg.sender];
@@ -183,8 +184,12 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
     ///         stay (Veranta's buffer-ratio fee). Ratio = pool value at the worst price / cash: 1.0 or more is free,
     ///         0.5% down to 0.95, 1.5% down to 0.90, 2.5% below. It slows a run on the pool when it can least afford one.
     function withdrawFeeBps() public view returns (uint256) {
-        if (cash == 0) return 0;
         (uint256 low,) = navRange();
+        return _withdrawFeeBps(low);
+    }
+
+    function _withdrawFeeBps(uint256 low) internal view returns (uint256) {
+        if (cash == 0) return 0;
         uint256 ratio = (low * BPS) / cash;
         return ratio >= BPS ? 0 : ratio >= 9500 ? 50 : ratio >= 9000 ? 150 : 250;
     }
@@ -255,8 +260,12 @@ contract LevPool is ERC20, Ownable2Step, ReentrancyGuard {
         }
     }
 
-    function _requireValuation() internal view {
-        if (!valuationOk()) revert ValuationPaused();
+    /// @dev navRange in one valuation, reverting while it is paused: the valuation reads every open position.
+    function _valuation() internal view returns (uint256 low, uint256 high) {
+        if (address(navSource) == address(0)) return (cash, cash);
+        (int256 owedLow, int256 owedHigh, bool blocked) = navSource.liabilityRange();
+        if (blocked) revert ValuationPaused();
+        return (_floor(int256(cash) - owedHigh), _floor(int256(cash) - owedLow));
     }
 
     function _floor(int256 v) internal pure returns (uint256) {

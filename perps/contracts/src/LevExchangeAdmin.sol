@@ -276,6 +276,24 @@ contract LevExchangeAdmin is LevExchangeBase {
         }
     }
 
+    /// @notice Open positions in [offset, offset+limit), with the margin added to each, for the pool's valuation.
+    function openPositionsData(uint256 offset, uint256 limit)
+        external
+        view
+        returns (Position[] memory ps, uint256[] memory margins)
+    {
+        uint256 n = _openIds.length();
+        if (offset >= n) return (ps, margins);
+        uint256 end = offset + limit > n ? n : offset + limit;
+        ps = new Position[](end - offset);
+        margins = new uint256[](end - offset);
+        for (uint256 i = offset; i < end; ++i) {
+            uint256 id = _openIds.at(i);
+            ps[i - offset] = _positions[id];
+            margins[i - offset] = marginOf[id];
+        }
+    }
+
     function positionIdsOf(address owner_) external view returns (uint256[] memory) {
         return _byOwner[owner_].values();
     }

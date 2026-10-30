@@ -64,6 +64,7 @@ v1 was deployed at block 76719371 and verified on Sourcify. Its token source is 
 | Scope | Code | Result | Report |
 | --- | --- | --- | --- |
 | PepesFamily launchpad (v2 contracts) | `d1ad578` | 1 medium, 3 low, 3 info | [explorer.imd.fun/jobs/a3e708e2…](https://explorer.imd.fun/jobs/a3e708e2-fb57-43ea-a163-d93b916694a2) |
+| Long/Short (perps contracts) | `19ac59a` | 1 high, 2 medium, 1 low: all fixed, each with a test (`perps/SECURITY_REVIEW.md`) | [explorer.imd.fun/jobs/1425b92e…](https://explorer.imd.fun/jobs/1425b92e-2a79-4c8e-9ba8-fa2163df4825) |
 | Pepes token (v1, as deployed) | `8c1869c` (branch `audit-pepes-v1`) | 1 high, 1 medium, 3 low, 6 info; the "honeypot", "owner can change balance" and "suspicious function" scanner warnings were confirmed false positives | [explorer.imd.fun/jobs/46a0c47b…](https://explorer.imd.fun/jobs/46a0c47b-d3ad-4c50-973e-369203a488ce) |
 
 Status of the main findings:
@@ -373,7 +374,7 @@ They add funds by sending ETH, BNB or HYPE to the address in the wallet menu, an
 
 Leveraged longs and shorts on coins we pick, one by one, against one shared ETH pool: the `perps/` folder (the MemeLev contracts, keeper and relayer). The first coin is UBIK on Robinhood Chain. The site's Long/Short page (`#/perps`) shows the market, its chart and a trade panel; trading stays "opening soon" until the contracts are deployed and their addresses are in `CONFIG.perps`. Opening a position is one transaction (the stake goes with it); closing pays out and sends the cash back to the wallet. Steps to go live: [perps/README.md](perps/README.md#pepesfamily-longshort-2026-10-29).
 
-The contracts have had an internal review (perps/SECURITY_REVIEW.md) but no outside audit. Leveraged trading is regulated in many countries.
+The contracts have had three internal reviews and an IMD Swarm audit (1 high, 2 medium, 1 low, all fixed with tests; see perps/SECURITY_REVIEW.md). Leveraged trading is regulated in many countries.
 
 Discover and search list only tokens launched on PepesFamily (2026-10-29).
 

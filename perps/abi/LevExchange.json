@@ -126,6 +126,19 @@
  },
  {
   "type": "function",
+  "name": "MAX_OPEN_POSITIONS",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
   "name": "STALE_PING_GAP",
   "inputs": [],
   "outputs": [
@@ -1887,6 +1900,11 @@
         "name": "sizeIndexSum",
         "type": "uint256",
         "internalType": "uint256"
+       },
+       {
+        "name": "margin",
+        "type": "uint256",
+        "internalType": "uint256"
        }
       ]
      },
@@ -1922,6 +1940,11 @@
        },
        {
         "name": "sizeIndexSum",
+        "type": "uint256",
+        "internalType": "uint256"
+       },
+       {
+        "name": "margin",
         "type": "uint256",
         "internalType": "uint256"
        }
@@ -2010,6 +2033,87 @@
   "outputs": [
    {
     "name": "ids",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "openPositionsData",
+  "inputs": [
+   {
+    "name": "offset",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "limit",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "ps",
+    "type": "tuple[]",
+    "internalType": "struct Position[]",
+    "components": [
+     {
+      "name": "owner",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "marketId",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "rugEpoch",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "openedAt",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "isLong",
+      "type": "bool",
+      "internalType": "bool"
+     },
+     {
+      "name": "leverage",
+      "type": "uint8",
+      "internalType": "uint8"
+     },
+     {
+      "name": "entryTick",
+      "type": "int24",
+      "internalType": "int24"
+     },
+     {
+      "name": "maxWinBps",
+      "type": "uint32",
+      "internalType": "uint32"
+     },
+     {
+      "name": "stake",
+      "type": "uint96",
+      "internalType": "uint96"
+     },
+     {
+      "name": "feeIndex",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ]
+   },
+   {
+    "name": "margins",
     "type": "uint256[]",
     "internalType": "uint256[]"
    }

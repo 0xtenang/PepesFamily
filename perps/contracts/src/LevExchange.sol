@@ -104,7 +104,8 @@ contract LevExchange is LevExchangeBase {
         _withdraw(trader, amount);
     }
 
-    /// @notice Liquidate a position whose equity has fallen to the liquidation level. Pays the caller a reward.
+    /// @notice Liquidate a position whose equity has fallen to the liquidation level. Pays the caller a reward,
+    ///         unless the caller is the owner.
     function liquidate(uint256 id) external nonReentrant {
         Position memory p = _requireOpen(id);
         Config memory c = _config;
@@ -118,10 +119,11 @@ contract LevExchange is LevExchangeBase {
             - int256(LevLogic.holdFee(p, s.feeIndex, c, block.timestamp));
         bool atMax = pnl >= int256((uint256(p.stake) * p.maxWinBps) / BPS);
         if (atMax || equity > int256((uint256(p.stake) * c.liqEquityBps) / BPS)) revert NotLiquidatable();
-        _finish(id, p, m, c, pnl, EXIT_LIQUIDATION, msg.sender);
+        _finish(id, p, m, c, pnl, EXIT_LIQUIDATION, msg.sender == p.owner ? address(0) : msg.sender);
     }
 
-    /// @notice Close a position that has reached its max win. Anyone can call this; it frees pool room.
+    /// @notice Close a position that has reached its max win. Anyone can call this; it frees pool room. Anyone but
+    ///         the owner is paid a share of its fees.
     function closeAtMaxWin(uint256 id) external nonReentrant {
         Position memory p = _requireOpen(id);
         Config memory c = _config;
@@ -132,14 +134,15 @@ contract LevExchange is LevExchangeBase {
         // a long's max win counts only once the pump has lasted (pump band)
         int256 pnl = LevLogic.pnl(p, p.isLong ? LevLogic.capLongExit(_risk, fast, slow) : fast);
         if (pnl < int256((uint256(p.stake) * p.maxWinBps) / BPS)) revert NotAtMaxWin();
-        _finish(id, p, m, c, pnl, EXIT_MAX_WIN, msg.sender);
+        _finish(id, p, m, c, pnl, EXIT_MAX_WIN, msg.sender == p.owner ? address(0) : msg.sender);
     }
 
     /// @notice Close a position whose take-profit or stop-loss the fast price has reached. Anyone but the owner
     ///         is paid a share of the position's fees for it. The exit is priced like a close (the worse of the live
-    ///         and the fast price, the pump band for longs, the spread), except that the live price counts at most
-    ///         openBandSpotTicks past the fast one, so whoever calls it can't push the exit far. On a stale feed it
-    ///         is the last good fast price, as for a close.
+    ///         and the fast price, the pump band for longs, the spread). It waits while the live price is more than
+    ///         openBandSpotTicks from the fast one: then the trigger can't be used to exit a crash at the lagging fast
+    ///         price, and whoever calls it can't push the exit far. On a stale feed it is the last good fast price,
+    ///         as for a close.
     function closeByTrigger(uint256 id) external nonReentrant {
         Position memory p = _requireOpen(id);
         Config memory c = _config;
@@ -153,6 +156,7 @@ contract LevExchange is LevExchangeBase {
         if (ok) {
             _recordGood(m, fast, slow);
             if (!p.isLong) _requireNoRug(c, spot, slow);
+            if (_gap(spot, fast) > r.openBandSpotTicks || _gap(fast, spot) > r.openBandSpotTicks) revert PriceBand();
         } else {
             _requireStale(m, c);
             (spot, fast, slow) = (m.lastGoodFast, m.lastGoodFast, m.lastGoodTick);
@@ -206,6 +210,7 @@ contract LevExchange is LevExchangeBase {
         np.owner = trader;
         np.marketId = uint32(marketId);
 
+        if (_openIds.length() >= MAX_OPEN_POSITIONS) revert PoolFull();
         uint256 fee = LevLogic.tradeFee(c, stake, stake * leverage);
         if (balanceOf[trader] < stake + fee) revert InsufficientBalance();
         balanceOf[trader] -= stake + fee;

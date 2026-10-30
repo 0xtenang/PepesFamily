@@ -113,14 +113,11 @@ library LevLogic {
         return 10;
     }
 
-    /// @dev A take-profit or stop-loss exit before the spread: the worse of the live and the fast price, the live one
-    ///      counted at most openBandSpotTicks past the fast one, and the pump band for longs.
+    /// @dev A take-profit or stop-loss exit before the spread, priced like a close: the worse of the live and the fast
+    ///      price, and the pump band for longs. closeByTrigger only runs while the two are within openBandSpotTicks
+    ///      of each other, so this is never better for the trader than a close (IMD audit H-1).
     function triggerExit(RiskConfig memory r, bool isLong, int24 spot, int24 fast, int24 slow) internal pure returns (int24) {
-        int256 band = int256(uint256(r.openBandSpotTicks));
-        int256 e = isLong ? _minI(spot, fast) : _maxI(spot, fast);
-        if (isLong && e < int256(fast) - band) e = int256(fast) - band;
-        if (!isLong && e > int256(fast) + band) e = int256(fast) + band;
-        int24 exit = int24(e);
+        int24 exit = int24(isLong ? _minI(spot, fast) : _maxI(spot, fast));
         return isLong ? capLongExit(r, exit, slow) : exit;
     }
 
@@ -157,20 +154,6 @@ library LevLogic {
     {
         if (c.hourlyLossBreakerBps == 0 || nowTs >= hourStart + HOUR || hourPoolPnl >= 0) return false;
         return uint256(-hourPoolPnl) * BPS >= hourStartCash * c.hourlyLossBreakerBps;
-    }
-
-    /// @dev What one side's open positions are worth to traders at `tick`, clamped between "all stakes lost"
-    ///      and "all max wins paid". `withMargin` lets the floor include margin added later: true only where a lower
-    ///      value is in the pool's favour (pricing deposits), so margin on one position never props up another's
-    ///      loss in the value LPs withdraw at.
-    function sideLiability(Side memory s, bool isLong, int24 refTick, int24 tick, bool withMargin) internal pure returns (int256) {
-        if (s.size == 0) return 0;
-        uint256 value = (s.expo * TickRatio.ratio(int256(tick) - int256(refTick))) / ONE;
-        int256 v = isLong ? int256(value) - int256(s.size) : int256(s.size) - int256(value);
-        if (v > int256(s.maxWin)) return int256(s.maxWin);
-        int256 floor = -int256(s.stake + (withMargin ? s.margin : 0));
-        if (v < floor) return floor;
-        return v;
     }
 
     /// @dev True when `tick` is a rug's depth (rugDropBps) under `slow`.

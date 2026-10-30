@@ -2,6 +2,8 @@
 
 What the long/short contracts do, what they must guarantee, the admin powers, and the limits we already know about. Rules and reasoning in more detail: [DESIGN.md](DESIGN.md). Earlier internal reviews and their fixes: [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
+**Audited:** IMD Swarm, 2026-10-30, commit 19ac59a ([report](https://explorer.imd.fun/jobs/1425b92e-2a79-4c8e-9ba8-fa2163df4825)): 1 high, 2 medium, 1 low, all fixed with tests (SECURITY_REVIEW.md).
+
 ## 1. What the system is
 
 Leveraged longs and shorts on a curated list of memecoins on **Robinhood Chain** (chain ID 4663, an Arbitrum Orbit L2). The first coin is UBIK (`0x812486EAea648819853F8E372dc9f1516C7868Bd`).
@@ -45,7 +47,7 @@ cd perps/contracts
 forge test
 ```
 
-That runs 211 tests offline. The fork tests skip unless `FORK_URL` is set:
+That runs 219 tests offline. The fork tests skip unless `FORK_URL` is set:
 
 ```bash
 FORK_URL=https://robinhood.drpc.org forge test --match-path 'test/fork/*'
@@ -114,10 +116,8 @@ The owner is meant to be a multisig with a timelock. Ownership is two-step every
 
 ## 5. Known limits (please confirm, not re-report)
 
-- **Capped winners in pool value (open, medium).**
-  - Pool value caps each side's winnings as a whole, not per position, so a winner past its own max win counts above its cap until someone calls `closeAtMaxWin`.
-  - A depositor can buy in at that low value and close the winner in the same transaction.
-  - Paying the closer makes keepers clear such positions within a pass, but doesn't stop the same-transaction version.
+- **Open-position cap.** The pool values every open position, so at most 600 are open at once (`MAX_OPEN_POSITIONS`). Someone can fill the slots to block new opens, at the cost of the stakes, fees and hold fees.
+- **Owner keeper share.** The owner gets no keeper share for clearing their own position, but this is an address check: calling from a second address collects it.
 - **F19 (mitigated).** A stolen session key can pre-sign intents that become usable shortly before their deadline. Any revocation kills them.
 - **Slippage bound and spread.** The session slippage bound is checked before the spread (at most 3% by default, and it goes to the pool).
 - **Stress-fee tier.** A large deposit just before a withdrawal can lower the stress-fee tier. The deposit is locked for the 24 h cooldown.
