@@ -1,6 +1,6 @@
 # PepesFamily
 
-**Website: [pepesfamily.fun](https://www.pepesfamily.fun)**
+**Website: [pepesdotfamily.fun](https://pepesdotfamily.fun)**
 
 A Pons-style fixed-supply token launchpad on Robinhood Chain (chain ID 4663) and Ethereum (launchpad v5, see "Multichain" below), built on **Uniswap v4**. Every launch is paired with either **ETH** or **IMD** (`0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127`), and every trade pays a 4% fee that goes partly to holders.
 
@@ -366,7 +366,7 @@ They add funds by sending ETH, BNB or HYPE to the address in the wallet menu, an
 - Source: `privy/island.jsx`. Build with `cd privy && npm install && npm run build`; it writes `web/js/privy/` and
   updates `CONFIG.privyScript` in `web/index.html`.
 - Turn it on: set `CONFIG.privyAppId` (public; Privy dashboard > App settings). In the dashboard, add
-  `https://pepesimd.fun` and `https://www.pepesimd.fun` to the allowed domains, pick the login methods, and turn on
+  `https://pepesdotfamily.fun` and `https://www.pepesdotfamily.fun` (and the older `https://pepesimd.fun`) to the allowed domains, pick the login methods, and turn on
   EVM embedded wallets.
 
 ## Long/Short (2026-10-29, not deployed yet)

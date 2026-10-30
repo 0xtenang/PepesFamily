@@ -3392,14 +3392,14 @@ async function renderRewards(who) {
     if (pick === "all") {
       url = await shareCard(total, `paid in ${assetParts(sum("earned"))}`, top);
       const tags = [...new Set(top.map((t) => t.sym))].join(" ");
-      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT, HYPE or BNB.\n\n${tags}\nhttps://pepesimd.fun`; // taste-skill-ignore: tweet copy, not UI
+      text = `I've earned ${total} in holder rewards on PepesFamily 🐸\n\nEvery trade pays holders, in IMD, ETH, PEPE, CASHCAT, HYPE or BNB.\n\n${tags}\nhttps://pepesdotfamily.fun`; // taste-skill-ignore: tweet copy, not UI
     } else {
       const r = rows[Number(pick)];
       const sp = await splitOf(r.P, r.t.token).catch(() => null);
       const holderPct = sp ? sp.h / 100 : 3;
       const amt = priced ? usdLong(toUsdNum(r.earned, r.t.quote)) : `${fmt(r.earned)} ${qsym(r.t.quote)}`;
       url = await tokenShareCard(r, amt, holderPct);
-      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesimd.fun/#/t/${r.t.token}`; // taste-skill-ignore: tweet copy, not UI
+      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesdotfamily.fun/#/t/${r.t.token}`; // taste-skill-ignore: tweet copy, not UI
       file = `pepesfamily-${r.t.symbol.replace(/[^a-z0-9]/gi, "").toLowerCase() || "token"}.png`;
     }
     if (mySeq !== cardSeq || seq !== rewardsSeq || !$("#card")) return;
@@ -3527,7 +3527,7 @@ async function tokenShareCard(r, amt, holderPct) {
 
   g.fillStyle = "#8c8c8c"; fit(`${holderPct}% of every $${r.t.symbol} trade goes to holders`, 400, 20, 640);
   g.fillText(`${holderPct}% of every $${r.t.symbol} trade goes to holders`, 60, floor + 36);
-  g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesimd.fun", W - 60, floor + 36);
+  g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesdotfamily.fun", W - 60, floor + 36);
   return c.toDataURL("image/png");
 }
 
@@ -3545,7 +3545,7 @@ async function shareCard(total, sub, top) {
     g.fillStyle = "#8c8c8c"; g.font = F(400, 26); g.fillText(t.amt, 360, y);
   });
   g.fillStyle = "#8c8c8c"; g.font = F(400, 20); g.fillText("Every trade pays its holders", 60, floor + 36);
-  g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesimd.fun", W - 60, floor + 36);
+  g.fillStyle = "#fff"; g.font = F(600, 20); g.textAlign = "right"; g.fillText("pepesdotfamily.fun", W - 60, floor + 36);
   return c.toDataURL("image/png");
 }
 

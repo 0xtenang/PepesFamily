@@ -8,7 +8,7 @@
 
 const ALLOWED = [/^quote\/v2$/, /^intents\/status\/v3\?requestId=0x[0-9a-fA-F]{64}$/, /^transactions\/index$/];
 const POSTS = /^(quote\/v2|transactions\/index)$/;
-const ORIGINS = ["https://pepesfamily.fun", "https://www.pepesfamily.fun", "https://pepesimd.fun", "https://www.pepesimd.fun"];
+const ORIGINS = ["https://pepesdotfamily.fun", "https://www.pepesdotfamily.fun", "https://pepesfamily.fun", "https://www.pepesfamily.fun", "https://pepesimd.fun", "https://www.pepesimd.fun"];
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
