@@ -742,14 +742,26 @@ const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "
 const SUPPLY = 10n ** 27n;
 const ONE = 10n ** 18n;
 
+// Second RPC per chain, used only when the first one fails a read (all allow requests from this site).
+const BACKUP_RPC = {
+  robinhood: "https://robinhood.drpc.org",
+  ethereum: "https://eth.drpc.org",
+  base: "https://mainnet.base.org",
+  hyperevm: "https://hyperliquid.drpc.org",
+  bsc: "https://bsc-dataseed.bnbchain.org",
+};
 for (const ch of Object.values(CHAINS)) {
   // one read per request: free RPCs refuse a whole batch when one read in it is too old for them (PublicNode's BSC
   // keeps only the last 128 blocks of state), which would fail every other read in that batch too
   ch.reader = new ethers.JsonRpcProvider(ch.rpc, ch.chainId, { staticNetwork: true, batchMaxCount: 1 });
   const send = ch.reader.send.bind(ch.reader);
+  // A second public RPC takes over a read the first one fails (down, rate-limited, or refusing old data). A contract
+  // revert is a real answer, so it isn't retried.
+  const backup = BACKUP_RPC[ch.key] && new ethers.JsonRpcProvider(BACKUP_RPC[ch.key], ch.chainId, { staticNetwork: true, batchMaxCount: 1 });
   ch.reader.send = (method, params) => send(method, params).catch((e) => {
     if (/archive|personal token/i.test(JSON.stringify(e?.info || e?.message || ""))) console.warn(`${ch.name} RPC refused an old-data read`, method, params);
-    throw e;
+    if (!backup || e?.code === "CALL_EXCEPTION") throw e;
+    return backup.send(method, params);
   });
   ch.quoterR = new ethers.Contract(ch.quoter, QUOTER_ABI, ch.reader);
 }
