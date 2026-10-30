@@ -8,6 +8,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' https: data: blob:; connect-src https: wss: http://127.0.0.1:8545 http://localhost:8545; frame-src https://www.geckoterminal.com https://dexscreener.com https://auth.privy.io https://challenges.cloudflare.com; child-src https://auth.privy.io; worker-src 'self' blob:; base-uri 'none'; form-action 'none'; object-src 'none'" />
 <meta name="referrer" content="no-referrer" />
 <title>PepesFamily</title>
+<link rel="icon" type="image/gif" href="/favicon.gif" />
 <link rel="icon" href="/favicon.ico" sizes="32x32" />
 <link rel="icon" type="image/png" href="/favicon-32.png" sizes="32x32" />
 <link rel="icon" type="image/png" href="/icon-192.png" sizes="192x192" />
@@ -81,7 +82,7 @@ label { display: block; font-size: 14px; font-weight: 500; color: var(--text); m
 /* shell: ruled T-frame */
 .side { position: fixed; inset: 0 auto 0 0; width: var(--sidebar); border-right: 1px solid var(--rule); display: flex; flex-direction: column; padding: 0 12px 16px; z-index: 10; background: var(--ground); }
 .brand { display: flex; align-items: center; gap: 10px; height: var(--topbar); padding: 0 10px; font-weight: 600; font-size: 16px; }
-.brand svg { width: 28px; height: 28px; flex: none; }
+.brand .logo { width: 32px; height: 32px; flex: none; }
 .navs { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
 .navs a { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; color: var(--nav); border-radius: 8px; }
 .navs a svg { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; }
@@ -118,6 +119,7 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
   .top, main#app { margin-left: 0; }
   .top { height: 56px; padding: 0 16px; gap: 10px; }
   .top .mark { display: block; width: 30px; height: 30px; flex: none; }
+  .top .mark .logo { display: block; width: 30px; height: 30px; }
   .top .acct { border-left: 0; padding-left: 0; }
   main#app { padding: 16px 16px 96px; }
   .tabbar { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--ground);
@@ -401,7 +403,7 @@ td.n, th.n { text-align: right; }
      On phones the sidebar folds into a bottom bar of the four pages. -->
 <a class="skip" href="#app">Skip to content</a>
 <aside class="side" aria-label="PepesFamily">
-  <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span>PepesFamily</span></a>
+  <a class="brand" href="#/"><img class="logo" src="/pepes-logo.gif" alt="" width="32" height="32" /><span>PepesFamily</span></a>
   <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/perps" data-r="/perps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20V5M3.5 8.5L7 5l3.5 3.5M17 4v15M13.5 15.5L17 19l3.5-3.5"/></svg><span>Long/Short</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
   <div class="glabel">Networks</div>
   <div id="netlist"></div>
@@ -411,7 +413,7 @@ td.n, th.n { text-align: right; }
   </div>
 </aside>
 <header class="top">
-  <a class="mark" href="#/" aria-label="PepesFamily"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 20c0-6.6 4.9-11 11-11s11 4.4 11 11c0 4-4.9 6-11 6S5 24 5 20z" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="21.5" cy="9.5" r="4.5" fill="#8fd66a"/><circle cx="10.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="21.5" cy="9.5" r="2.6" fill="#fff"/><circle cx="11.3" cy="9.8" r="1.3" fill="#000"/><circle cx="22.3" cy="9.8" r="1.3" fill="#000"/><path d="M10 20.5c3.6 2.2 8.4 2.2 12 0" stroke="#000" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></a>
+  <a class="mark" href="#/" aria-label="PepesFamily"><img class="logo" src="/pepes-logo.gif" alt="" width="32" height="32" /></a>
   <form class="search" id="search" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" type="search" placeholder="Search tokens or paste a contract…" autocomplete="off" spellcheck="false" aria-label="Search tokens" aria-controls="sres"><div class="sres" id="sres" role="listbox" hidden></div></form>
   <div class="acct"><span class="cashpill" id="cash" hidden></span><button id="connect" type="button">Connect wallet</button></div>
 </header>
