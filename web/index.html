@@ -88,6 +88,7 @@ label { display: block; font-size: 14px; font-weight: 500; color: var(--text); m
 .navs a:hover { color: #fff; }
 .navs a.on { color: #fff; font-weight: 500; }
 .side .glabel { font-size: 12px; color: var(--faint); padding: 0 10px; margin: 28px 0 6px; }
+.side .chainrow .cav { width: 20px; height: 20px; }
 .side .chainrow { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; color: var(--nav); }
 .side .foot { margin-top: auto; display: flex; flex-direction: column; }
 .side .foot a { height: 30px; display: flex; align-items: center; padding: 0 10px; color: var(--faint); font-size: 13px; }
@@ -154,6 +155,9 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
   font-size: 14px; font-weight: 500; max-width: calc(100% - 32px); z-index: 40; display: none; box-shadow: 0 8px 30px rgba(0,0,0,.5); } /* taste-skill-ignore: the toast floats */
 @media (max-width: 1000px) { .toast { bottom: 84px; } }
 .pill { display: inline-flex; align-items: center; flex: none; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--nested); color: var(--text); white-space: nowrap; }
+.cav { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; flex: none; display: inline-block; vertical-align: -3px; }
+.pill .cav, .seg .cav { margin: 0 6px 0 -4px; }
+.sub .cav, .w .cav, .meta .cav { width: 14px; height: 14px; margin-right: 4px; }
 .pill.pos { background: var(--pill-positive-bg); color: var(--positive); }
 .pill.neg { background: var(--pill-negative-bg); color: var(--negative); }
 .pill.warn { background: var(--pill-warning-bg); color: var(--warning); }
@@ -270,7 +274,6 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .fi .w { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fi .amt { text-align: right; font-weight: 500; }
 .fi .amt .w { text-align: right; }
-.livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--positive); }
 .official { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .official .ca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; font-size: 13px; color: var(--muted); }
 .official .ca code { font-family: var(--font); word-break: break-all; }
@@ -774,7 +777,9 @@ const PADS = [
 }));
 const padLabel = (P) => (P.nft ? "Pepes Earn IMD" : `Launchpad v${P.version}${P.ch.key === "robinhood" ? "" : ` · ${P.ch.short}`}`);
 /// Small chain badge for tokens off Robinhood Chain.
-const chainBadge = (P) => (P && P.ch.key !== "robinhood" ? `<span class="pill chain">${esc(P.ch.short)}</span>` : "");
+// Each chain's Pepes, in that chain's hat (web/chains/<key>.webp).
+const chainAv = (ch) => (ch?.key ? `<img class="cav" src="/chains/${ch.key}.webp" alt="" width="16" height="16" loading="lazy" decoding="async" />` : "");
+const chainBadge = (P) => (P && P.ch.key !== "robinhood" ? `<span class="pill chain">${chainAv(P.ch)}${esc(P.ch.short)}</span>` : "");
 let LAUNCH = null; // newest live launchpad on the chosen chain: where new tokens are created
 let padR = null;   // LAUNCH's contract (launch form + admin owner lookups)
 const LAUNCHES = {}; // chain key -> newest live launchpad there for each pair asset (array, newest first)
@@ -1583,7 +1588,7 @@ function showResults(list, q) {
   const box = sres();
   box.hidden = false;
   box.innerHTML = list.length ? list.map((x, i) => `<a href="${x.href}" role="option" class="${i === 0 ? "on" : ""}">${x.av}
-      <div style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? `<span class="pill">PepesFamily</span>` : ""}</div><div class="sub">$${esc(x.symbol)} · ${esc(x.ch.short)}</div></div>
+      <div style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? `<span class="pill">PepesFamily</span>` : ""}</div><div class="sub">$${esc(x.symbol)} · ${chainAv(x.ch)}${esc(x.ch.short)}</div></div>
       <div class="r">${x.mc ? "$" + compact(x.mc) : "—"}<div class="w">${x.liq ? "liq $" + compact(x.liq) : "mcap"}</div></div></a>`).join("")
     : `<div class="msg">No PepesFamily token matches “${esc(q)}”.</div>`;
 }
@@ -1686,7 +1691,7 @@ function discoverFrame(chains) {
       <section class="card listcard" aria-label="All tokens">
         <div class="tools">
           <div class="utabs" id="sort" role="tablist"><button type="button" data-s="hot">Trending</button><button type="button" data-s="new">New</button><button type="button" data-s="mc">Market cap</button><button type="button" data-s="gain">Gainers</button></div>
-          <div class="seg" id="chainf"><button type="button" data-c="all">All chains</button>${chains.map((c) => `<button type="button" data-c="${c.key}">${esc(c.short)}</button>`).join("")}</div>
+          <div class="seg" id="chainf"><button type="button" data-c="all">All chains</button>${chains.map((c) => `<button type="button" data-c="${c.key}">${chainAv(c)}${esc(c.short)}</button>`).join("")}</div>
         </div>
         <div id="list">${THEAD}${skelRow.repeat(8)}</div>
       </section>
@@ -1756,7 +1761,7 @@ async function renderHome() {
   const row = (x, n) => `<a class="lrow" href="${x.href}">
       <span class="rk">${n}</span>${x.av}
       <div class="tn" style="min-width:0"><div class="nm"><b>${esc(x.name)}</b>${x.own ? FROG : ""}</div>
-        <div class="sub">$${esc(x.symbol)} · ${esc(x.ch?.short || "")} · ${x.created ? ago(x.created) : "—"}</div></div>
+        <div class="sub">$${esc(x.symbol)} · ${chainAv(x.ch)}${esc(x.ch?.short || "")} · ${x.created ? ago(x.created) : "—"}</div></div>
       <span class="r mcc">${x.mc ? fmtUsd(x.mc) : "—"}</span>
       <span class="r vol${x.vol ? "" : " dim"}">${x.vol ? fmtUsd(x.vol) : "—"}</span>
       <span class="r chgc">${chgText(x.chg)}</span>
@@ -1782,7 +1787,7 @@ async function renderHome() {
     const ours = pool.filter((x) => x.own).slice(0, 2);
     const top = [...pool.filter((x) => !ours.includes(x)).slice(0, 5 - ours.length), ...ours];
     $("#trend").innerHTML = top.map((x) => `<a class="tc" href="${x.href}">
-        <div class="head">${x.av}<div style="min-width:0"><div class="nm">${esc(x.name)}${x.own ? FROG : ""}</div><div class="meta">$${esc(x.symbol)}<span class="ch"> · ${esc(x.ch?.short || "")}</span></div></div></div>
+        <div class="head">${x.av}<div style="min-width:0"><div class="nm">${esc(x.name)}${x.own ? FROG : ""}</div><div class="meta">$${esc(x.symbol)}<span class="ch"> · ${chainAv(x.ch)}${esc(x.ch?.short || "")}</span></div></div></div>
         <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${x.mc ? fmtUsd(x.mc) : "—"}</div></div>${chgText(x.chg)}</div>
         <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
       || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
@@ -1811,7 +1816,7 @@ async function renderHome() {
         <div style="min-width:0"><div class="t"><b>Cash</b></div><div class="w">${cash.list.filter((x) => x.usd >= 0.01).map((x) => `${x.sym} on ${x.ch.short}`).join(" · ") || "no ETH, BNB or HYPE yet"}</div></div>
         <div class="amt">${fmtUsd(cash.total)}</div></div>` : "";
     const rows = (pos || []).map((r) => `<a class="fi" href="${r.href}">${r.av}
-        <div style="min-width:0"><div class="t"><b>$${esc(r.symbol)}</b>${r.own ? FROG : ""}</div><div class="w">${r.amount.toLocaleString("en-US", { maximumSignificantDigits: 4 })} · ${esc(r.ch.short)}</div></div>
+        <div style="min-width:0"><div class="t"><b>$${esc(r.symbol)}</b>${r.own ? FROG : ""}</div><div class="w">${r.amount.toLocaleString("en-US", { maximumSignificantDigits: 4 })} · ${chainAv(r.ch)}${esc(r.ch.short)}</div></div>
         <div class="amt">${fmtUsd(r.usd)}${r.chg != null ? `<div class="w">${chgText(r.chg)}</div>` : ""}</div></a>`).join("");
     $("#positions").innerHTML = cashRow + (rows || `<div class="stat" style="padding:12px 18px">No tokens yet. Your buys show up here.</div>`);
   };
@@ -2303,7 +2308,7 @@ async function renderPerps(sym) {
     <div class="mflat">
       <div class="card mlead">
         <div class="thead-token">${mAvatar(x, "lg")}
-          <div style="min-width:0"><div class="row"><h1>${esc(mk.name)}</h1><span class="pill">$${esc(mk.symbol)}</span><span class="pill">${esc(ch.short)}</span><span class="pill" id="pmaxlev">Long/Short</span></div>
+          <div style="min-width:0"><div class="row"><h1>${esc(mk.name)}</h1><span class="pill">$${esc(mk.symbol)}</span><span class="pill">${chainAv(ch)}${esc(ch.short)}</span><span class="pill" id="pmaxlev">Long/Short</span></div>
             <div class="stat" style="margin-top:4px">${markets.length > 1 ? markets.map((m) => `<a class="lnk" href="#/perps/${esc(m.symbol)}">${esc(m.symbol)}</a>`).join(" · ") + " · " : ""}<a class="lnk" href="${ch.explorer}/token/${mk.coin}" target="_blank" rel="noopener">${short(mk.coin)}</a></div></div>
         </div>
         <div class="tstrip">
@@ -2672,7 +2677,7 @@ async function renderMarketToken(chKey, addrIn) {
     <div class="mflat">
       <div class="card mlead">
         <div class="thead-token">${mAvatar(x, "lg")}
-          <div style="min-width:0"><div class="row"><h1>${esc(t.name)}</h1><span class="pill">$${esc(t.symbol)}</span><span class="pill">${esc(ch.short)}</span><span class="pill warn">Not launched on PepesFamily</span></div>
+          <div style="min-width:0"><div class="row"><h1>${esc(t.name)}</h1><span class="pill">$${esc(t.symbol)}</span><span class="pill">${chainAv(ch)}${esc(ch.short)}</span><span class="pill warn">Not launched on PepesFamily</span></div>
             <div class="stat" style="margin-top:4px"><a class="lnk" href="${ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)}</a> · <button type="button" class="sharebtn" id="mcopy">Copy address</button></div></div>
         </div>
         <div class="tstrip">
@@ -3821,7 +3826,7 @@ async function renderCreate() {
   const quote = LAUNCH.quote, QS = qsym(quote), NAT = ch.native?.symbol || "ETH";
   const chainPicker = Object.keys(LAUNCHES).length > 1 ? `
         <div class="seg wrap" id="lchain" style="margin-bottom:10px">${Object.values(CHAINS).filter((c) => LAUNCHES[c.key]).map((c) =>
-          `<button type="button" data-c="${c.key}" class="${c.key === ch.key ? "on" : ""}">${esc(c.short)}</button>`).join("")}</div>
+          `<button type="button" data-c="${c.key}" class="${c.key === ch.key ? "on" : ""}">${chainAv(c)}${esc(c.short)}</button>`).join("")}</div>
         <div class="stat" style="margin-bottom:10px">${esc(ch.blurb || "")} Your token lives on ${esc(ch.name)} only.</div>` : "";
   const pairPicker = pads.length > 1 ? `
         <div class="row" style="margin-bottom:10px"><span class="stat">Pair with</span><div class="seg wrap" id="lpair">${pads.map((P) =>
@@ -4731,7 +4736,7 @@ booted.finally(() => {
   // the sidebar's networks: where tokens launch, and where else people can pay from
   const launchOn = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
   const payFrom = Object.values(CHAINS).filter((c) => !launchOn.includes(c) && !c.testnet && c.remote);
-  $("#netlist").innerHTML = launchOn.map((c) => `<div class="chainrow"><i class="livedot" aria-hidden="true"></i>${esc(c.name)}</div>`).join("")
+  $("#netlist").innerHTML = launchOn.map((c) => `<div class="chainrow">${chainAv(c)}${esc(c.name)}</div>`).join("")
     + (payFrom.length ? `<div class="chainrow" style="color:var(--faint);font-size:13px">Pay from ${payFrom.map((c) => esc(c.short)).join(", ")}</div>` : "");
 });
 setInterval(loadPrices, 60_000);
