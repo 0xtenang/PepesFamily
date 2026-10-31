@@ -3100,23 +3100,26 @@ async function renderAdmin() {
     try {
       const v4 = rows.filter((r) => r.P.expiry).flatMap((r) => r.tokens.map((x) => ({ t: x.t, P: r.P })));
       found = [];
+      const skipped = []; // one token the explorer can't list must not stop the others
       for (const [i, { t, P }] of v4.entries()) {
         $("#rcy").textContent = `Checking $${t.symbol} (${i + 1} of ${v4.length})…`;
-        const tok = new ethers.Contract(t.token, TOKEN_ABI, P.ch.reader);
-        const who = await tokenParticipants(t.token, P.ch);
-        const hits = [];
-        for (let k = 0; k < who.length; k += 25) {
-          const part = who.slice(k, k + 25);
-          const ex = await Promise.all(part.map((a) => tok.expiredRewardsOf(a).catch(() => 0n)));
-          part.forEach((a, j) => { if (ex[j] > 0n) hits.push({ a, ex: ex[j] }); });
-        }
-        if (hits.length) found.push({ t, P, hits, total: hits.reduce((s, h) => s + h.ex, 0n) });
+        try {
+          const tok = new ethers.Contract(t.token, TOKEN_ABI, P.ch.reader);
+          const who = await tokenParticipants(t.token, P.ch);
+          const hits = [];
+          for (let k = 0; k < who.length; k += 25) {
+            const part = who.slice(k, k + 25);
+            const ex = await Promise.all(part.map((a) => tok.expiredRewardsOf(a).catch(() => 0n)));
+            part.forEach((a, j) => { if (ex[j] > 0n) hits.push({ a, ex: ex[j] }); });
+          }
+          if (hits.length) found.push({ t, P, hits, total: hits.reduce((s, h) => s + h.ex, 0n) });
+        } catch (e) { skipped.push(`$${t.symbol} (${P.ch.short}): ${errMsg(e)}`); }
       }
-      const total = found.reduce((s, f) => s + f.total, 0n);
-      $("#rcy").innerHTML = found.length
+      const skipNote = skipped.length ? `<p class="stat">Not checked: ${esc(skipped.join("; "))}</p>` : "";
+      $("#rcy").innerHTML = (found.length
         ? `<div class="scroll-x"><table><thead><tr><th>Token</th><th>Wallets</th><th>Expired</th></tr></thead><tbody>${found.map((f) => `
             <tr><td><a href="#/t/${f.t.token}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} ${qsym(f.t.quote)}</div></td></tr>`).join("")}</tbody></table></div>`
-        : "No expired rewards right now.";
+        : "No expired rewards right now.") + skipNote;
       if (found.length) {
         const txs = found.reduce((n, f) => n + Math.ceil(f.hits.length / 50), 0);
         $("#rcysend").textContent = `Send the expired rewards to the fee address${txs > 1 ? ` (${txs} transactions)` : ""}`;
@@ -3202,6 +3205,8 @@ async function tokenParticipants(token, ch = CHAINS.robinhood) {
   for (let page = 0; page < 200; page++) {
     const r = await fetch(`${ch.blockscoutApi}/tokens/${token}/transfers` + (next ? "?" + new URLSearchParams(next) : ""),
       { signal: AbortSignal.timeout(10000) });
+    // 404: the explorer hasn't indexed this token (no transfers it knows of); what was read so far still counts
+    if (r.status === 404) break;
     if (!r.ok) throw new Error(`Blockscout answered ${r.status}`);
     const j = await r.json();
     for (const it of j.items || []) for (const a of [it.from?.hash, it.to?.hash]) if (a && ethers.isAddress(a)) seen.add(ethers.getAddress(a));

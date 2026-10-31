@@ -1,0 +1,434 @@
+{
+ "pieces": [
+  {
+   "kind": 0,
+   "index": 0,
+   "file": "swirl-0.b64",
+   "bytes": 120880
+  },
+  {
+   "kind": 1,
+   "index": 0,
+   "file": "body-0.b64",
+   "bytes": 107216
+  },
+  {
+   "kind": 1,
+   "index": 1,
+   "file": "body-1.b64",
+   "bytes": 105376
+  },
+  {
+   "kind": 1,
+   "index": 2,
+   "file": "body-2.b64",
+   "bytes": 127328
+  },
+  {
+   "kind": 1,
+   "index": 3,
+   "file": "body-3.b64",
+   "bytes": 122448
+  },
+  {
+   "kind": 1,
+   "index": 4,
+   "file": "body-4.b64",
+   "bytes": 124976
+  },
+  {
+   "kind": 1,
+   "index": 5,
+   "file": "body-5.b64",
+   "bytes": 121232
+  },
+  {
+   "kind": 2,
+   "index": 0,
+   "file": "shirt-0.b64",
+   "bytes": 41072
+  },
+  {
+   "kind": 2,
+   "index": 1,
+   "file": "shirt-1.b64",
+   "bytes": 46384
+  },
+  {
+   "kind": 2,
+   "index": 2,
+   "file": "shirt-2.b64",
+   "bytes": 30160
+  },
+  {
+   "kind": 2,
+   "index": 3,
+   "file": "shirt-3.b64",
+   "bytes": 41280
+  },
+  {
+   "kind": 2,
+   "index": 4,
+   "file": "shirt-4.b64",
+   "bytes": 35728
+  },
+  {
+   "kind": 2,
+   "index": 5,
+   "file": "shirt-5.b64",
+   "bytes": 40048
+  },
+  {
+   "kind": 2,
+   "index": 6,
+   "file": "shirt-6.b64",
+   "bytes": 41600
+  },
+  {
+   "kind": 2,
+   "index": 7,
+   "file": "shirt-7.b64",
+   "bytes": 38400
+  },
+  {
+   "kind": 2,
+   "index": 8,
+   "file": "shirt-8.b64",
+   "bytes": 42368
+  },
+  {
+   "kind": 2,
+   "index": 9,
+   "file": "shirt-9.b64",
+   "bytes": 36528
+  },
+  {
+   "kind": 2,
+   "index": 10,
+   "file": "shirt-10.b64",
+   "bytes": 44064
+  },
+  {
+   "kind": 2,
+   "index": 11,
+   "file": "shirt-11.b64",
+   "bytes": 13312
+  },
+  {
+   "kind": 3,
+   "index": 0,
+   "file": "pants-0.b64",
+   "bytes": 11600
+  },
+  {
+   "kind": 3,
+   "index": 1,
+   "file": "pants-1.b64",
+   "bytes": 12768
+  },
+  {
+   "kind": 3,
+   "index": 2,
+   "file": "pants-2.b64",
+   "bytes": 9792
+  },
+  {
+   "kind": 3,
+   "index": 3,
+   "file": "pants-3.b64",
+   "bytes": 10064
+  },
+  {
+   "kind": 3,
+   "index": 4,
+   "file": "pants-4.b64",
+   "bytes": 14800
+  },
+  {
+   "kind": 3,
+   "index": 5,
+   "file": "pants-5.b64",
+   "bytes": 11216
+  },
+  {
+   "kind": 3,
+   "index": 6,
+   "file": "pants-6.b64",
+   "bytes": 11488
+  },
+  {
+   "kind": 3,
+   "index": 7,
+   "file": "pants-7.b64",
+   "bytes": 11440
+  },
+  {
+   "kind": 4,
+   "index": 0,
+   "file": "hat-0.b64",
+   "bytes": 34432
+  },
+  {
+   "kind": 4,
+   "index": 1,
+   "file": "hat-1.b64",
+   "bytes": 38432
+  },
+  {
+   "kind": 4,
+   "index": 2,
+   "file": "hat-2.b64",
+   "bytes": 37872
+  },
+  {
+   "kind": 4,
+   "index": 3,
+   "file": "hat-3.b64",
+   "bytes": 41760
+  },
+  {
+   "kind": 4,
+   "index": 4,
+   "file": "hat-4.b64",
+   "bytes": 40976
+  },
+  {
+   "kind": 4,
+   "index": 5,
+   "file": "hat-5.b64",
+   "bytes": 40304
+  },
+  {
+   "kind": 5,
+   "index": 0,
+   "file": "acc-0.b64",
+   "bytes": 13312
+  },
+  {
+   "kind": 5,
+   "index": 1,
+   "file": "acc-1.b64",
+   "bytes": 25504
+  },
+  {
+   "kind": 5,
+   "index": 2,
+   "file": "acc-2.b64",
+   "bytes": 16944
+  },
+  {
+   "kind": 5,
+   "index": 3,
+   "file": "acc-3.b64",
+   "bytes": 20464
+  },
+  {
+   "kind": 5,
+   "index": 4,
+   "file": "acc-4.b64",
+   "bytes": 25216
+  },
+  {
+   "kind": 5,
+   "index": 5,
+   "file": "acc-5.b64",
+   "bytes": 40928
+  },
+  {
+   "kind": 5,
+   "index": 6,
+   "file": "acc-6.b64",
+   "bytes": 30880
+  },
+  {
+   "kind": 5,
+   "index": 7,
+   "file": "acc-7.b64",
+   "bytes": 40432
+  },
+  {
+   "kind": 5,
+   "index": 8,
+   "file": "acc-8.b64",
+   "bytes": 15936
+  },
+  {
+   "kind": 5,
+   "index": 9,
+   "file": "acc-9.b64",
+   "bytes": 29040
+  }
+ ],
+ "backgrounds": [
+  {
+   "swirl": [
+    "#1b1714",
+    "#9e4f4a",
+    "#566a7b",
+    "#cc6670",
+    "#d9878c"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#123456",
+    "#20768c",
+    "#62bac4",
+    "#b2e2de"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#581e52",
+    "#c43a60",
+    "#f0804a",
+    "#fac462"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#1e4e3e",
+    "#54966e",
+    "#96cea0",
+    "#e0eecc"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#a878c4",
+    "#ee96be",
+    "#96c4ec",
+    "#fce896"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#601414",
+    "#c82e1e",
+    "#f4821e",
+    "#fcd246"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#10122c",
+    "#30286e",
+    "#6048a8",
+    "#465a78"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#3c3c3c",
+    "#787878",
+    "#b4b4b4",
+    "#e6e6e6"
+   ]
+  },
+  {
+   "swirl": [
+    "#1b1714",
+    "#6e4c0e",
+    "#ba8c24",
+    "#e8c04c",
+    "#fae696"
+   ]
+  },
+  {
+   "fill": "#eee4c8"
+  },
+  {
+   "fill": "#96c8ec"
+  },
+  {
+   "fill": "#f8b896"
+  },
+  {
+   "fill": "#c4aae4"
+  },
+  {
+   "fill": "#c4e678"
+  },
+  {
+   "fill": "#2c2c30"
+  }
+ ],
+ "names": {
+  "bg": [
+   "Original Swirl",
+   "Ocean Swirl",
+   "Sunset Swirl",
+   "Mint Swirl",
+   "Candy Swirl",
+   "Fire Swirl",
+   "Night Swirl",
+   "Mono Swirl",
+   "Gold Swirl",
+   "Cream",
+   "Sky",
+   "Peach",
+   "Lilac",
+   "Lime",
+   "Charcoal"
+  ],
+  "skin": [
+   "Green",
+   "Blue",
+   "Purple",
+   "Stone",
+   "Pink",
+   "Gold"
+  ],
+  "shirt": [
+   "Yellow",
+   "White",
+   "Black",
+   "Red",
+   "Blue",
+   "Purple",
+   "Pink",
+   "Orange",
+   "Teal",
+   "Grey",
+   "Gold",
+   "Rainbow"
+  ],
+  "pants": [
+   "Red",
+   "Denim",
+   "Black",
+   "Khaki",
+   "White",
+   "Grey",
+   "Purple",
+   "Green"
+  ],
+  "hat": [
+   "Robinhood",
+   "Ethereum",
+   "Base",
+   "HyperEVM",
+   "BNB Chain",
+   "Elysium"
+  ],
+  "acc": [
+   "Sunglasses",
+   "Gold Chain",
+   "Cigarette",
+   "Bubble Gum",
+   "3D Glasses",
+   "Shades + Chain",
+   "Diamond Chain",
+   "Monocle",
+   "Laser Eyes",
+   "Halo"
+  ]
+ }
+}

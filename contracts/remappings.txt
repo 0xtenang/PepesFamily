@@ -1,3 +1,4 @@
 forge-std/=lib/forge-std/src/
 v4-core/=lib/v4-core/
 dn404/=lib/dn404/src/
+solmate/=lib/v4-core/lib/solmate/
