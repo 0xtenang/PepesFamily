@@ -148,6 +148,15 @@ export async function swapToken({
 
     const { transaction: unsignedTx, requestId } = order;
 
+    // PepesAgent: a Privy agent wallet signs and sends in one call (its policy allows only signAndSendTransaction),
+    // so its swaps skip Jupiter's /execute. Amounts out aren't reported on this path.
+    if (wallet.sendVersioned) {
+      const sig = await wallet.sendVersioned(connection, VersionedTransaction.deserialize(Buffer.from(unsignedTx, "base64")));
+      log("swap", `SUCCESS tx: ${sig}`);
+      return { success: true, tx: sig, input_mint, output_mint, amount_in: amountStr, amount_out: order.outAmount ?? null,
+        referral_account: referralParams?.referralAccount || null, referral_fee_bps_requested: referralParams?.referralFee || 0, fee_bps_applied: order.feeBps ?? null };
+    }
+
     // ─── Deserialize and sign ─────────────────────────────────
     const tx = await wallet.signVersioned(VersionedTransaction.deserialize(Buffer.from(unsignedTx, "base64")));
     const signedTx = Buffer.from(tx.serialize()).toString("base64");

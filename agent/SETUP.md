@@ -77,6 +77,12 @@ could be drained in position-sized steps. Before raising the beta caps, test whe
 token program instead, and tighten or drop that rule. Also check in the beta: that Privy keeps the new position
 key's signature (`partialSign`), and that only top-level instructions are checked (Jupiter routes call many DEXes).
 
+**Done 2026-11-01:** Phantom/Solana sign-in on; agent key `gtfdxu6nd0kfmr8wjchzisnd` (`PRIVY_SIGNER_ID`);
+policy `aq37pdzg0k081xuwuwh0icqm` (`PRIVY_POLICY_IDS`), made in the dashboard form with the four rules above, all on
+`signAndSendTransaction` only (the agent never uses `*`, which would also allow exporting keys). Jupiter swaps for
+agent wallets are therefore signed and sent directly, not through Jupiter's `/execute`; check in the beta that the
+routes `/order` returns land this way (RFQ routes may need `/execute`).
+
 ## 2. Railway
 
 1. New project > Deploy from GitHub repo `0xtenang/PepesFamily`, root directory `agent`.

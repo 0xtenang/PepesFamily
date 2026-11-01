@@ -3,7 +3,9 @@
 //   signer.publicKey                         the wallet
 //   await signer.send(connection, tx, extra) a legacy Transaction (Meteora SDK), co-signed by `extra` keypairs
 //                                            (a new position's key), sent and confirmed; returns the signature
-//   await signer.signVersioned(vtx)          a VersionedTransaction (Jupiter), signed, not sent
+//   await signer.signVersioned(vtx)          a VersionedTransaction (Jupiter), signed, not sent (local keys)
+//   await signer.sendVersioned(conn, vtx)    the same, signed and sent here (Privy: the policy allows only
+//                                            signAndSendTransaction, so Privy users' swaps skip Jupiter's /execute)
 //
 // LocalSigner holds a key (WALLET_PRIVATE_KEY: the team's own testing). PrivySigner is a user's Privy agent
 // wallet: the worker signs with the authorization key the user approved, and Privy's policy decides what may be
@@ -65,6 +67,18 @@ export class PrivySigner {
     });
     const conf = await connection.confirmTransaction({ signature: res.hash, blockhash, lastValidBlockHeight }, "confirmed");
     if (conf.value.err) throw new Error(`Transaction ${res.hash} failed: ${JSON.stringify(conf.value.err)}`);
+    return res.hash;
+  }
+
+  /** Signs and sends a VersionedTransaction (a Jupiter swap): the policy allows only signAndSendTransaction. */
+  async sendVersioned(connection, vtx) {
+    const res = await (await privy()).wallets().solana().signAndSendTransaction(this.walletId, {
+      caip2: SOLANA_MAINNET,
+      transaction: Buffer.from(vtx.serialize()).toString("base64"),
+      authorization_context: authorization(),
+    });
+    const conf = await connection.confirmTransaction(res.hash, "confirmed");
+    if (conf.value.err) throw new Error(`Swap ${res.hash} failed: ${JSON.stringify(conf.value.err)}`);
     return res.hash;
   }
 
