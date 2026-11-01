@@ -3175,7 +3175,7 @@ async function renderAdmin() {
       to: x.t.pendingHolderFees === 0n ? x.t.token : r.P.pad,
       data: x.t.pendingHolderFees === 0n ? TOKI.encodeFunctionData("distribute") : PADI.encodeFunctionData("flush", [x.t.token]) })));
     try {
-      const r = await sendAll(calls, (m2) => toast(m2, 30000));
+      const r = await sendAll(calls, (m2) => toast(m2, 30000), { anyone: true });
       toast(`Paid out on ${r.done} token${r.done === 1 ? "" : "s"}${r.failed.length ? `. Not paid out: ${r.failed.join("; ")}` : ""}`, r.failed.length ? 12000 : 6000);
       renderAdmin();
     } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
@@ -3184,7 +3184,38 @@ async function renderAdmin() {
 /// Sends `calls` ({ ch, to, data, label }) chain by chain: one confirmation per chain where the wallet batches
 /// (EIP-5792), none at all with the PepesFamily wallet, else one per call. Brings a little gas to a chain that has
 /// none. A failing call is listed and the rest go on; saying no in the wallet stops everything.
-async function sendAll(calls, onStatus) {
+/// `anyone`: the calls work from any sender (flush, distribute), so a wallet that can't batch sends them through
+/// Multicall3 instead: one confirmation per chain (a few on HyperEVM, whose normal blocks are small).
+const MC3_SEND = new ethers.Interface(["function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[])"]);
+/// Calls that anyone may make, packed into as few Multicall3 transactions as the chain's gas allows. Each call is
+/// estimated on its own first: one that would fail is listed and left out, and allowFailure keeps one surprise
+/// from undoing the rest.
+async function viaMulticall(ch, list, onStatus) {
+  const failed = [], ok = [];
+  onStatus?.(`${ch.short}: checking ${list.length} payouts…`);
+  await Promise.all(list.map(async (c) => {
+    try { ok.push({ c, gas: await ch.reader.estimateGas({ from: account, to: c.to, data: c.data }) }); }
+    catch (e) { failed.push(`${c.label} on ${ch.short}: ${errMsg(e)}`); }
+  }));
+  const cap = ch.chainId === 999 ? 1700000n : 10000000n; // HyperEVM's normal blocks hold 2M gas
+  const groups = [];
+  let cur = [], used = 60000n;
+  for (const x of ok) {
+    if (cur.length && used + x.gas > cap) { groups.push(cur); cur = []; used = 60000n; }
+    cur.push(x.c); used += x.gas;
+  }
+  if (cur.length) groups.push(cur);
+  let done = 0;
+  for (const [i, g] of groups.entries()) {
+    onStatus?.(`Confirm in your wallet: ${g.length} payout${g.length === 1 ? "" : "s"} on ${ch.short} in one transaction${groups.length > 1 ? ` (${i + 1} of ${groups.length})` : ""}…`);
+    const data = MC3_SEND.encodeFunctionData("aggregate3", [g.map((c) => ({ target: c.to, allowFailure: true, callData: c.data }))]);
+    const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: MC3, data }] });
+    await waitReceipt(ch, hash);
+    done += g.length;
+  }
+  return { done, failed };
+}
+async function sendAll(calls, onStatus, { anyone = false } = {}) {
   const byChain = new Map();
   for (const c of calls) byChain.set(c.ch, [...(byChain.get(c.ch) || []), c]);
   let done = 0; const failed = [];
@@ -3195,6 +3226,11 @@ async function sendAll(calls, onStatus) {
       onStatus?.(`${ch.short}: ${list.length} transaction${list.length === 1 ? "" : "s"}…`);
       const receipts = list.length > 1 ? await walletBatch(ch, list, `Confirm in your wallet: all ${list.length} on ${ch.short} in one confirmation…`) : null;
       if (receipts) { done += list.length; continue; }
+      if (anyone && list.length > 1 && WALLET_KIND !== "privy") {
+        const r = await viaMulticall(ch, list, onStatus);
+        done += r.done; failed.push(...r.failed);
+        continue;
+      }
       for (const c of list) {
         try {
           const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: c.to, data: c.data }] });
