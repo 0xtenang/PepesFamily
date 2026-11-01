@@ -1,5 +1,258 @@
 {
-  "generatedAt": "2026-11-01T15:23:50.124Z",
-  "method": "pepes/scan-lpers.js: open LPs in the day's top-fee Meteora SOL memecoin pools, ranked by all-time Meteora profit",
-  "wallets": []
+  "generatedAt": "2026-11-01T15:38:44.876Z",
+  "method": "pepes/scan-lpers.js: open LPs in the day's top-fee Meteora SOL memecoin pools, filtered and ranked by their 30-day Meteora profit",
+  "wallets": [
+    {
+      "name": "starter-01",
+      "address": "5rLsEyxQvyXq4tzpfoZJkecjWAjCgdLLsGPCZmaRR8h5",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 328,
+        "depositSol30d": 3398.9,
+        "pnlSol30d": 131.34,
+        "roiPct30d": 3.9,
+        "winPct30d": 54,
+        "allTimePnlSol": 156.71
+      }
+    },
+    {
+      "name": "starter-02",
+      "address": "5oE1gXtVdKx8LehCj4GgmtrUA5bzYDQmvTagGdyN6PLW",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 320,
+        "depositSol30d": 4030.2,
+        "pnlSol30d": 119.12,
+        "roiPct30d": 3,
+        "winPct30d": 55,
+        "allTimePnlSol": 231.46
+      }
+    },
+    {
+      "name": "starter-03",
+      "address": "CKdCnBAc9iXXT9aVP1mwm3twAyxRBC8BfPax5eRBrxDL",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 185,
+        "depositSol30d": 5018,
+        "pnlSol30d": 114.77,
+        "roiPct30d": 2.3,
+        "winPct30d": 50,
+        "allTimePnlSol": 128.65
+      }
+    },
+    {
+      "name": "starter-04",
+      "address": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 312,
+        "depositSol30d": 4122.1,
+        "pnlSol30d": 103.27,
+        "roiPct30d": 2.5,
+        "winPct30d": 59,
+        "allTimePnlSol": 168.22
+      }
+    },
+    {
+      "name": "starter-05",
+      "address": "2w1pE8PDaD46CSkKS7LGLGutgbsCrwp9kx38NkmkVRVT",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 322,
+        "depositSol30d": 3744.3,
+        "pnlSol30d": 102.72,
+        "roiPct30d": 2.7,
+        "winPct30d": 54,
+        "allTimePnlSol": 164.73
+      }
+    },
+    {
+      "name": "starter-06",
+      "address": "3ULyokrApPK6uHwzBzmcvFQAiBRgtWin2zU67FPRupHh",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 27,
+        "depositSol30d": 773,
+        "pnlSol30d": 71.86,
+        "roiPct30d": 9.3,
+        "winPct30d": 70,
+        "allTimePnlSol": 214.13
+      }
+    },
+    {
+      "name": "starter-07",
+      "address": "7WrdFScX9fkevTqgUgwiA5TSNmbgRcwqCKyD7RXA52du",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 160,
+        "depositSol30d": 2743.7,
+        "pnlSol30d": 55.59,
+        "roiPct30d": 2,
+        "winPct30d": 74,
+        "allTimePnlSol": 126.42
+      }
+    },
+    {
+      "name": "starter-08",
+      "address": "2EY79Uxxv5RMUzewhKrrFNkdHpXFPx1EdbTCR4wgiwPe",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 24,
+        "depositSol30d": 1952.8,
+        "pnlSol30d": 43.03,
+        "roiPct30d": 2.2,
+        "winPct30d": 83,
+        "allTimePnlSol": 84.74
+      }
+    },
+    {
+      "name": "starter-09",
+      "address": "B1dmWzc4sGUWRj9r57sG1kwxKMJ2qU8ePwJocrFQgA5Y",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 30,
+        "depositSol30d": 732.2,
+        "pnlSol30d": 35.76,
+        "roiPct30d": 4.9,
+        "winPct30d": 53,
+        "allTimePnlSol": 215.44
+      }
+    },
+    {
+      "name": "starter-10",
+      "address": "CL7TUEBwgz1NbAdRRgpsZHPVyJ3u3XARgEcPTeRsmKXH",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 85,
+        "depositSol30d": 788.1,
+        "pnlSol30d": 20.35,
+        "roiPct30d": 2.6,
+        "winPct30d": 56,
+        "allTimePnlSol": 28.46
+      }
+    },
+    {
+      "name": "starter-11",
+      "address": "GnuGGWDsPaLgn2H7gxBqF9m6zx7zMph2PXPDZWKJMW5k",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 12,
+        "depositSol30d": 384.3,
+        "pnlSol30d": 15.4,
+        "roiPct30d": 4,
+        "winPct30d": 100,
+        "allTimePnlSol": 164.34
+      }
+    },
+    {
+      "name": "starter-12",
+      "address": "HmwKbiPP1kjqbrTvFVtqCf2hNSjB9TU1NF8PRfYRgqUH",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 8,
+        "depositSol30d": 100,
+        "pnlSol30d": 10.8,
+        "roiPct30d": 10.8,
+        "winPct30d": 88,
+        "allTimePnlSol": 46.8
+      }
+    },
+    {
+      "name": "starter-13",
+      "address": "FSZ6dpJzh6NNmhpntPe6zLV5ecpovw13TQwfiZrx5KcM",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 41,
+        "depositSol30d": 150.9,
+        "pnlSol30d": 10.42,
+        "roiPct30d": 6.9,
+        "winPct30d": 54,
+        "allTimePnlSol": 9.45
+      }
+    },
+    {
+      "name": "starter-14",
+      "address": "Hu99bARove1PHuqbDT4aBBMA8UwZJiFLDcArfxAvYzVh",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 12,
+        "depositSol30d": 252.7,
+        "pnlSol30d": 9.66,
+        "roiPct30d": 3.8,
+        "winPct30d": 100,
+        "allTimePnlSol": 33.21
+      }
+    },
+    {
+      "name": "starter-15",
+      "address": "95yMJ1wah4keVP4wiQvyhMhvn6zn1v9gjXFPBKJmAGiw",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 83,
+        "depositSol30d": 169.4,
+        "pnlSol30d": 6.2,
+        "roiPct30d": 3.7,
+        "winPct30d": 64,
+        "allTimePnlSol": 31.72
+      }
+    },
+    {
+      "name": "starter-16",
+      "address": "2uXwhJ5XwdWZwuNt6KtHK1x3EZ7G9p2psMXgQoJJxSnG",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 12,
+        "depositSol30d": 75.7,
+        "pnlSol30d": 4.78,
+        "roiPct30d": 6.3,
+        "winPct30d": 67,
+        "allTimePnlSol": 17.5
+      }
+    },
+    {
+      "name": "starter-17",
+      "address": "9rF8WzkToCvT5zii2dYndV6mdtq5ifbd5sbJfcQh2YfW",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 51,
+        "depositSol30d": 87,
+        "pnlSol30d": 3.37,
+        "roiPct30d": 3.9,
+        "winPct30d": 92,
+        "allTimePnlSol": 3.37
+      }
+    },
+    {
+      "name": "starter-18",
+      "address": "BswdZXecf3CUXL2P7DyxUKmHwv1jG27nuxTVkJ1WcWDF",
+      "category": "starter",
+      "type": "lp",
+      "stats": {
+        "pools30d": 43,
+        "depositSol30d": 62.9,
+        "pnlSol30d": 1.43,
+        "roiPct30d": 2.3,
+        "winPct30d": 51,
+        "allTimePnlSol": 29.26
+      }
+    }
+  ]
 }

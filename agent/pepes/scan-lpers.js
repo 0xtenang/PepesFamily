@@ -1,16 +1,17 @@
 // PepesAgent starter list: Meteora LP wallets worth watching for convergence signals.
 //
-//   node pepes/scan-lpers.js [--pools 30] [--top 25] [--write]
+//   node pepes/scan-lpers.js [--pools 30] [--top 25] [--write] [--rerank]
 //
 // 1. Pools: the day's highest-fee Meteora DLMM memecoin pools the agent itself can trade (token/SOL, bin step
 //    80-125, TVL $10k-$500k: config.js screening defaults).
 // 2. Owners: every open position in those pools, read on-chain (DLMM Position accounts: lb_pair at offset 8,
 //    owner at 40). Wallets LPing in at least 2 of them are candidates.
 // 3. Track record from Meteora's portfolio API: the last 30 days per pool (SOL deposited, profit in SOL, last
-//    close) and the all-time total. Kept: >= 8 pools and >= 3 SOL deposited in 30 days, 30-day profit > 3% of
-//    deposits, >= 55% of pools profitable, all-time profit > 0, a close in the last 3 days. Ranked by 30-day profit.
-// --write saves pepes/smart-wallets.starter.json (used when no smart-wallets.json exists); every rated wallet
-// also goes to data/scan-lpers.json for tuning the filters.
+//    close) and the all-time total. Kept: >= 5 pools and >= 2 SOL deposited in 30 days, 30-day profit > 2% of
+//    deposits, >= 50% of pools profitable, all-time profit > 0, a close in the last 3 days. Ranked by 30-day profit.
+//    (Nearly every wallet LPing today's hot pools is up over 30 days, so the profit bar matters more than the count.)
+// --write saves pepes/smart-wallets.starter.json (used when no smart-wallets.json exists). Every rated wallet goes to
+// data/scan-lpers.json; --rerank re-applies the filters to that file without scanning again.
 
 import fs from "node:fs";
 import bs58 from "bs58";
@@ -72,6 +73,10 @@ async function record(wallet) {
     winPct: sol.length ? wins / sol.length * 100 : 0, lastClosedAt: last };
 }
 
+const SAVED = process.env.DATA_DIR ? dataPath("scan-lpers.json") : repoPath("data", "scan-lpers.json");
+const rated = args.includes("--rerank") ? JSON.parse(fs.readFileSync(SAVED, "utf8")) : await scan();
+
+async function scan() {
 const pools = await topPools();
 console.error(`${pools.length} pools: ${pools.map(p => p.name).join(", ")}`);
 const seen = new Map();
@@ -83,25 +88,28 @@ for (const p of pools) {
 }
 const candidates = [...seen].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 300);
 console.error(`${seen.size} LP wallets, ${candidates.length} in 2+ pools`);
-const now = Date.now() / 1000;
-const rated = [];
+const out = [];
 for (const [w, n] of candidates) {
-  try { rated.push({ ...(await record(w)), livePools: n }); } catch (e) { console.error(`record ${w.slice(0, 6)}: ${e.message}`); }
+  try { out.push({ ...(await record(w)), livePools: n }); } catch (e) { console.error(`record ${w.slice(0, 6)}: ${e.message}`); }
   await sleep(150);
 }
+fs.mkdirSync(SAVED.replace(/[^/]+$/, ""), { recursive: true });
+fs.writeFileSync(SAVED, JSON.stringify(out, null, 1));
+return out;
+}
+
+const now = Date.now() / 1000;
 const keep = rated
-  .filter(r => r.pools >= 8 && r.depositSol >= 3 && r.roiPct > 3 && r.winPct >= 55 && r.allTimePnlSol > 0 && now - r.lastClosedAt < 3 * 86400)
+  .filter(r => r.pools >= 5 && r.depositSol >= 2 && r.roiPct > 2 && r.winPct >= 50 && r.allTimePnlSol > 0 && now - r.lastClosedAt < 3 * 86400)
   .sort((a, b) => b.pnlSol - a.pnlSol)
   .slice(0, TOP);
 const round = (x, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
-fs.mkdirSync(dataPath(), { recursive: true });
-fs.writeFileSync(dataPath("scan-lpers.json"), JSON.stringify(rated, null, 1));
 console.table(keep.map(r => ({ wallet: r.wallet, pools: r.pools, live: r.livePools, depositSol: round(r.depositSol, 1),
   pnlSol: round(r.pnlSol), roiPct: round(r.roiPct, 1), winPct: round(r.winPct, 0), allTimeSol: round(r.allTimePnlSol) })));
 if (args.includes("--write")) {
   const out = {
     generatedAt: new Date().toISOString(),
-    method: "pepes/scan-lpers.js: open LPs in the day's top-fee Meteora SOL memecoin pools, ranked by all-time Meteora profit",
+    method: "pepes/scan-lpers.js: open LPs in the day's top-fee Meteora SOL memecoin pools, filtered and ranked by their 30-day Meteora profit",
     wallets: keep.map((r, i) => ({ name: `starter-${String(i + 1).padStart(2, "0")}`, address: r.wallet, category: "starter", type: "lp",
       stats: { pools30d: r.pools, depositSol30d: round(r.depositSol, 1), pnlSol30d: round(r.pnlSol), roiPct30d: round(r.roiPct, 1), winPct30d: round(r.winPct, 0), allTimePnlSol: round(r.allTimePnlSol) } })),
   };
