@@ -3610,6 +3610,7 @@ const NFT_ABI = [
   "function proceeds() view returns (uint256)",
   "function setMintConfig(uint256 price, bool open, uint256 maxPerTx)",
   "function withdrawProceeds(address to)",
+  "error MintClosed()", "error SoldOut()", "error WrongPayment()", "error BadQuantity()",
 ];
 const NFT_ART_ABI = ["function tokenURI(uint256 id, uint256 n) view returns (string)"];
 const svgUrl = (svg) => "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
@@ -3764,8 +3765,20 @@ async function renderMint() {
       await requireWallet(ch);
       const nft = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, signer);
       const price = await nftR.price(); // the price now, in case the owner changed it
+      const cost = price * BigInt(qty);
+      // a short balance or a revert is said plainly here: through the wallet both arrive as "missing revert data"
+      const bal = await ch.reader.getBalance(account);
+      if (bal < cost) throw new Error(`Not enough ETH on ${ch.name}: minting ${qty} costs ${fmt(cost, 6)} ETH plus gas, this wallet has ${fmt(bal, 6)} ETH.`);
+      try { await nftR.mint.staticCall(qty, { value: cost, from: account }); }
+      catch (e) {
+        const name = e?.revert?.name || (() => { try { return nftR.interface.parseError(e?.data)?.name; } catch { return ""; } })();
+        const why = { MintClosed: "The mint is closed right now.", SoldOut: "Not enough NFTs left for that many.", WrongPayment: "The price just changed: reload the page.", BadQuantity: `At most ${st.perTx} per transaction.` }[name];
+        if (why) throw new Error(why);
+        if (bal < cost + ethers.parseEther("0.0002")) throw new Error(`Not enough ETH on ${ch.name} for ${fmt(cost, 6)} ETH plus gas: this wallet has ${fmt(bal, 6)} ETH.`);
+        throw e;
+      }
       toast("Confirm the mint in your wallet…", 10000);
-      const tx = await nft.mint(qty, { value: price * BigInt(qty) });
+      const tx = await nft.mint(qty, { value: cost });
       toast("Minting…", 30000);
       await tx.wait();
       toast(`Minted ${qty} PEPES FAMILY`, 6000);
