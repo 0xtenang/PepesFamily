@@ -272,6 +272,16 @@ contract PepesFamilyNFT is ERC721 {
         else asset.transferOut(msg.sender, amount);
     }
 
+    /// @notice The NFTs `holder` owns (a scan of every minted id: for websites, not for other contracts).
+    function tokensOfOwner(address holder) external view returns (uint256[] memory ids) {
+        ids = new uint256[](balanceOf(holder));
+        uint256 n;
+        uint256 supply = totalSupply;
+        for (uint256 id = 1; id <= supply && n < ids.length; ++id) {
+            if (_ownerOf[id] == holder) ids[n++] = id;
+        }
+    }
+
     function rewardAssetCount() external view returns (uint256) {
         return rewardAssets.length;
     }

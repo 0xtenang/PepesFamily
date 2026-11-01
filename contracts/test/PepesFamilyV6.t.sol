@@ -771,6 +771,13 @@ contract PepesFamilyNftArtTest is Test {
         assertEq(nft.name(), "PEPES FAMILY");
         assertEq(nft.symbol(), "PEPES");
         assertEq(nft.tokenURI(1), "token 1 entry 0");
+        vm.prank(bob);
+        nft.transferFrom(bob, owner, 2);
+        uint256[] memory ids = nft.tokensOfOwner(bob);
+        assertEq(ids.length, 2);
+        assertEq(ids[0], 1);
+        assertEq(ids[1], 3);
+        assertEq(nft.tokensOfOwner(owner)[0], 2);
         assertEq(nft.tokenURI(3), "token 3 entry 2");
         vm.expectRevert("NOT_MINTED");
         nft.tokenURI(4);

@@ -190,6 +190,40 @@ and creator earnings are paid in the wrapped coin. Not audited. Tests: `forge te
 Ethereum and a Robinhood fork `FORK_RPC_ETH=https://ethereum-rpc.publicnode.com FORK_RPC=https://robinhood.drpc.org forge
 test --mc NewPadsForkTest` (launch, the quoter, buying and selling with ETH, holder rewards, protocol fees). Deploy page: `deploy-ui/v5-pairs.html` (local workspace).
 
+### Launchpad v6 and the PEPES FAMILY NFT (2026-11-01, not deployed yet, audit pending)
+
+v6 replaces v5's per-token choice with one split for every token, and pairs every launch with the chain's own coin.
+
+- **Fee: 4% of the pair side of every swap, in four equal shares:** 1% protocol (`feeRecipient`), 1% the token's creator
+  (`creatorPayout`, collected by anyone with `collectCreatorFees`), 1% the token's holders (pro rata, `claim()` on the
+  token, 7-day expiry as in v4/v5), 1% PEPES FAMILY NFT holders (`nftFeeRecipient`). No burn.
+- **Pair asset:** WETH on Robinhood Chain, Ethereum and Base; WBNB on BSC; WHYPE on HyperEVM. Holder claims and creator
+  fees are paid as the plain coin (ETH, BNB, HYPE); a wallet that can't receive it gets the wrapped token instead.
+- **NFT share:** `collectProtocolFees(quote)` (anyone) sends the protocol 1% to `feeRecipient` and the NFT 1% to
+  `nftFeeRecipient`: the NFT contract on Robinhood Chain, the team address on the other chains, which moves it to the NFT
+  contract (a trust step, like the $Pepes buyback). The owner can change `nftFeeRecipient`, as it can `feeRecipient`.
+- **Compatibility:** v6 keeps v5's function signatures (`launchWithSplit`, `feeSplit`, `pendingBurn`, `totalBurned`), so the
+  routers, the lens and PepesFamilyRemote v2 work unchanged (the Remote's owner adds each v6 launchpad with `setPad`).
+  The split argument is ignored.
+- **Size:** tokens are deployed by `PadTokenFactory` (one per launchpad, bound once in the launchpad's constructor), which
+  keeps the launchpad at 15.5 KB. A cross-chain launch through the Remote measures ~2.53M gas, inside HyperEVM's 3M blocks.
+- Contracts: `src/PepesFamilyV6.sol`, `src/PadTokenV6.sol`, `src/PadTokenFactory.sol`, `src/lib/NativePayout.sol`. Tests:
+  `test/PepesFamilyV6.t.sol` (every swap kind in both currency orders, the four shares, ETH payouts and the WETH fallback,
+  partial fills, the Remote on v6, solvency fuzz).
+
+**PEPES FAMILY (ticker PEPES)**: 2,000 NFTs on Robinhood Chain (`src/nft/PepesFamilyNFT.sol`).
+- Mint 0.005 ETH, up to 10 per transaction; the owner opens and closes the mint and can mint from the same 2,000.
+- Rewards: everything that reaches the contract in a reward asset (WETH, added with `addRewardAsset`) is shared equally by
+  the NFTs minted at that moment; `claim()` pays ETH. Sellers keep what their NFTs earned before the sale. No expiry.
+- Royalty: ERC-2981, 5% at launch, editable by the owner (at most 10%). ERC-721C hooks (`setTransferValidator`,
+  `getTransferValidator`) and `contractURI` for OpenSea Studio.
+- Art: fully on-chain (`src/nft/PepesFamilyArt.sol`, data in `art/pieces`, made by `pepes-nft/` in the workspace): layers cut
+  from the original drawing (swirl background recoloured by an SVG colour table, bodies per skin, shirts, pants, chain hats,
+  accessories), grain added by an SVG filter, stored in SSTORE2 data contracts and sealed. The 2,000 trait combinations are
+  stored too; token `id` shows combination `id - 1`, visible at mint (no reveal). `tokenURI` costs ~20M gas in an eth_call.
+  Tests: `test/PepesFamilyArt.t.sol` checks the contract's pictures byte for byte against the generator's.
+- Deploy: `deploy-ui/v6.html` (workspace), built by `deploy-ui/build-v6.py` from `script/V6DeployData.s.sol`.
+
 ### Launchpad v5
 
 v5 keeps v4 (IMD pairs, 7-day reward expiry) and lets each creator choose, at launch and forever, where the 3% goes. The 1% protocol fee is unchanged.

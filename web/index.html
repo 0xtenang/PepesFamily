@@ -350,7 +350,7 @@ td.n, th.n { text-align: right; }
 /* mint */
 .mint-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--gap); align-items: start; }
 .mint-pics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.mint-pics img, .mint-mine img { width: 100%; aspect-ratio: 1; display: block; background: var(--nested); border-radius: var(--radius-nested); }
+.mint-pics img, .mint-mine img { width: 100%; aspect-ratio: 856 / 1200; object-fit: cover; display: block; background: var(--nested); border-radius: var(--radius-nested); }
 .mint-bar { height: 8px; background: var(--nested); border-radius: 999px; overflow: hidden; margin: 8px 0 4px; }
 .mint-bar i { display: block; height: 100%; background: var(--accent); }
 .mint-mine { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
@@ -445,6 +445,14 @@ const CONFIG = {
   // v5: the creator chooses where the 3% goes (split: true); token lists are read from its lens contract.
   // `chain` picks the network from CHAINS below (default: Robinhood Chain).
   pads: [
+    // v6 (fixed: true): every token pays the same 4%: 1% protocol, 1% creator, 1% holders, 1% PEPES FAMILY NFT holders,
+    // paired with the chain's own coin (ETH; BNB on BSC, HYPE on HyperEVM) and paid out in it. Where v6 is live it is
+    // the only launchpad for new tokens on that chain (sortLaunches).
+    { version: 6, quote: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", pad: "0x5ac1907b5C534CDA7A41D317987c492c6f3Ce8cc", router: "0x111a01E232D0FEdF937671F4bdE573aFC40C124b", ethRouter: "0x8f38720b82f4F9b1804D66Bf4A363985DB1f78b8", lens: "0x3c4e0eC719224add4392A2e169AA2598c621fea0", permit: true, expiry: true, split: true, fixed: true },
+    { version: 6, chain: "ethereum", quote: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", pad: "0xd6cdd777A805FC656f4A47cd39556b7278f8E8CC", router: "0xca66076f2B08DD0DDD5528b5651d754da383F547", ethRouter: "0xEEB445247d8866505F8F6c033717CD450E82Db30", lens: "0xc68AF8765d6682DFcE17ff131F170606e4a0b944", permit: true, expiry: true, split: true, fixed: true },
+    { version: 6, chain: "base", quote: "0x4200000000000000000000000000000000000006", pad: "0x3f9E6FAa22543eeF353C6be25B570aEA8C2CE8cc", router: "0x100431c230313fE9AfA0CEC513F9907580a8Ef41", ethRouter: "0xb292506Bea4fF9A1a99E4EdA7a6E7805EfEb3A51", lens: "0x746530eCc277d15FC8a8256850551AFA7dC5A857", permit: true, expiry: true, split: true, fixed: true },
+    { version: 6, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0B28bCC6380fFbf5CC76038f3629eBe7e6bc68cC", router: "0x6d90F18386a5eBaB94A8d9b945BFCf85E13D1758", ethRouter: "0xDC50c7b188A4D57bcAAF8928B54B2Ab07058e60d", lens: "0x269A97a3b324AD8FC50ceA561CF809d4F26e439b", permit: true, expiry: true, split: true, fixed: true },
+    { version: 6, chain: "bsc", quote: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", pad: "0x84E2b2e0dBB0709f865ccB5050A98179a79568Cc", router: "0x9281A650984dA16a42545C900A08263461980902", ethRouter: "0xa4009350Bc855E082284D8b87c2F625638233dbf", lens: "0x7AC273c23D8C2f455A2381Fc7F77Ef76Cb7825F9", permit: true, expiry: true, split: true, fixed: true },
     // 2026-10-18: one launchpad per pair asset (contracts/script/Chains.sol `pad`). Addresses are fixed in advance
     // (CREATE2); each lights up here once its contract exists on its chain.
     { version: 5, chain: "base", quote: "0x4200000000000000000000000000000000000006", pad: "0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc", router: "0xB34C8016EA506E257b47640e52fC9329daF9C847", ethRouter: "0x5d3105EcE7b5459cf6313f5925F78325a0C4A1aE", lens: "0x1b44F02c09eaef9Eed8289e7a218f5402a966d77", permit: true, expiry: true, split: true },
@@ -483,10 +491,11 @@ const CONFIG = {
     router: "0x3a6ce89cc881aa054d289C7a9456AF4bc3217bcC",
     ethRouter: "0xB5f81908d652332850dFFCcd898d7e0e0d70467F",
   },
-  // Pepes Family: 3,333 on-chain Pepes drawn from IMD's own Pepe (github.com/0xtenang/PepesFamilyNFT,
-  // deployments/chain-4663.json), minted on the Mint page (#/mint).
-  pepesNft: "0xC105792e11A60Bd8F461E6e5094E18594574AABe",
-  pepesArt: "0xc084E16c5a3FcBd75F34f010a012c44Dc5Fe8a06",
+  // PEPES FAMILY ($PEPES NFT): 2,000 Pepes in chain hats, drawn fully on-chain (contracts/src/nft), minted on the Mint
+  // page (#/mint). Every launchpad v6 trade pays 1% to its holders, in ETH. Shown as "opening soon" until deployed.
+  // (The earlier 3,333 "Pepes Family" collection, 0xC105…4AABe, is no longer on the site.)
+  pepesNft: "0x0FF038f8D54cC48FAA2b467BF1778a1d9f523502",
+  pepesArt: "0xff8e69bBBe914A6d1B8eC538Ea53dC5f8e97eD8D",
   // $Pepes and its launchpad (v1): expired $EARN rewards buy back and burn $Pepes there.
   pepes: "0xE2C46c7068566740A33A4C93f5445B07BCfE5644",
   // Images shown instead of a token's on-chain metadata image (token address in lower case -> path on this site).
@@ -537,7 +546,7 @@ const CHAINS = {
     key: "robinhood", gt: "robinhood", name: CONFIG.chainName, short: "Robinhood", chainId: CONFIG.chainId, rpc: CONFIG.rpc, walletRpc: CONFIG.walletRpc,
     explorer: CONFIG.explorer, blockscoutApi: CONFIG.blockscoutApi, quoter: CONFIG.quoter, imd: CONFIG.imd, imdEthKey: CONFIG.imdEthKey,
     gmgn: "robinhood", dex: "robinhood", native: { name: "Ether", symbol: "ETH" }, stateView: CONFIG.stateView,
-    remote: "0xC6A3C9C80242745B795aE94afe8667a0eF3ec827", remotePads: ["0xC26003787503b978033427F77047fAF5551Ca8CC", "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDG", "0x5fc5360D0400a0fD4F2AF552ADd042d716F1D168", 6]], blurb: "Robinhood Chain: low gas, home of $PEPES.",
+    remote: "0xC6A3C9C80242745B795aE94afe8667a0eF3ec827", remotePads: ["0x5ac1907b5C534CDA7A41D317987c492c6f3Ce8cc", "0xC26003787503b978033427F77047fAF5551Ca8CC", "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC"], pay: [["ETH", ZERO_ADDR, 18], ["USDG", "0x5fc5360D0400a0fD4F2AF552ADd042d716F1D168", 6]], blurb: "Robinhood Chain: low gas, home of $PEPES.",
   },
   ethereum: {
     key: "ethereum", gt: "eth", name: "Ethereum", short: "Ethereum", chainId: 1, rpc: "https://ethereum-rpc.publicnode.com", walletRpc: "https://ethereum-rpc.publicnode.com",
@@ -545,27 +554,27 @@ const CHAINS = {
     imd: "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7",
     imdEthKey: ["0x0000000000000000000000000000000000000000", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7", 10000, 200, "0x0000000000000000000000000000000000000000"],
     gmgn: "eth", dex: "ethereum", native: { name: "Ether", symbol: "ETH" },
-    remote: "0x8ec13A6E998000175fCf20A77B90562fe8127252", remotePads: ["0xa89083083119B70c06b372dC85Dc6155a8F568CC", "0x4130878d0f1efEfB84e424829bd35Aa83201A8cC", "0x5095D9b943F951769a528212f50a41FB7CF568CC"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6]], blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
+    remote: "0x8ec13A6E998000175fCf20A77B90562fe8127252", remotePads: ["0xd6cdd777A805FC656f4A47cd39556b7278f8E8CC", "0xa89083083119B70c06b372dC85Dc6155a8F568CC", "0x4130878d0f1efEfB84e424829bd35Aa83201A8cC", "0x5095D9b943F951769a528212f50a41FB7CF568CC"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6]], blurb: "Ethereum mainnet: higher gas, the deepest liquidity.",
     stateView: "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
   },
   base: {
     key: "base", gt: "base", name: "Base", short: "Base", chainId: 8453, rpc: "https://base-rpc.publicnode.com", walletRpc: "https://mainnet.base.org",
     explorer: "https://basescan.org", blockscoutApi: "https://base.blockscout.com/api/v2", quoter: "0x0d5e0F971ED27FBfF6c2837bf31316121532048D",
     gmgn: "base", dex: "base", native: { name: "Ether", symbol: "ETH" }, blurb: "Base: low gas, paired with ETH.",
-    remote: "0xAf760F137D9785A14a2f7b0f0cf4b6fD943589a4", remotePads: ["0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]],
+    remote: "0xAf760F137D9785A14a2f7b0f0cf4b6fD943589a4", remotePads: ["0x3f9E6FAa22543eeF353C6be25B570aEA8C2CE8cc", "0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc"], pay: [["ETH", ZERO_ADDR, 18], ["USDC", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6]],
   },
   hyperevm: {
     key: "hyperevm", gt: "hyperevm", name: "HyperEVM", short: "HyperEVM", chainId: 999, rpc: "https://rpc.hyperliquid.xyz/evm", walletRpc: "https://rpc.hyperliquid.xyz/evm",
     explorer: "https://hyperevmscan.io", blockscoutApi: "", quoter: "0x108Bfe38532C98f8Cd8D7Ab49c9dDAa3675a1c5e",
     gmgn: "hyperevm", dex: "hyperevm", native: { name: "HYPE", symbol: "HYPE" }, blurb: "HyperEVM: low gas, paired with HYPE.",
-    remote: "0x3e7dcCdE57953495396A0714b85B419D59F57A29", remotePads: ["0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
+    remote: "0x3e7dcCdE57953495396A0714b85B419D59F57A29", remotePads: ["0x0B28bCC6380fFbf5CC76038f3629eBe7e6bc68cC", "0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC"], pay: [["HYPE", ZERO_ADDR, 18], ["USDC", "0xb88339CB7199b77E23DB6E890353E22632Ba630f", 6]],
   },
   // BNB Smart Chain: Uniswap v4 (PoolManager 0x28e2…e9dF). No Blockscout there, so trade history comes from the RPC.
   bsc: {
     key: "bsc", gt: "bsc", name: "BNB Smart Chain", short: "BSC", chainId: 56, rpc: "https://bsc-rpc.publicnode.com", walletRpc: "https://bsc-dataseed.bnbchain.org",
     explorer: "https://bscscan.com", blockscoutApi: "", quoter: "0x9F75dD27D6664c475B90e105573E550ff69437B0",
     gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
-    remote: "0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B", remotePads: ["0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
+    remote: "0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B", remotePads: ["0x84E2b2e0dBB0709f865ccB5050A98179a79568Cc", "0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
   // own PoolManager and quoter (contracts/script/ElysiumAddrs.s.sol). Test tokens: no USD values shown.
@@ -598,6 +607,8 @@ const PAD_ABI = [
   "function pendingCreatorFees(address token) view returns (uint256)",
   "function creatorPayout(address token) view returns (address)",
   "function pendingCreatorPayout(address token) view returns (address)",
+  // v6 only: the 1% for PEPES FAMILY NFT holders, waiting at the launchpad until fees are collected
+  "function pendingNftFees(address quote) view returns (uint256)",
   "function totalBurned(address token) view returns (uint256)",
   "function pendingBurn(address token) view returns (uint256)",
   "function collectCreatorFees(address token)",
@@ -649,7 +660,7 @@ async function splitOf(P, token) {
   const k = token.toLowerCase();
   if (!SPLITS.has(k)) {
     const [c, h, b] = await P.c.feeSplit(token);
-    SPLITS.set(k, { c: Number(c), h: Number(h), b: Number(b) });
+    SPLITS.set(k, { c: Number(c), h: Number(h), b: Number(b), nft: !!P.fixed });
   }
   return SPLITS.get(k);
 }
@@ -661,6 +672,7 @@ const SPLIT_PRESETS = [
 const pct = (bps) => `${bps / 100}%`;
 /// Short label of a split: the preset's name, or the three shares.
 function splitLabel(sp) {
+  if (sp.nft) return "Fixed split";
   const p = SPLIT_PRESETS.find((x) => x.c === sp.c && x.h === sp.h && x.b === sp.b);
   return p ? p.name : `Custom: ${pct(sp.c)} creator · ${pct(sp.h)} holders · ${pct(sp.b)} burn`;
 }
@@ -672,6 +684,7 @@ function feeText(sp) {
   if (sp.c) parts.push(`${pct(sp.c)} creator`);
   if (sp.h) parts.push(`${pct(sp.h)} holders`);
   if (sp.b) parts.push(`${pct(sp.b)} burned`);
+  if (sp.nft) parts.push("1% PEPES FAMILY NFT holders");
   return parts.join(" · ");
 }
 /// Expiry status of a v4 holding: { expired (wei), left (seconds until older rewards start expiring) }.
@@ -833,6 +846,8 @@ function sortLaunches() {
     const L = (LAUNCHES[P.ch.key] ||= []);
     if (!L.some((x) => x.quote.toLowerCase() === P.quote.toLowerCase())) L.push(P);
   }
+  // v6 live on a chain: it is the only launchpad for new tokens there (one fixed split, paired with the chain's coin)
+  for (const [k, L] of Object.entries(LAUNCHES)) if (L.some((P) => P.fixed)) LAUNCHES[k] = L.filter((P) => P.fixed);
   // IMD first on each chain: the default pair (the Launch form, and the launchpad the admin page reads)
   for (const L of Object.values(LAUNCHES)) L.sort((a, b) => (b.quote.toLowerCase() === (b.ch.imd || "").toLowerCase()) - (a.quote.toLowerCase() === (a.ch.imd || "").toLowerCase()));
   LAUNCH = LAUNCHES.robinhood?.[0] || PADS.find((P) => P.live && !P.nft) || null;
@@ -1566,7 +1581,7 @@ window.addEventListener("hashchange", route);
 const sec = (n, title, extra = "") => `<div class="hsec"><h2>${esc(title)}</h2>${extra}</div>`;
 
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
-const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint Pepes Family", "/admin": "Admin", "/perps": "Long/Short" };
+const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/admin": "Admin", "/perps": "Long/Short" };
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
@@ -3049,6 +3064,7 @@ async function renderAdmin() {
   const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
     <div class="hero"><div><h1>Admin</h1><p>Everything to collect or pay out, on every launchpad and chain, one button each.</p></div></div>
+    <div id="nftadmin"></div>
     <div class="card" style="margin-bottom:14px">
       <span class="h">Claim all</span>
       <div class="stat" id="claimall-sum" style="margin:4px 0 12px">Protocol fees: ${fmtUsd(totalUsd)}. Swap fees at Relay: checking…</div>
@@ -3091,6 +3107,7 @@ async function renderAdmin() {
       renderAdmin();
     } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
   };
+  nftAdmin($("#nftadmin"));
   // v4: find wallets with expired rewards (every address that ever sent or received the token, from Blockscout)
   // and send them to the fee address with recycleMany, in batches.
   let found = [];
@@ -3250,6 +3267,7 @@ async function renderRewards(who) {
       <input id="ra" placeholder="Wallet address 0x…" value="${addr ? esc(addr) : ""}" spellcheck="false" autocomplete="off" aria-label="Wallet address" />
       <button type="submit">View</button>
     </form>
+    <div id="nftrw"></div>
     <div id="rw">${addr ? `<div class="muted" style="margin-top:16px">Loading…</div>`
       : `<div class="card" style="margin-top:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><h2>See what you've earned</h2>
            <div class="stat">Connect your wallet, or paste any address above. Rewards are paid in each token's pair asset and wait for you to claim.</div></div>
@@ -3263,6 +3281,7 @@ async function renderRewards(who) {
     location.hash = "#/rewards/" + ethers.getAddress(v);
   };
   $("#rconn")?.addEventListener("click", () => connect().catch((e) => toast(errMsg(e), 7000)));
+  if (addr) nftRewardsCard($("#nftrw"), addr, mine);
   if (!addr) {
     // no wallet yet: the tokens whose holders have been paid the most, as a place to start
     const all = (await allTokenInfos().catch(() => [])).map((x) => x.t).filter(isListed);
@@ -3577,18 +3596,22 @@ async function shareCard(total, sub, top) {
 const NFT_ABI = [
   "function mint(uint256 quantity) payable",
   "function price() view returns (uint256)",
-  "function saleOpen() view returns (bool)",
-  "function totalMinted() view returns (uint256)",
-  "function walletLimit() view returns (uint256)",
-  "function mintedBy(address) view returns (uint256)",
+  "function mintOpen() view returns (bool)",
+  "function maxPerTx() view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
   "function MAX_SUPPLY() view returns (uint256)",
-  "function MAX_PER_TX() view returns (uint256)",
   "function tokensOfOwner(address) view returns (uint256[])",
   "function tokenURI(uint256) view returns (string)",
-  "function seed() view returns (uint256)",
-  "function traitSetOf(uint256) view returns (uint256)",
+  "function weth() view returns (address)",
+  "function pendingRewardOf(address asset, address holder) view returns (uint256)",
+  "function totalRewardsDistributed(address asset) view returns (uint256)",
+  "function claim()",
+  "function owner() view returns (address)",
+  "function proceeds() view returns (uint256)",
+  "function setMintConfig(uint256 price, bool open, uint256 maxPerTx)",
+  "function withdrawProceeds(address to)",
 ];
-const NFT_ART_ABI = ["function render(uint256) view returns (string)", "function sealedSvg() view returns (string)", "function specOf(uint256) view returns (uint256)"];
+const NFT_ART_ABI = ["function tokenURI(uint256 id, uint256 n) view returns (string)"];
 const svgUrl = (svg) => "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
 /// The image of a token from its on-chain tokenURI (a data: JSON with a data: SVG image).
 function nftImage(uri) {
@@ -3598,57 +3621,134 @@ function nftImage(uri) {
     return img.startsWith("data:image/") ? img : "";
   } catch { return ""; }
 }
+/// The Robinhood Chain launchpad v6 (its 1% NFT fee goes straight to the NFT contract), if configured.
+const nftPad = () => PADS.find((P) => P.fixed && P.ch.key === "robinhood");
+/// NFT rewards of `addr`: claimable now (ETH), and its share of what waits at the launchpad until fees are collected.
+async function nftRewards(addr) {
+  const ch = CHAINS.robinhood;
+  if ((await ch.reader.getCode(CONFIG.pepesNft)).length <= 2) return null;
+  const nft = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, ch.reader);
+  const weth = await nft.weth();
+  const [claimable, owned, supply, waiting] = await Promise.all([
+    nft.pendingRewardOf(weth, addr), nft.tokensOfOwner(addr), nft.totalSupply(),
+    nftPad()?.live ? nftPad().c.pendingNftFees(weth).catch(() => 0n) : 0n,
+  ]);
+  const share = supply > 0n ? (waiting * BigInt(owned.length)) / supply : 0n;
+  return { nft, weth, claimable, owned, supply, waiting, share };
+}
+/// The NFT rewards card (Mint and Rewards pages): what `addr` can claim, and the claim button for its own wallet.
+async function nftRewardsCard(el, addr, mine) {
+  if (!el || !addr) return;
+  let r;
+  try { r = await nftRewards(addr); } catch { return; }
+  if (!r || (!r.owned.length && r.claimable === 0n)) return;
+  const eth = (w) => `${fmt(w, 6)} ETH${prices.ethUsd ? ` <span class="stat">≈ ${fmtUsd(Number(ethers.formatEther(w)) * prices.ethUsd)}</span>` : ""}`;
+  el.innerHTML = `<div class="card" style="margin-top:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="flex:1;min-width:220px"><h2 style="margin:0 0 4px">PEPES FAMILY rewards</h2>
+      <div class="stat">${r.owned.length} NFT${r.owned.length === 1 ? "" : "s"} · 1% of every launchpad v6 trade is shared by all minted PEPES FAMILY, paid in ETH.</div>
+      <div style="margin-top:8px;font-size:20px;font-weight:700">${eth(r.claimable)}</div>
+      ${r.share > 0n ? `<div class="stat">+ about ${fmt(r.share, 6)} ETH waiting at the launchpad: it arrives when fees are next collected.</div>` : ""}</div>
+    ${mine && r.claimable > 0n ? `<button class="primary" id="nftclaim">Claim ETH</button>` : ""}</div>`;
+  const b = el.querySelector("#nftclaim");
+  if (b) b.onclick = async () => {
+    b.disabled = true;
+    try {
+      await requireWallet(CHAINS.robinhood);
+      toast("Confirm the claim in your wallet…", 10000);
+      await (await new ethers.Contract(CONFIG.pepesNft, NFT_ABI, signer).claim()).wait();
+      toast("Claimed your PEPES FAMILY rewards", 6000);
+      nftRewardsCard(el, addr, mine);
+    } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
+  };
+}
+
+/// Admin: the PEPES FAMILY mint (open/close, price), its proceeds, and its rewards so far.
+async function nftAdmin(el) {
+  if (!el) return;
+  const ch = CHAINS.robinhood;
+  try {
+    if ((await ch.reader.getCode(CONFIG.pepesNft)).length <= 2) {
+      el.innerHTML = `<div class="card" style="margin-bottom:14px"><span class="h">PEPES FAMILY NFT</span><div class="stat">Not deployed yet (deploy-ui/v6.html).</div></div>`;
+      return;
+    }
+    const n = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, ch.reader);
+    const weth = await n.weth();
+    const [open, price, perTx, minted, proceeds, paid, owner] = await Promise.all([n.mintOpen(), n.price(), n.maxPerTx(), n.totalSupply(), n.proceeds(), n.totalRewardsDistributed(weth), n.owner()]);
+    el.innerHTML = `<div class="card" style="margin-bottom:14px"><span class="h">PEPES FAMILY NFT</span>
+      <div class="stat" style="margin:4px 0 10px">Mint ${open ? "<b style='color:var(--accent)'>open</b>" : "closed"} · ${fmt(price, 6)} ETH · ${minted} / 2,000 minted · mint proceeds ${fmt(proceeds, 6)} ETH · paid to holders ${fmt(paid, 6)} ETH.
+        On the other chains the NFT 1% reaches the fee address ${short(FEES.recipient)}: send it to the NFT contract on Robinhood Chain (as WETH) to share it with holders. Owner ${short(owner)} only.</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px"><button id="nftopen">${open ? "Close the mint" : "Open the mint"}</button><button id="nftwd" ${proceeds > 0n ? "" : "disabled"}>Withdraw ${fmt(proceeds, 6)} ETH to the fee address</button></div></div>`;
+    const w = () => new ethers.Contract(CONFIG.pepesNft, NFT_ABI, signer);
+    const act = (id, fn, msg) => ($(id).onclick = async () => {
+      $(id).disabled = true;
+      try { await requireWallet(ch); toast("Confirm in your wallet…", 10000); await (await fn()).wait(); toast(msg, 6000); nftAdmin(el); }
+      catch (e) { toast(errMsg(e), 8000); $(id).disabled = false; }
+    });
+    act("#nftopen", () => w().setMintConfig(price, !open, perTx), open ? "Mint closed" : "Mint open");
+    act("#nftwd", () => w().withdrawProceeds(FEES.recipient), "Proceeds sent to the fee address");
+  } catch (e) { el.innerHTML = `<div class="card" style="margin-bottom:14px"><span class="h">PEPES FAMILY NFT</span><div class="stat">Couldn't read it: ${esc(errMsg(e))}</div></div>`; }
+}
 
 async function renderMint() {
   const app = $("#app"), gen = routeGen;
   const ch = CHAINS.robinhood;
   const nftR = new ethers.Contract(CONFIG.pepesNft, NFT_ABI, ch.reader);
   const artR = new ethers.Contract(CONFIG.pepesArt, NFT_ART_ABI, ch.reader);
-  app.innerHTML = `<div class="mint-top"><div class="mint-pics">${`<div class="skel" style="aspect-ratio:1"></div>`.repeat(4)}</div>
-    <div><h1>Pepes Family</h1><div class="stat" style="margin-top:4px">Reading the collection…</div><div class="card" style="margin-top:16px"><div class="skel" style="height:60px"></div></div>
-    <div class="card"><div class="skel" style="height:90px"></div></div></div></div>`;
+  const previews = [1, 2, 3, 4].map((i) => `<img src="/nft/preview-${i}.webp" alt="A PEPES FAMILY Pepe" />`).join("");
+  const intro = `<h1 style="margin:0 0 4px">PEPES FAMILY</h1>
+    <p class="stat" style="margin:0 0 14px">2,000 Pepes in their chain hats, drawn and stored entirely on Robinhood Chain: no IPFS, no server. Every token launched on PepesFamily from launchpad v6 on pays 1% of each trade to the holders of this collection, in ETH, forever.</p>`;
+  app.innerHTML = `<div class="mint-top"><div class="mint-pics">${previews}</div><div>${intro}<div class="card"><div class="skel" style="height:90px"></div></div></div></div>`;
   let st;
   try {
-    const [price, open, minted, limit, max, perTx, seed, mine] = await Promise.all([
-      nftR.price(), nftR.saleOpen(), nftR.totalMinted(), nftR.walletLimit(), nftR.MAX_SUPPLY(), nftR.MAX_PER_TX(), nftR.seed(),
-      account ? nftR.mintedBy(account) : Promise.resolve(0n),
-    ]);
-    st = { price, open, minted: Number(minted), limit: Number(limit), max: Number(max), perTx: Number(perTx), revealed: seed !== 0n, mine: Number(mine) };
+    if ((await ch.reader.getCode(CONFIG.pepesNft)).length <= 2) st = null;
+    else {
+      const [price, open, minted, max, perTx] = await Promise.all([nftR.price(), nftR.mintOpen(), nftR.totalSupply(), nftR.MAX_SUPPLY(), nftR.maxPerTx()]);
+      st = { price, open, minted: Number(minted), max: Number(max), perTx: Number(perTx) };
+    }
   } catch (e) { if (gen === routeGen) app.innerHTML = `<div class="card empty">Couldn't read the collection: ${esc(errMsg(e))}</div>`; return; }
   if (gen !== routeGen) return;
+  const how = `<div class="card" style="margin-top:14px"><span class="h">How the rewards work</span>
+    <div class="stat">Every buy and sell of a token launched on launchpad v6 pays 4%: 1% protocol, 1% the token's creator, 1% its holders, and <b style="color:var(--text)">1% to PEPES FAMILY holders</b>, shared equally by every minted NFT. Rewards are paid in ETH; claim them here or on the Rewards page. If you sell an NFT you keep what it earned while you held it.</div></div>`;
+  if (!st) {
+    app.innerHTML = `<div class="mint-top"><div><div class="mint-pics">${previews}</div><p class="stat" style="margin:8px 0 0">A few of the 2,000 looks: 6 chain hats, 15 backgrounds, 6 skins, 12 shirts, 8 pants, 11 accessories.</p></div>
+      <div>${intro}<div class="stats q" style="margin:0 0 14px"><div class="card"><div class="k">Price</div><div class="v">0.005 ETH</div><div class="stat">each</div></div>
+        <div class="card"><div class="k">Supply</div><div class="v">2,000</div><div class="stat">on Robinhood Chain</div></div></div>
+        <div class="card empty" style="padding:24px">Opening soon</div>${how}</div></div>`;
+    return;
+  }
   const left = st.max - st.minted;
-  const canMint = Math.max(0, Math.min(st.perTx, st.limit - st.mine, left));
-  const usdEach = Number(ethers.formatEther(st.price)) * quoteUsd(ZERO);
+  const canMint = Math.max(0, Math.min(st.perTx, left));
+  const usdEach = Number(ethers.formatEther(st.price)) * (prices.ethUsd || 0);
   let qty = Math.min(1, canMint);
-  const state = !st.open ? (st.minted >= st.max ? "Sold out" : "The mint is closed") : left === 0 ? "Sold out" : "";
+  const state = left === 0 ? "Sold out" : !st.open ? "The mint is closed" : "";
   app.innerHTML = `
     <div class="mint-top">
-      <div><div class="mint-pics" id="mpics">${[0, 1, 2, 3].map(() => `<img alt="A Pepes Family Pepe" />`).join("")}</div>
-        <p class="stat" style="margin:8px 0 0">Some of the 3,333 looks, drawn live by the contract. Each Pepe is sealed until the reveal after the mint, then shows its own look.</p></div>
+      <div><div class="mint-pics" id="mpics">${previews}</div>
+        <p class="stat" style="margin:8px 0 0">Some of the 2,000 looks, drawn live by the contract. Every NFT shows its look as soon as it's minted.</p></div>
       <div>
-        <h1 style="margin:0 0 4px">Pepes Family</h1>
-        <p class="stat" style="margin:0 0 14px">3,333 Pepes drawn from IMD's own Pepe, stored and drawn entirely on Robinhood Chain: no IPFS, no server. No two look alike.</p>
+        ${intro}
         <div class="stats q" style="margin:0 0 14px">
           <div class="card"><div class="k">Price</div><div class="v">${fmt(st.price, 6)} ETH</div><div class="stat">${usdEach ? "≈ " + fmtUsd(usdEach) : ""} each</div></div>
           <div class="card"><div class="k">Minted</div><div class="v">${st.minted.toLocaleString()} / ${st.max.toLocaleString()}</div><div class="mint-bar"><i style="width:${(100 * st.minted / st.max).toFixed(2)}%"></i></div></div>
         </div>
         ${state ? `<div class="card empty" style="padding:24px">${state}</div>` : `
         <div class="card">
-          <div class="stat" style="margin-bottom:8px">${account ? `You've minted ${st.mine} of ${st.limit} a wallet.` : `Up to ${st.limit} a wallet.`}</div>
-          ${account && canMint === 0 ? `<p style="margin:0">You've reached the limit for this wallet.</p>` : `
+          <div class="stat" style="margin-bottom:8px">Up to ${st.perTx} per transaction.</div>
           <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
-            <div class="seg" id="mqty">${Array.from({ length: account ? canMint : Math.min(st.perTx, st.limit, left) }, (_, i) => `<button type="button" data-q="${i + 1}">${i + 1}</button>`).join("")}</div>
+            <div class="seg" id="mqty">${Array.from({ length: canMint }, (_, i) => `<button type="button" data-q="${i + 1}">${i + 1}</button>`).join("")}</div>
             <span class="stat" id="mtotal"></span>
           </div>
-          <button class="primary" id="mintbtn" style="width:100%;margin-top:12px">${account ? "Mint" : "Connect wallet to mint"}</button>`}
+          <button class="primary" id="mintbtn" style="width:100%;margin-top:12px">${account ? "Mint" : "Connect wallet to mint"}</button>
         </div>`}
-        <p class="stat" style="margin:12px 0 0">5% royalty on resales, enforced on marketplaces. Wallets only (no contracts). <a href="${ch.explorer}/address/${CONFIG.pepesNft}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Contract ↗</a></p>
+        ${how}
+        <p class="stat" style="margin:12px 0 0">5% royalty on resales. <a href="${ch.explorer}/address/${CONFIG.pepesNft}" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Contract ↗</a></p>
       </div>
     </div>
+    <div id="mrw"></div>
     <div id="mmine"></div>`;
-  // a few looks, drawn live by the art contract
-  const picks = Array.from({ length: 4 }, () => Math.floor(Math.random() * 3333));
-  app.querySelectorAll("#mpics img").forEach((im, i) => artR.render(picks[i]).then((svg) => { im.src = svgUrl(svg); }).catch(() => {}));
+  // a few looks, drawn live by the art contract (the previews stay if a read fails)
+  const picks = Array.from({ length: 4 }, () => Math.floor(Math.random() * 2000));
+  app.querySelectorAll("#mpics img").forEach((im, i) => artR.tokenURI(0, picks[i]).then((u) => { const src = nftImage(u); if (src && gen === routeGen) im.src = src; }).catch(() => {}));
   const setQty = (q) => {
     qty = q;
     app.querySelectorAll("#mqty button").forEach((b) => b.classList.toggle("on", Number(b.dataset.q) === q));
@@ -3668,17 +3768,18 @@ async function renderMint() {
       const tx = await nft.mint(qty, { value: price * BigInt(qty) });
       toast("Minting…", 30000);
       await tx.wait();
-      toast(`Minted ${qty} Pepe${qty > 1 ? "s" : ""}`, 6000);
+      toast(`Minted ${qty} PEPES FAMILY`, 6000);
       if (gen === routeGen) renderMint();
     } catch (e) { toast(errMsg(e), 8000); btn.disabled = false; }
   };
-  // this wallet's Pepes
   if (!account) return;
+  nftRewardsCard($("#mrw"), account, true);
+  // this wallet's Pepes
   try {
     const ids = await nftR.tokensOfOwner(account);
     if (gen !== routeGen || !ids.length) return;
-    $("#mmine").innerHTML = `${sec(1, "Your Pepes")}<div class="mint-mine">${ids.map((id) => `<figure><img data-id="${id}" alt="Pepes Family #${id}" /><figcaption>#${id}${st.revealed ? "" : " · sealed"}</figcaption></figure>`).join("")}</div>`;
-    for (const id of ids.slice(0, 60)) nftR.tokenURI(id).then((u) => { const im = app.querySelector(`img[data-id="${id}"]`); const src = nftImage(u); if (im && src) im.src = src; }).catch(() => {});
+    $("#mmine").innerHTML = `${sec(1, "Your PEPES FAMILY")}<div class="mint-mine">${ids.map((id) => `<figure><img data-id="${id}" alt="PEPES FAMILY #${id}" /><figcaption>#${id}</figcaption></figure>`).join("")}</div>`;
+    for (const id of ids.slice(0, 40)) nftR.tokenURI(id).then((u) => { const im = app.querySelector(`img[data-id="${id}"]`); const src = nftImage(u); if (im && src) im.src = src; }).catch(() => {});
   } catch {}
 }
 
@@ -3850,6 +3951,8 @@ async function renderCreate() {
   const pairPicker = pads.length > 1 ? `
         <div class="row" style="margin-bottom:10px"><span class="stat">Pair with</span><div class="seg wrap" id="lpair">${pads.map((P) =>
           `<button type="button" data-q="${P.quote}" class="${P === LAUNCH ? "on" : ""}">${esc(qsym(P.quote))}</button>`).join("")}</div></div>` : "";
+  // v6 (fixed) has one split for every token: no picker
+  const chooseSplit = !!LAUNCH?.split && !LAUNCH.fixed;
   const payNote = LAUNCH.wrapped ? `buyers pay with ${NAT} (wrapped automatically) or ${QS}` : `buyers can pay with ${NAT} or ${QS}`;
   $("#app").innerHTML = `
     <div class="hero"><div><h1>Launch a token</h1>
@@ -3859,7 +3962,7 @@ async function renderCreate() {
         ${sec(1, Object.keys(LAUNCHES).length > 1 ? "Chain and pair" : "Pair")}
         ${chainPicker}
         ${pairPicker}
-        <div class="row"><span class="pill imd">${esc(QS)}</span><span class="stat">Your token is paired with ${esc(QS)}; ${payNote}. ${LAUNCH?.split ? `Holder rewards are paid in ${esc(QS)}: you choose below how much of the 3% they get (none, with Deflationary).` : `Holders earn 3% of every trade, in ${esc(QS)}.`}${LAUNCH?.expiry ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
+        <div class="row"><span class="pill imd">${esc(QS)}</span><span class="stat">Your token is paired with ${esc(QS)}; ${payNote}. ${LAUNCH?.fixed ? `Every trade pays 4%, the same for every token: 1% to you as the creator, 1% to holders, 1% to PEPES FAMILY NFT holders and 1% to the protocol, all paid in ${esc(NAT)}.` : LAUNCH?.split ? `Holder rewards are paid in ${esc(QS)}: you choose below how much of the 3% they get (none, with Deflationary).` : `Holders earn 3% of every trade, in ${esc(QS)}.`}${LAUNCH?.expiry ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
         ${sec(2, "Describe")}
         <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
@@ -3881,26 +3984,26 @@ async function renderCreate() {
           <div style="flex:1;min-width:140px"><label for="x">X</label><input id="x" placeholder="https://x.com/…" /></div>
           <div style="flex:1;min-width:140px"><label for="tg">Telegram</label><input id="tg" placeholder="https://t.me/…" /></div>
         </div>
-        ${LAUNCH?.split ? `${sec(3, "Where the 3% goes")}
+        ${chooseSplit ? `${sec(3, "Where the 3% goes")}
         <div class="presets" id="presets">${SPLIT_PRESETS.map((p) => `<button type="button" data-p="${p.id}"><b>${p.name}</b><div class="stat">${p.note}</div></button>`).join("")}<button type="button" data-p="custom"><b>Custom</b><div class="stat">Your own mix, in 0.5% steps</div></button></div>
         <div class="splitrow" id="custom" hidden>
           ${[["sc", "Creator", 200], ["sh", "Holders", 300], ["sb", "Burn", 300]].map(([id, l, max]) => `<div><label for="${id}">${l}</label><select id="${id}">${Array.from({ length: max / 50 + 1 }, (_, i) => `<option value="${i * 50}">${i * 0.5}%</option>`).join("")}</select></div>`).join("")}
         </div>
         <div class="stat" id="splitnote" style="margin-top:8px"></div>` : ""}
-        ${sec(LAUNCH?.split ? 4 : 3, "Initial buy")}
+        ${sec(chooseSplit ? 4 : 3, "Initial buy")}
         <div class="row" style="margin-bottom:4px" id="ibpayrow"><span class="stat">Pay with</span><div class="seg" id="ibpay"><button type="button" data-p="eth">${esc(NAT)}</button><button type="button" data-p="imd">${esc(QS)}</button></div></div>
         <label for="ib" id="ibl">Amount (optional)</label><input id="ib" inputmode="decimal" placeholder="0" />
         <div class="preview" id="ibp"></div>
         <div class="stat" id="ibcost"></div>
         <div class="stat" id="ibnote"></div>
-        ${sec(LAUNCH?.split ? 5 : 4, "Launch")}
+        ${sec(chooseSplit ? 5 : 4, "Launch")}
         <div class="stat" id="lfee" style="margin-top:12px"></div>
         <button class="primary full" id="go" type="submit">Launch token</button>
       </form>
       <div class="card" style="margin-top:26px">
         <span class="h">How it works</span>
         <p class="muted">Your token gets a Uniswap v4 pool against ${esc(QS)} holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
-        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>${LAUNCH?.split ? `1% protocol · 3% split as you choose: creator earnings (${esc(QS)}, up to 2%), holder rewards (${esc(QS)}, pro rata to balance), and burn (taken in your token on every trade and burned). The split is fixed forever at launch.` : `1% protocol · 3% shared by all holders, pro rata to their balance, paid in ${esc(QS)}. Holders claim anytime.`}</div>
+        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>${LAUNCH?.fixed ? `1% protocol · 1% creator earnings (yours: collect them on the token page) · 1% holder rewards (pro rata to balance) · 1% to PEPES FAMILY NFT holders. All paid in ${esc(NAT)}, the same for every token.` : LAUNCH?.split ? `1% protocol · 3% split as you choose: creator earnings (${esc(QS)}, up to 2%), holder rewards (${esc(QS)}, pro rata to balance), and burn (taken in your token on every trade and burned). The split is fixed forever at launch.` : `1% protocol · 3% shared by all holders, pro rata to their balance, paid in ${esc(QS)}. Holders claim anytime.`}</div>
         <div class="fees" id="startmc"></div>
       </div>
     </div>`;
@@ -3928,14 +4031,14 @@ async function renderCreate() {
   const ibAmount = () => { try { const v = $("#ib").value.trim(); return v ? ethers.parseUnits(v, 18) : 0n; } catch { return 0n; } };
   /// Tokens bought at launch for `imdIn` IMD: the new pool behaves like x*y=k with startMcap(tick) of virtual IMD.
   // v5 split: the IMD fee is 4% minus the burn share, and the buyer receives the tokens minus the burn share.
-  let split = { c: 0, h: 300, b: 0 };
+  let split = LAUNCH.fixed ? { c: 100, h: 100, b: 0 } : { c: 0, h: 300, b: 0 };
   const tokensFor = (imdIn, tick) => {
     const b = BigInt(split.b);
     const net = imdIn - (imdIn * (400n - b)) / 10000n;
     const pool = (SUPPLY * net) / (startMcap(tick) + net);
     return pool - (pool * b) / 10000n;
   };
-  if (LAUNCH?.split) {
+  if (chooseSplit) {
     const showSplit = () => {
       const sum = split.c + split.h + split.b;
       $("#splitnote").innerHTML = sum === 300
@@ -3998,11 +4101,11 @@ async function renderCreate() {
       : "Bought in the same transaction as the launch, so nobody can buy before you.";
     updPreview();
   };
-  document.querySelectorAll("#ibpay button").forEach((b) => b.onclick = () => setPay(b.dataset.p));
-  setPay(pay);
   // Paying with the chain's coin: from this chain when the wallet holds enough here (launch fee and buy), else from
   // the chain holding the most, through this chain's PepesFamilyRemote and Relay, in one confirmation.
-  let gatherLaunch = 0; // spread over several chains: brought to this chain first (gatherCash)
+  let gatherLaunch = 0; // spread over several chains: brought to this chain first (gatherCash); declared before setPay uses it
+  document.querySelectorAll("#ibpay button").forEach((b) => b.onclick = () => setPay(b.dataset.p));
+  setPay(pay);
   function autoFromLaunch() {
     from = null; gatherLaunch = 0;
     if (!xcReady(LAUNCH) || pay !== "eth" || !CASH) return;
@@ -4041,7 +4144,7 @@ async function renderCreate() {
       if (gatherLaunch) await gatherCash(ch, gatherLaunch, (m2) => toast(m2, 30000));
       if (from) {
         // paid from another chain: launchFor on this chain's PepesFamilyRemote, delivered by Relay
-        if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
+        if (chooseSplit && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
         const o = from;
         await requireWallet(o.ch); // connects too
         const { amt: buy, value } = await xcValue();
@@ -4078,7 +4181,7 @@ async function renderCreate() {
       let minOut = 0n;
       if (imdBuy > 0n) minOut = withSlippage(tokensFor(imdBuy, await padR.startTick(quote)), 1000);
       const router = new ethers.Contract(LAUNCH.router, ROUTER_ABI, signer);
-      if (LAUNCH.split && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
+      if (chooseSplit && split.c + split.h + split.b !== 300) throw new Error("The fee shares must add up to 3%");
       const fee = launchFeeWei(ch);
       if (fee > 0n && (await signer.provider.getBalance(account)) < fee + ethBuy) throw new Error(`Not enough ${NAT}: the launch fee is ${fmt(fee, 6)} ${NAT}${ethBuy ? ", plus your buy" : ""}`);
       // One confirmation when the wallet can batch: the launch fee, any approval, the launch and the first buy. With a
@@ -4185,7 +4288,7 @@ async function renderToken(addr) {
             <div class="row ext">
               ${P.ch.gmgn ? `<a class="btn" href="https://gmgn.ai/${P.ch.gmgn}/token/${addr}" target="_blank" rel="noopener noreferrer">GMGN ↗</a>` : ""}
               ${P.ch.dex ? `<a class="btn" href="https://dexscreener.com/${P.ch.dex}/${addr}" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>` : ""}
-              ${((a) => `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>`)(CONFIG.audits.tokens[addr.toLowerCase()] || (P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
+              ${((a) => (a ? `<a class="btn" href="${a.url}" target="_blank" rel="noopener noreferrer" title="${esc(a.result)}">Audit ↗</a>` : ""))(CONFIG.audits.tokens[addr.toLowerCase()] || (P.fixed ? CONFIG.audits.launchpadV6 : P.split ? CONFIG.audits.launchpadV5 : P.expiry ? CONFIG.audits.launchpadV4 : CONFIG.audits.launchpad))}
             </div>
           </div>
           <div class="cbox" id="cbox"><div class="cmsg">Loading chart…</div></div>
@@ -4199,7 +4302,7 @@ async function renderToken(addr) {
           <div class="card"><div class="k">Liquidity</div><div class="v">Locked</div><div class="stat">forever, in the pool</div></div>
         </div>
         ${sp ? `<div class="card" style="margin-top:14px" id="v5box"><span class="h">Fee split · ${esc(splitLabel(sp))}</span>
-          <div class="stat">Every trade pays 4%: ${esc(feeText(sp))}. Chosen at launch, fixed forever.</div><div id="v5detail" class="stat" style="margin-top:8px">Loading…</div></div>` : ""}
+          <div class="stat">Every trade pays 4%: ${esc(feeText(sp))}. ${sp.nft ? "The same for every token of launchpad v6, paid in " + esc(Q) + "." : "Chosen at launch, fixed forever."}</div><div id="v5detail" class="stat" style="margin-top:8px">Loading…</div></div>` : ""}
         <div class="card" style="margin-top:14px">
           <h2 style="margin-bottom:6px">Trades</h2>
           <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th class="n">Value</th><th class="n">Tokens</th><th class="n">Tx</th></tr></thead>
