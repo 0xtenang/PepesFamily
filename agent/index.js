@@ -8,8 +8,9 @@ import path from "node:path";
 
 const entry = process.env.pm_exec_path || process.argv[1];
 if (entry && pathToFileURL(path.resolve(entry)).href === import.meta.url) {
+  // PepesAgent: the Agent page's API first when hosted (Render/Railway set PORT), so health checks pass while the
+  // bot is still connecting to the wallets it follows
+  if (process.env.PORT) (await import("./pepes/server.js")).startServer();
   const { startStandalone } = await import("./standalone/runtime.js");
   await startStandalone();
-  // PepesAgent: the Agent page's API, when hosted (Railway sets PORT)
-  if (process.env.PORT) (await import("./pepes/server.js")).startServer();
 }
