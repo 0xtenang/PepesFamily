@@ -1,0 +1,105 @@
+# PepesAgent: going live
+
+The worker (this folder) runs the bot and the Agent page's API. Everything stays in shadow mode (nothing is sent)
+until `AGENT_LIVE=true` is set.
+
+## 1. Privy (dashboard.privy.io, app `cmvqjognl02en0hle77o94cri`)
+
+1. **Solana:** turn on Solana embedded wallets and Phantom as a login wallet (Login methods > Wallets).
+2. **Agent key:** on your own computer, make the key pair the worker signs with:
+   ```bash
+   openssl ecparam -name prime256v1 -genkey -noout -out agent-key.pem
+   openssl ec -in agent-key.pem -pubout -out agent-key.pub.pem
+   openssl pkcs8 -topk8 -nocrypt -in agent-key.pem -outform DER | base64
+   ```
+   The last line is `PRIVY_AUTHORIZATION_KEY` (goes only into Railway). Register the public key
+   (`agent-key.pub.pem`) in the dashboard as a **key quorum** (Wallet infrastructure > Authorization keys, 1 of 1).
+   Its id is `PRIVY_SIGNER_ID`. Delete the files afterwards.
+3. **Policy:** create a Solana policy (Policies > New) from `policy.json` below. Its id is `PRIVY_POLICY_IDS`.
+
+### policy.json
+
+```json
+{
+  "version": "1.0",
+  "name": "PepesAgent",
+  "chain_type": "solana",
+  "rules": [
+    {
+      "name": "Meteora DLMM, Jupiter, token accounts",
+      "method": "*",
+      "conditions": [{ "field_source": "solana_program_instruction", "field": "programId", "operator": "in", "value": [
+        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QAvbyto4",
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        "ComputeBudget111111111111111111111111111111",
+        "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+      ] }],
+      "action": "ALLOW"
+    },
+    {
+      "name": "Profit fee: SOL to the fee wallet",
+      "method": "*",
+      "conditions": [
+        { "field_source": "solana_system_program_instruction", "field": "instructionName", "operator": "eq", "value": "Transfer" },
+        { "field_source": "solana_system_program_instruction", "field": "Transfer.to", "operator": "eq", "value": "Gy1Ub83ERYtC4y7PNyTKEbuokZUWnt2TQ4DPaX77anQ" },
+        { "field_source": "solana_system_program_instruction", "field": "Transfer.lamports", "operator": "lte", "value": "500000000" }
+      ],
+      "action": "ALLOW"
+    },
+    {
+      "name": "Wrapping SOL for a position (to the wallet's own wSOL account), capped at one position",
+      "method": "*",
+      "conditions": [
+        { "field_source": "solana_system_program_instruction", "field": "instructionName", "operator": "eq", "value": "Transfer" },
+        { "field_source": "solana_system_program_instruction", "field": "Transfer.lamports", "operator": "lte", "value": "1100000000" }
+      ],
+      "action": "ALLOW"
+    },
+    {
+      "name": "Accounts the SDKs create",
+      "method": "*",
+      "conditions": [
+        { "field_source": "solana_system_program_instruction", "field": "instructionName", "operator": "in", "value": ["CreateAccount", "CreateAccountWithSeed", "Allocate", "Assign"] }
+      ],
+      "action": "ALLOW"
+    }
+  ]
+}
+```
+
+**Known limit (check in the beta):** opening a position first moves SOL into the wallet's own wrapped-SOL account
+with a plain transfer, and Privy's policy can't tell "to my own wSOL account" from "to anyone". The third rule
+therefore allows transfers up to one position's size (1.1 SOL) to any address. If the worker's key leaked, a wallet
+could be drained in position-sized steps. Before raising the beta caps, test whether these opens can wrap through the
+token program instead, and tighten or drop that rule. Also check in the beta: that Privy keeps the new position
+key's signature (`partialSign`), and that only top-level instructions are checked (Jupiter routes call many DEXes).
+
+## 2. Railway
+
+1. New project > Deploy from GitHub repo `0xtenang/PepesFamily`, root directory `agent`.
+2. Add a **volume** mounted at `/data`.
+3. Variables (Settings > Variables), typed in by you:
+
+| Variable | Value |
+|---|---|
+| `DATA_DIR` | `/data` |
+| `RPC_URL` | Helius mainnet URL (with your key) |
+| `MONITOR_WS_URL` | Helius websocket URL |
+| `PRIVY_APP_ID` | `cmvqjognl02en0hle77o94cri` |
+| `PRIVY_APP_SECRET` | from the Privy dashboard |
+| `PRIVY_AUTHORIZATION_KEY` | from step 1.2 |
+| `PRIVY_SIGNER_ID` | the key quorum id |
+| `PRIVY_POLICY_IDS` | the policy id |
+| `AGENT_LIVE` | `false` (shadow) until the beta |
+
+4. Generate a public domain (Settings > Networking). Put that URL in `CONFIG.agentApi` in `web/index.html`.
+
+## 3. Going live
+
+1. Watch shadow results for a week or two (Railway logs, `/agent/stats`).
+2. Beta: set `AGENT_LIVE=true`, keep the caps
+   (`MAX_POSITION_SOL=1`, `MAX_POSITIONS=3`), and trade small amounts from the team's own wallets first.
+3. Raise the caps when the policy limit above is resolved.
