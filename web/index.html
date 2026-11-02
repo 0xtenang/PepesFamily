@@ -3395,7 +3395,20 @@ const solFmt = (x, d = 4) => (x == null || !Number.isFinite(Number(x)) ? "—" :
 /// The agent's API; `auth` sends the visitor's Privy sign-in (the public figures don't need Privy at all).
 async function agentFetch(path, opts = {}, auth = true) {
   const token = auth ? await loadPrivy().then((P) => P.agent.token()).catch(() => null) : null;
-  const r = await fetch(CONFIG.agentApi + path, { ...opts, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) } });
+  const headers = { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) };
+  // The worker is offline for about a minute when it updates: reads wait that out. Writes aren't repeated.
+  const reads = !opts.method || opts.method === "GET";
+  let r;
+  for (let i = 0; ; i++) {
+    try {
+      r = await fetch(CONFIG.agentApi + path, { ...opts, headers });
+      if (!reads || r.status < 500 || i >= 8) break;
+    } catch (e) {
+      if (!reads || i >= 8) throw new Error("The agent is restarting. Try again in a minute.");
+    }
+    await new Promise((ok) => setTimeout(ok, 8000));
+  }
+  if (r.status >= 500) throw new Error("The agent is restarting. Try again in a minute.");
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `The agent didn't answer (${r.status})`);
   return j;
@@ -3418,7 +3431,7 @@ async function renderAgent() {
   app.innerHTML = `${head}<div class="stats q" id="agstats"></div><div id="agmain"><div class="card"><div class="skel" style="height:120px"></div></div></div><div id="agpos"></div><div id="agscout"></div><div id="agsig"></div>${how}`;
   let cfg, stats;
   try { [cfg, stats] = await Promise.all([agentFetch("/agent/config", {}, false), agentFetch("/agent/stats", {}, false)]); }
-  catch (e) { if (gen === routeGen) $("#agmain").innerHTML = `<div class="card empty">The agent isn't reachable right now: ${esc(errMsg(e))}</div>`; return; }
+  catch (e) { if (gen === routeGen) $("#agmain").innerHTML = `<div class="card empty">${esc(errMsg(e))} <button type="button" id="agretry">Retry</button></div>`; if ($("#agretry")) $("#agretry").onclick = () => renderAgent(); return; }
   if (gen !== routeGen) return;
   $("#agstats").innerHTML = `<div class="card"><div class="k">Mode</div><div class="v">${cfg.reduceOnly ? "Exits only" : cfg.shadow ? "Shadow" : "Live"}</div><div class="stat">${cfg.reduceOnly ? "no new positions for now" : cfg.shadow ? "recording, not trading yet" : "trading"}</div></div>
     <div class="card"><div class="k">Agents running</div><div class="v">${stats.users}</div></div>
