@@ -12,7 +12,7 @@ until `AGENT_LIVE=true` is set.
    openssl ec -in agent-key.pem -pubout -out agent-key.pub.pem
    openssl pkcs8 -topk8 -nocrypt -in agent-key.pem -outform DER | base64
    ```
-   The last line is `PRIVY_AUTHORIZATION_KEY` (goes only into Railway). Register the public key
+   The last line is `PRIVY_AUTHORIZATION_KEY` (goes only into Render). Register the public key
    (`agent-key.pub.pem`) in the dashboard as a **key quorum** (Wallet infrastructure > Authorization keys, 1 of 1).
    Its id is `PRIVY_SIGNER_ID`. Delete the files afterwards.
 3. **Policy:** create a Solana policy (Policies > New) from `policy.json` below. Its id is `PRIVY_POLICY_IDS`.
@@ -93,10 +93,6 @@ Variables, entered in Render only: `DATA_DIR=/data`, `RPC_URL` and `MONITOR_WS_U
 `PRIVY_APP_SECRET`, `PRIVY_AUTHORIZATION_KEY`, `PRIVY_SIGNER_ID`, `PRIVY_POLICY_IDS`, `AGENT_LIVE=false`.
 
 ## 3. Going live
-
-**Before any real money:** replace the agent key (`PRIVY_AUTHORIZATION_KEY`). The current one was pasted into a chat
-on 2026-11-01. Make a new key in Privy, put its id in `PRIVY_SIGNER_ID`, and recreate the policy under it if it can't be
-moved. Users who approved the old key must approve the new one.
 
 1. Watch shadow results for a week or two (the Agent page's signal list, Render logs, `/agent/stats`).
 2. Beta: set `AGENT_LIVE=true`, keep the caps

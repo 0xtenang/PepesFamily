@@ -43,6 +43,14 @@ function nonEmptyString(...values) {
   return null;
 }
 
+/** PepesAgent: wallets run by one operator count as one (pepes/scan-lpers.js): wallet -> group. */
+function starterGroups() {
+  try {
+    const { wallets } = JSON.parse(fs.readFileSync(repoPath("pepes", "smart-wallets.starter.json"), "utf8"));
+    return Object.fromEntries(wallets.filter(w => w.group).map(w => [w.address, w.group]));
+  } catch { return {}; }
+}
+
 export const config = {
   // The standalone wallet-triggered bot IS the app — there is no mode toggle.
   // The LLM/server-driven flow lives on the `legacy` branch.
@@ -59,12 +67,14 @@ export const config = {
     windowSec: u.walletWindowSec ?? 120,
     screeningDeadlineSec: u.screeningDeadlineSec ?? 120,
     retrySec: u.screeningRetrySec ?? 15,
-    reconcileSec: u.walletReconcileSec ?? 30,
+    // PepesAgent: the live feed finds entries; this backfill every 100 s only catches missed ones (each pass costs
+    // an RPC call per wallet). It must stay under windowSec, or missed entries fall outside the window.
+    reconcileSec: u.walletReconcileSec ?? 100,
     minDepositSol: u.minSmartWalletDepositSol ?? 0.1,
     maxPriceMovePct: u.maxEntryPriceMovePct ?? 5,
     cooldownSec: u.walletSignalCooldownSec ?? 300,
     maxPendingTransactions: u.maxPendingWalletTransactions ?? 1000,
-    walletGroups: u.walletGroups ?? {},
+    walletGroups: u.walletGroups ?? starterGroups(),
   },
   // ─── Risk Limits ─────────────────────────
   risk: {

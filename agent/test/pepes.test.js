@@ -76,3 +76,13 @@ test("shadow signal log records results and works out price moves", async () => 
   assert.equal(st.recent[1].reason, "Insufficient holders");
   assert.equal(st.recent[1].movePct, null);
 });
+
+test("wallets of one operator count as one vote", async () => {
+  const { qualifyingEvents } = await import("../standalone/store.js");
+  const now = Date.now();
+  const e = (wallet, id) => ({ id, wallet, mint: "M", at: now - 1000, depositSol: 1 });
+  const events = [e("A", "1"), e("B", "2"), e("C", "3")];
+  const opts = { windowSec: 120, minDepositSol: 0.1, walletGroups: { A: "op", B: "op" } };
+  assert.equal(qualifyingEvents(events.slice(0, 2), "M", opts, now).length, 1); // A and B are one operator
+  assert.equal(qualifyingEvents(events, "M", opts, now).length, 2);             // C is independent
+});
