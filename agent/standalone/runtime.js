@@ -23,6 +23,7 @@ import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
 import { activeUsers, managedUsers, multiUser, reduceOnly } from "../pepes/users.js";
 import { recordSignal, followSignals, followLps } from "../pepes/signals.js";
+import { scan as scoutScan, follow as scoutFollow } from "../pepes/scout.js";
 import { startAdmin } from "./telegram-admin.js";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -391,6 +392,12 @@ export async function startStandalone() {
   timers.manage = setInterval(() => { void manageOnce(); }, Math.max(1, config.schedule.managementIntervalMin) * 60_000);
   startPnlPoller();
   startHeartbeat();
+  if (multiUser()) {
+    const scout = () => void scoutScan().then(n => { if (n) log("scout", `${n} new pool(s)`); }).catch(e => log("scout_warn", e.message));
+    timers.scout = setInterval(scout, 5 * 60_000);
+    timers.scoutFollow = setInterval(() => { void scoutFollow().catch(e => log("scout_warn", e.message)); }, 30 * 60_000);
+    scout();
+  }
   if (multiUser()) timers.signals = setInterval(() => {
     void followSignals().catch(e => log("signals_warn", e.message));
     void followLps().catch(e => log("signals_warn", e.message));

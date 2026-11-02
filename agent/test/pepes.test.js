@@ -126,3 +126,35 @@ test("Stop ends new positions but the agent keeps looking after open ones", asyn
   assert.equal(reduceOnly(), true);
   delete process.env.AGENT_REDUCE_ONLY;
 });
+
+test("scout: scans feeds, follows pools, and reports outcomes by trait", async () => {
+  const { scan, applyCheck, positionLossPct, edge, isPick, features } = await import("../pepes/scout.js");
+  const t0 = 1_800_000_000_000;
+  const pool = (over = {}) => ({ pool_address: "PA", name: "A-SOL", pool_type: "dlmm", pool_price: 1, is_blacklisted: false, active_tvl: 5000, fee_active_tvl_ratio: 1, fee_pct: 1, volatility: 3,
+    dlmm_params: { bin_step: 100 }, token_y: { address: "So11111111111111111111111111111111111111112" },
+    token_x: { address: "MA", market_cap: 200000, top_holders_pct: 30, organic_score: 50, created_at: t0 - 3600_000, has_mint_authority: false, has_freeze_authority: false, warnings: [] }, ...over });
+  assert.equal(isPick(pool(), features(pool(), t0)), true);
+  const rug = pool({ token_x: { ...pool().token_x, has_mint_authority: true } });
+  assert.equal(isPick(rug, features(rug, t0)), false);
+  const notSol = pool({ pool_address: "PB", token_y: { address: "USDC" } });
+  assert.equal(await scan(async (url) => ({ data: url.includes("category=top") ? [pool(), notSol] : url.includes("category=new") ? [pool()] : [] }), t0), 1); // once, SOL only
+
+  // losses: none above entry; half the drop at the bottom of a wide range is about right for spot
+  assert.equal(positionLossPct(1, 0.5, 1.2), 0);
+  assert.ok(Math.abs(positionLossPct(1, 0.5, 0.5) - -33.33) < 0.1);
+  assert.ok(positionLossPct(1, 0.5, 0.25) < positionLossPct(1, 0.5, 0.5)); // below the range it keeps falling
+
+  const r = { price: 1, lower: 0.5, last: 1, low: 1, feeSum: 0, at: t0, checkedAt: t0, h: {}, cats: ["top"], f: { ageH: 1, feeRate: 1 }, pick: true };
+  applyCheck(r, { pool_price: 0.9, fee_active_tvl_ratio: 2 }, t0 + 3600_000);  // in range: 1h at 2% per 30m = 4%
+  assert.equal(r.feeSum, 4);
+  assert.equal(r.h[1].price, -10);
+  assert.ok(r.h[1].est > 0 && r.h[1].est < 4);
+  applyCheck(r, { pool_price: 1.5, fee_active_tvl_ratio: 9 }, t0 + 2 * 3600_000); // above the range: no fees
+  assert.equal(r.feeSum, 4);
+  applyCheck(r, { pool_price: 1.5, fee_active_tvl_ratio: 9 }, t0 + 4 * 3600_000);
+  assert.equal(r.h[4].est, 4);
+  const rows = edge([r], 4);
+  assert.deepEqual(rows.find((x) => x.trait === "Feed"), { trait: "Feed", bucket: "top", n: 1, est: 4, winPct: 100, fees: 4, halvedPct: 0 });
+  assert.equal(rows.find((x) => x.trait === "Token age").bucket, "Under 6h");
+});
+

@@ -183,6 +183,16 @@ export const config = {
 
 };
 
+// PepesAgent, hosted: degen screening. Younger, smaller, wider-ranged pools than Meridian's defaults; the rug checks stay
+// (mint/freeze authority, top 10 and bot holders, dangerous warnings, blocklists). A 5-minute wallet window too.
+if (process.env.PRIVY_APP_ID) {
+  Object.assign(config.screening, {
+    minTvl: 3_000, maxTvl: null, minVolume: 500, minOrganic: 30, minHolders: 100, minMcap: 50_000, maxMcap: 50_000_000,
+    minBinStep: 50, maxBinStep: 400, minTokenFeesSol: 5, minFeeActiveTvlRatio: 0.05,
+  });
+  config.standalone.windowSec = u.walletWindowSec ?? 300;
+}
+
 // PepesAgent: each user's own risk settings (sizes, limits, exits) override these inside runAs (pepes/context.js).
 config.risk = overlay("risk", config.risk);
 config.management = overlay("management", config.management);

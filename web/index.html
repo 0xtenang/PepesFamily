@@ -3404,7 +3404,7 @@ async function renderAgent() {
   const app = $("#app"), gen = routeGen;
   const head = `<div class="hero"><div><h1>PepesAgent</h1><p>Your SOL, working as liquidity on Meteora around the clock. The agent follows proven Meteora liquidity providers, enters the pools they enter, collects trading fees and exits on fixed rules. Withdraw to Phantom any time.</p></div></div>`;
   const how = `<div class="card" style="margin-top:14px"><span class="h">How it works</span>
-    <div class="stat"><b style="color:var(--text)">1. Signal.</b> It follows proven Meteora liquidity providers: when two of them add liquidity to the same token within two minutes, that's a signal.<br/>
+    <div class="stat"><b style="color:var(--text)">1. Signal.</b> It follows proven Meteora liquidity providers: when two of them add liquidity to the same token within five minutes, that's a signal. It also scans Meteora's Top Performers, Trending and New Tokens to learn which kinds of pool pay.<br/>
     <b style="color:var(--text)">2. Screen.</b> The pool must pass liquidity, volume, fee, holder and rug checks.<br/>
     <b style="color:var(--text)">3. Enter.</b> It adds your SOL just below the price, sized to your settings, and earns fees as the token trades.<br/>
     <b style="color:var(--text)">4. Exit.</b> Take profit (trailing), stop loss, out of range too long, or fees too low. Tokens are swapped back to SOL.<br/>
@@ -3415,7 +3415,7 @@ async function renderAgent() {
     app.innerHTML = `${head}<div class="card empty" style="padding:24px">Opening soon. The agent is running in shadow mode first: it records what it would do and trades nothing.</div>${how}`;
     return;
   }
-  app.innerHTML = `${head}<div class="stats q" id="agstats"></div><div id="agmain"><div class="card"><div class="skel" style="height:120px"></div></div></div><div id="agpos"></div><div id="agsig"></div>${how}`;
+  app.innerHTML = `${head}<div class="stats q" id="agstats"></div><div id="agmain"><div class="card"><div class="skel" style="height:120px"></div></div></div><div id="agpos"></div><div id="agscout"></div><div id="agsig"></div>${how}`;
   let cfg, stats;
   try { [cfg, stats] = await Promise.all([agentFetch("/agent/config", {}, false), agentFetch("/agent/stats", {}, false)]); }
   catch (e) { if (gen === routeGen) $("#agmain").innerHTML = `<div class="card empty">The agent isn't reachable right now: ${esc(errMsg(e))}</div>`; return; }
@@ -3424,6 +3424,21 @@ async function renderAgent() {
     <div class="card"><div class="k">Agents running</div><div class="v">${stats.users}</div></div>
     <div class="card"><div class="k">LPs followed</div><div class="v">${stats.walletsWatched}</div></div>
     <div class="card"><div class="k">Fee</div><div class="v">${cfg.feePct}%</div><div class="stat">of profit above your best</div></div>`;
+  // the scout: what Meteora's feeds offer now, and which kinds of pool have paid
+  const sc = stats.scout || { tracked: 0, latest: [], edge: [] };
+  const money = (x) => (x == null ? "—" : fmtUsd(x));
+  const estCell = (x) => (x == null ? `<td class="r stat">—</td>` : `<td class="r ${x >= 0 ? "up" : "dn"}">${x > 0 ? "+" : ""}${solFmt(x, 1)}%</td>`);
+  const ageTxt = (h) => (h == null ? "—" : h < 48 ? solFmt(h, 0) + "h" : solFmt(h / 24, 0) + "d");
+  const FEEDS = { top: "Top", trending: "Trending", new: "New" };
+  const edgeRows = sc.edge.filter((e) => e.n >= 5).sort((a, b) => b.est - a.est);
+  $("#agscout").innerHTML = `${sec(5, "What to LP", `<span class="stat">${sc.tracked} pools tracked · ${sc.picks || 0} picks · ${sc.withResults || 0} with ${sc.horizon || 4}h results</span>`)}
+    ${sc.latest.length ? `<div class="card scroll-x"><table><thead><tr><th>Latest picks</th><th>Feed</th><th class="r">Age</th><th class="r">Mcap</th><th class="r">Active TVL</th><th class="r">Fees, 1h</th><th class="r">Bin</th><th class="r">Est. after ${sc.horizon}h</th></tr></thead><tbody>${sc.latest.map((x) =>
+      `<tr><td><a href="https://app.meteora.ag/dlmm/${esc(x.pool)}" target="_blank" rel="noopener noreferrer">${esc(x.name || short(x.pool))}</a></td><td class="stat">${x.cats.map((c) => FEEDS[c] || esc(c)).join(", ")}</td><td class="r">${ageTxt(x.ageH)}</td><td class="r">${money(x.mcap)}</td><td class="r">${money(x.activeTvl)}</td><td class="r">${solFmt(x.feeRate, 2)}%</td><td class="r">${Number(x.binStep) || "—"}</td>${estCell(x.result?.est)}</tr>`).join("")}</tbody></table></div>`
+      : `<div class="card empty">The scout checks Meteora every 5 minutes. Picks appear here after its first scan.</div>`}
+    ${edgeRows.length ? `<div class="card scroll-x" style="margin-top:14px"><span class="h">What has paid, best first</span><table><thead><tr><th>Trait</th><th></th><th class="r">Pools</th><th class="r">Median est.</th><th class="r">Above 0</th><th class="r">Median fees</th><th class="r">Halved</th></tr></thead><tbody>${edgeRows.map((e) =>
+      `<tr><td class="stat">${esc(e.trait)}</td><td>${esc(e.bucket)}</td><td class="r">${e.n}</td>${estCell(e.est)}<td class="r">${e.winPct}%</td><td class="r">${solFmt(e.fees, 1)}%</td><td class="r">${e.halvedPct}%</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="card empty" style="margin-top:14px">Outcomes by trait appear once at least 5 pools have ${sc.horizon || 4}-hour results.</div>`}
+    <p class="stat" style="margin:10px 0 14px">Estimates for a single-sided SOL position opened when the pool was first seen, ${sc.horizon || 4} hours on: pool fees while in range, minus the loss as SOL converts to the token. No stop loss or exits are modelled, and Halved means the price fell 50% or more. Use them to compare kinds of pool, not as promised returns.</p>`;
   // what the agent has seen: every signal, whether or not anyone has funds in (the shadow record)
   const sg = stats.signals || { total: 0, passed: 0, recent: [] };
   const pctCell = (x) => (x == null ? `<td class="r stat">—</td>` : `<td class="r ${x >= 0 ? "up" : "dn"}">${x > 0 ? "+" : ""}${solFmt(x, 1)}%</td>`);
@@ -3438,7 +3453,7 @@ async function renderAgent() {
   $("#agsig").innerHTML = `${trackRecord}${sec(4, "Signals so far", `<span class="stat">${sg.total} seen · ${sg.passed} passed screening</span>`)}${sg.recent.length ? `<div class="card scroll-x"><table><thead><tr><th>When</th><th>Token</th><th class="r">LPs</th><th>Screening</th><th class="r">LPs' result</th><th class="r">Price now</th><th class="r">High</th><th class="r">Low</th></tr></thead><tbody>${sg.recent.map((x) =>
       `<tr><td class="stat">${esc(new Date(x.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${x.pool ? `<a href="https://app.meteora.ag/dlmm/${esc(x.pool)}" target="_blank" rel="noopener noreferrer">${esc(x.symbol || x.name || short(x.mint))}</a>` : esc(x.symbol || short(x.mint))}</td><td class="r">${Number(x.wallets) || 0}</td><td class="${x.pass ? "up" : "stat"}">${x.pass ? "Passed" : esc(x.reason || "Rejected")}</td>${x.lpPct == null ? `<td class="r stat">—</td>` : `<td class="r ${x.lpPct >= 0 ? "up" : "dn"}">${x.lpPct > 0 ? "+" : ""}${solFmt(x.lpPct, 1)}%${x.lpClosed ? "" : ` <span class="stat">open</span>`}</td>`}${pctCell(x.movePct)}${pctCell(x.highPct)}${pctCell(x.lowPct)}</tr>`).join("")}</tbody></table>
       <p class="stat" style="margin:10px 0 0">Price moves since the signal, followed for 24 hours. LPs' result is followed for 7 days.</p></div>`
-    : `<div class="card empty">Watching ${stats.walletsWatched} LPs. A signal appears here when two of them add liquidity to the same token within two minutes.</div>`}`;
+    : `<div class="card empty">Watching ${stats.walletsWatched} LPs. A signal appears here when two of them add liquidity to the same token within five minutes.</div>`}`;
   let P;
   try { P = await loadPrivy(); } catch (e) { $("#agmain").innerHTML = `<div class="card empty">${esc(errMsg(e))}</div>`; return; }
   const step = async () => {

@@ -18,6 +18,7 @@ import { loadUsers, saveUsers, activeUsers, managedUsers, isLive, reduceOnly } f
 import { PrivySigner } from "./signer.js";
 import { FEE_PCT, FEE_ADDRESS } from "./fee.js";
 import { signalStats } from "./signals.js";
+import { scoutStats } from "./scout.js";
 import { config } from "../config.js";
 import { log } from "../logger.js";
 
@@ -172,6 +173,7 @@ async function stats() {
     decisions: typeof getRecentDecisions === "function" ? getRecentDecisions(20) : [],
     signals: signalStats(20),
     record: await agentRecord(),
+    scout: scoutStats(),
     reduceOnly: reduceOnly(),
   };
 }
