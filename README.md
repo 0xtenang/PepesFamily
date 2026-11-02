@@ -412,15 +412,6 @@ They add funds by sending ETH, BNB or HYPE to the address in the wallet menu, an
   `https://pepesdotfamily.fun` and `https://www.pepesdotfamily.fun` (and the older `https://pepesimd.fun`) to the allowed domains, pick the login methods, and turn on
   EVM embedded wallets.
 
-## PepesAgent (2026-11-01, shadow mode)
-
-An automated Meteora DLMM liquidity agent on Solana: `agent/` (the worker: bot and API, run on Render) and the
-site's Agent page (`#/agent`). Visitors sign in with Phantom through Privy, get a Solana agent wallet, approve the
-agent's key once (a Privy policy limits what it can sign), deposit SOL and pick a preset. 10% of a user's profit above
-their previous best goes to the team's Solana wallet when a position closes; losses carry forward. It is built on
-[Meridian](https://github.com/yunus-0x/meridian) by yunus-0x, with the author's permission. Setup and going live:
-[agent/SETUP.md](agent/SETUP.md). The page shows "opening soon" until `CONFIG.agentApi` is set.
-
 ## Long/Short (dropped 2026-11-01)
 
 Leveraged longs and shorts (the MemeLev contracts, keeper and relayer in `perps/`) were never deployed and are
