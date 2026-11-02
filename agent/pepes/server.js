@@ -8,7 +8,7 @@
 //
 // Signed-in calls carry the Privy access token (Authorization: Bearer). The user's wallets are read from Privy,
 // never taken from the request: the agent wallet must be the user's Privy embedded Solana wallet with the agent's
-// signer added (delegated), and withdrawals and the fee never use an address the request names.
+// signer on it, limited by the agent's policy (walletOf), and withdrawals and the fee never use an address the request names.
 
 import http from "node:http";
 import { runAs } from "./context.js";
@@ -67,11 +67,29 @@ async function whoIs(req) {
   return { id: claims.user_id, agent, phantom };
 }
 
+/**
+ * The user's agent wallet as Privy has it, and whether they approved the agent: our key is among the wallet's signers,
+ * limited by our policy. Privy's `delegated` flag on the account can't be used for this: it is not specific to our key.
+ */
+async function walletOf(who) {
+  if (!who.agent?.address) return { walletId: null, approved: false };
+  const p = await privy();
+  let wallet = null;
+  if (who.agent.id) wallet = await p.wallets().get(who.agent.id);
+  else for await (const w of p.wallets().list({ user_id: who.id, chain_type: "solana" })) if (w.address === who.agent.address) { wallet = w; break; }
+  if (!wallet) return { walletId: null, approved: false };
+  const policies = (process.env.PRIVY_POLICY_IDS || "").split(",").filter(Boolean);
+  const signer = (wallet.additional_signers || []).find(a => a.signer_id === process.env.PRIVY_SIGNER_ID);
+  const limited = !!signer && policies.length > 0 && policies.every(id => (signer.override_policy_ids || []).includes(id));
+  return { walletId: wallet.id, approved: limited };
+}
+
 const view = (u) => u && { active: !!u.active, live: isLive(u), address: u.address, owner: u.owner, settings: u.settings, startedAt: u.startedAt };
 
 async function me(who) {
   const record = loadUsers().find(u => u.id === who.id) || null;
-  const out = { user: view(record), agentWallet: who.agent?.address || null, delegated: !!who.agent?.delegated, phantom: who.phantom?.address || null };
+  const { approved } = await walletOf(who);
+  const out = { user: view(record), agentWallet: who.agent?.address || null, approved, phantom: who.phantom?.address || null };
   if (!who.agent?.address) return out;
   const user = { ...(record || {}), id: who.id, address: who.agent.address, live: false, // read-only here
     signer: new PrivySigner({ walletId: who.agent.id || "none", address: who.agent.address }) };
@@ -88,14 +106,15 @@ async function me(who) {
   return out;
 }
 
-function start(who, body) {
-  if (!who.agent?.address || !who.agent.id) throw Object.assign(new Error("Create your agent wallet first"), { status: 400 });
-  if (!who.agent.delegated) throw Object.assign(new Error("Approve the agent for your agent wallet first"), { status: 400 });
+async function start(who, body) {
+  const { walletId, approved } = await walletOf(who);
+  if (!who.agent?.address || !walletId) throw Object.assign(new Error("Create your agent wallet first"), { status: 400 });
+  if (!approved) throw Object.assign(new Error("Approve the agent for your agent wallet first"), { status: 400 });
   if (!who.phantom?.address) throw Object.assign(new Error("Sign in with Phantom first"), { status: 400 });
   const users = loadUsers();
   let u = users.find(x => x.id === who.id);
   if (!u) { u = { id: who.id, startedAt: new Date().toISOString() }; users.push(u); }
-  Object.assign(u, { address: who.agent.address, walletId: who.agent.id, owner: who.phantom.address, active: true,
+  Object.assign(u, { address: who.agent.address, walletId, owner: who.phantom.address, active: true,
     settings: settingsFor(body) });
   saveUsers(users);
   log("agent_user", `${who.agent.address.slice(0, 6)} started (${u.settings.preset}, ${u.settings.positionSol} SOL x ${u.settings.maxPositions}, ${isLive(u) ? "live" : "shadow"})`);
@@ -151,7 +170,7 @@ export function startServer(port = Number(process.env.PORT || 8080)) {
       if (req.method === "GET" && path === "/agent/config") return send(200, publicConfig());
       if (req.method === "GET" && path === "/agent/stats") return send(200, await stats());
       if (req.method === "GET" && path === "/agent/me") return send(200, await me(await whoIs(req)));
-      if (req.method === "POST" && path === "/agent/start") { const b = await body(req); return send(200, start(await whoIs(req), b)); }
+      if (req.method === "POST" && path === "/agent/start") { const b = await body(req); return send(200, await start(await whoIs(req), b)); }
       if (req.method === "POST" && path === "/agent/stop") return send(200, stop(await whoIs(req)));
       return send(404, { error: "Not found" });
     } catch (e) {

@@ -3445,7 +3445,7 @@ async function renderAgent() {
     const s = me.user?.settings || { preset: "balanced", positionSol: Math.min(0.25, cfg.maxPositionSol), maxPositions: Math.min(2, cfg.maxPositions) };
     const running = !!me.user?.active;
     const status = running ? (me.user.live ? "Running" : "Running (shadow)") : "Stopped";
-    const approve = st.agent.delegated ? "" : `<div class="card" style="margin-bottom:14px"><span class="h">Approve the agent</span>
+    const approve = me.approved ? "" : `<div class="card" style="margin-bottom:14px"><span class="h">Approve the agent</span>
       <div class="stat" style="margin-bottom:10px">One approval lets the agent trade your agent wallet within its limits: Meteora liquidity and Jupiter swaps only, SOL out only to you or as the ${cfg.feePct}% profit fee. You can remove it any time.</div>
       <button class="primary" id="agapprove" style="width:100%" ${cfg.signerId ? "" : "disabled"}>${cfg.signerId ? "Approve PepesAgent" : "Approval opens soon"}</button></div>`;
     const presets = Object.entries(cfg.presets).map(([k, v]) => `<button type="button" data-p="${k}" class="${s.preset === k ? "on" : ""}">${esc(v.label)}</button>`).join("");
@@ -3464,8 +3464,8 @@ async function renderAgent() {
       <div class="row" style="gap:14px;flex-wrap:wrap;margin-bottom:14px">
         <label class="stat">SOL per position <input id="agsize" type="number" min="0.1" max="${cfg.maxPositionSol}" step="0.05" value="${s.positionSol}" inputmode="decimal" style="width:90px" /></label>
         <label class="stat">Open positions at most <input id="agmax" type="number" min="1" max="${cfg.maxPositions}" step="1" value="${s.maxPositions}" inputmode="numeric" style="width:70px" /></label></div>
-      <div class="row" style="gap:8px"><button class="primary" id="agstart" style="flex:1" ${st.agent.delegated ? "" : "disabled"}>${running ? "Save settings" : "Start the agent"}</button>${running ? `<button type="button" id="agstop">Stop</button>` : ""}</div>
-      <p class="stat" style="margin:10px 0 0">Beta limits: up to ${cfg.maxPositionSol} SOL per position and ${cfg.maxPositions} open positions. Keep about 0.1 SOL extra for network fees and position deposits (refunded when a position closes).${st.agent.delegated ? ` <a href="#" id="agrevoke" class="lnk">Remove the agent's approval</a>` : ""}</p></div>`;
+      <div class="row" style="gap:8px"><button class="primary" id="agstart" style="flex:1" ${me.approved ? "" : "disabled"}>${running ? "Save settings" : "Start the agent"}</button>${running ? `<button type="button" id="agstop">Stop</button>` : ""}</div>
+      <p class="stat" style="margin:10px 0 0">Beta limits: up to ${cfg.maxPositionSol} SOL per position and ${cfg.maxPositions} open positions. Keep about 0.1 SOL extra for network fees and position deposits (refunded when a position closes).${me.approved ? ` <a href="#" id="agrevoke" class="lnk">Remove the agent's approval</a>` : ""}</p></div>`;
     let preset = s.preset;
     const desc = () => {
       const v = cfg.presets[preset];
