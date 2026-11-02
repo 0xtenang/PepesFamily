@@ -1,620 +1,277 @@
 {
-  "generatedAt": "2026-11-02T01:56:38.453Z",
-  "method": "pepes/scan-lpers.js: open LPs in the day's top-fee Meteora SOL memecoin pools, filtered and ranked by their 30-day Meteora profit",
+  "generatedAt": "2026-11-02T02:51:30.413Z",
+  "method": "pepes/scan-lpers.js: open LPs in the day's top Meteora SOL pools of $30K-$500K tokens whose own open positions median under $500K, ranked by 30-day Meteora profit",
   "wallets": [
     {
       "name": "starter-01",
-      "address": "9nmmMavj2cmJF3QTv8UdwNs9BDMZZ4RkrFf2h2AXVdp",
+      "address": "5rLsEyxQvyXq4tzpfoZJkecjWAjCgdLLsGPCZmaRR8h5",
       "category": "starter",
       "type": "lp",
-      "group": "ApJgFV8eBEM3V37amvWBykEvj5F7b3q5XbKLywfFwk3R",
+      "group": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
       "stats": {
-        "pools30d": 139,
-        "depositSol30d": 14082.5,
-        "pnlSol30d": 229.41,
-        "roiPct30d": 1.6,
-        "winPct30d": 81,
-        "allTimePnlSol": 252.34
+        "pools30d": 321,
+        "depositSol30d": 3229.6,
+        "pnlSol30d": 126.88,
+        "roiPct30d": 3.9,
+        "winPct30d": 54,
+        "allTimePnlSol": 157.73,
+        "medianOpenMcap": 474968
       }
     },
     {
       "name": "starter-02",
-      "address": "AE8R6FiRvLUawrf5dR7wezfsf5rcyRUHgW84zaCTAcsY",
+      "address": "5oE1gXtVdKx8LehCj4GgmtrUA5bzYDQmvTagGdyN6PLW",
       "category": "starter",
       "type": "lp",
-      "group": "AE8R6FiRvLUawrf5dR7wezfsf5rcyRUHgW84zaCTAcsY",
+      "group": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
       "stats": {
-        "pools30d": 40,
-        "depositSol30d": 16781.7,
-        "pnlSol30d": 184.08,
-        "roiPct30d": 1.1,
-        "winPct30d": 83,
-        "allTimePnlSol": 60.87
+        "pools30d": 315,
+        "depositSol30d": 3951,
+        "pnlSol30d": 118.84,
+        "roiPct30d": 3,
+        "winPct30d": 55,
+        "allTimePnlSol": 232.3,
+        "medianOpenMcap": 334828
       }
     },
     {
       "name": "starter-03",
-      "address": "ApJgFV8eBEM3V37amvWBykEvj5F7b3q5XbKLywfFwk3R",
+      "address": "8LSRV1seqxebcCcXUnMK4QnC7DDtDirtfYR7CM9LuLQw",
       "category": "starter",
       "type": "lp",
-      "group": "ApJgFV8eBEM3V37amvWBykEvj5F7b3q5XbKLywfFwk3R",
+      "group": "8LSRV1seqxebcCcXUnMK4QnC7DDtDirtfYR7CM9LuLQw",
       "stats": {
-        "pools30d": 116,
-        "depositSol30d": 13463.9,
-        "pnlSol30d": 169.7,
-        "roiPct30d": 1.3,
-        "winPct30d": 84,
-        "allTimePnlSol": 253.12
+        "pools30d": 254,
+        "depositSol30d": 6549.7,
+        "pnlSol30d": 105.08,
+        "roiPct30d": 1.6,
+        "winPct30d": 48,
+        "allTimePnlSol": 128.02,
+        "medianOpenMcap": 332228
       }
     },
     {
       "name": "starter-04",
-      "address": "GdA8VKgh6NEtxA6zvZKttyfEB1mgt4bnuypGQ9mYmxYE",
+      "address": "2w1pE8PDaD46CSkKS7LGLGutgbsCrwp9kx38NkmkVRVT",
       "category": "starter",
       "type": "lp",
-      "group": "GdA8VKgh6NEtxA6zvZKttyfEB1mgt4bnuypGQ9mYmxYE",
+      "group": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
       "stats": {
-        "pools30d": 168,
-        "depositSol30d": 9391,
-        "pnlSol30d": 143.83,
-        "roiPct30d": 1.5,
-        "winPct30d": 83,
-        "allTimePnlSol": 342.69
+        "pools30d": 316,
+        "depositSol30d": 3640.3,
+        "pnlSol30d": 99.24,
+        "roiPct30d": 2.7,
+        "winPct30d": 53,
+        "allTimePnlSol": 164.53,
+        "medianOpenMcap": 408586
       }
     },
     {
       "name": "starter-05",
-      "address": "5rLsEyxQvyXq4tzpfoZJkecjWAjCgdLLsGPCZmaRR8h5",
+      "address": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
       "category": "starter",
       "type": "lp",
-      "group": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "group": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
       "stats": {
-        "pools30d": 328,
-        "depositSol30d": 3398.9,
-        "pnlSol30d": 131.34,
-        "roiPct30d": 3.9,
-        "winPct30d": 54,
-        "allTimePnlSol": 156.71
+        "pools30d": 308,
+        "depositSol30d": 4111.7,
+        "pnlSol30d": 96.66,
+        "roiPct30d": 2.4,
+        "winPct30d": 57,
+        "allTimePnlSol": 166.52,
+        "medianOpenMcap": 207897
       }
     },
     {
       "name": "starter-06",
-      "address": "5oE1gXtVdKx8LehCj4GgmtrUA5bzYDQmvTagGdyN6PLW",
+      "address": "33J69KhT7KDTB6bbESmb2C62oqZVqdoRj1FcEwa7vs5w",
       "category": "starter",
       "type": "lp",
-      "group": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "group": "33J69KhT7KDTB6bbESmb2C62oqZVqdoRj1FcEwa7vs5w",
       "stats": {
-        "pools30d": 320,
-        "depositSol30d": 4030.2,
-        "pnlSol30d": 119.12,
-        "roiPct30d": 3,
-        "winPct30d": 55,
-        "allTimePnlSol": 231.46
+        "pools30d": 435,
+        "depositSol30d": 4311.8,
+        "pnlSol30d": 28.26,
+        "roiPct30d": 0.7,
+        "winPct30d": 69,
+        "allTimePnlSol": 28.26,
+        "medianOpenMcap": 159295
       }
     },
     {
       "name": "starter-07",
-      "address": "CKdCnBAc9iXXT9aVP1mwm3twAyxRBC8BfPax5eRBrxDL",
+      "address": "Ecc6LA1Z4n7SefBawrzADLgDaq1Uwkr86mhxs9SiZYv5",
       "category": "starter",
       "type": "lp",
-      "group": "CKdCnBAc9iXXT9aVP1mwm3twAyxRBC8BfPax5eRBrxDL",
+      "group": "Ecc6LA1Z4n7SefBawrzADLgDaq1Uwkr86mhxs9SiZYv5",
       "stats": {
-        "pools30d": 185,
-        "depositSol30d": 5018,
-        "pnlSol30d": 114.77,
-        "roiPct30d": 2.3,
-        "winPct30d": 50,
-        "allTimePnlSol": 128.65
+        "pools30d": 215,
+        "depositSol30d": 1604.1,
+        "pnlSol30d": 25.64,
+        "roiPct30d": 1.6,
+        "winPct30d": 53,
+        "allTimePnlSol": 30.74,
+        "medianOpenMcap": 474355
       }
     },
     {
       "name": "starter-08",
-      "address": "9sgepAEMAVWo8LzzVT7CL4dhqxZnnhATbtkhnintTbv9",
+      "address": "4KUMdkL4p2Kb5B7teBD6rEyhgTQZqRfJxQfVxaxk67TN",
       "category": "starter",
       "type": "lp",
-      "group": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "group": "AiYSPHJ3hsZxoSL6KWrX49F669VfJtJTVDETxPaQJ4Ms",
       "stats": {
-        "pools30d": 312,
-        "depositSol30d": 4122.1,
-        "pnlSol30d": 103.27,
-        "roiPct30d": 2.5,
-        "winPct30d": 59,
-        "allTimePnlSol": 168.22
+        "pools30d": 175,
+        "depositSol30d": 2605.1,
+        "pnlSol30d": 20.2,
+        "roiPct30d": 0.8,
+        "winPct30d": 81,
+        "allTimePnlSol": 283.51,
+        "medianOpenMcap": 467620
       }
     },
     {
       "name": "starter-09",
-      "address": "89kr8297BNNY7Hof8XBt9WVM6HnDHgwEuyYtJ6pRtuiR",
+      "address": "AiYSPHJ3hsZxoSL6KWrX49F669VfJtJTVDETxPaQJ4Ms",
       "category": "starter",
       "type": "lp",
-      "group": "89kr8297BNNY7Hof8XBt9WVM6HnDHgwEuyYtJ6pRtuiR",
+      "group": "AiYSPHJ3hsZxoSL6KWrX49F669VfJtJTVDETxPaQJ4Ms",
       "stats": {
-        "pools30d": 163,
-        "depositSol30d": 9977.8,
-        "pnlSol30d": 102.82,
-        "roiPct30d": 1,
-        "winPct30d": 72,
-        "allTimePnlSol": 599.99
+        "pools30d": 173,
+        "depositSol30d": 2351,
+        "pnlSol30d": 19.01,
+        "roiPct30d": 0.8,
+        "winPct30d": 79,
+        "allTimePnlSol": 73.32,
+        "medianOpenMcap": 467620
       }
     },
     {
       "name": "starter-10",
-      "address": "2w1pE8PDaD46CSkKS7LGLGutgbsCrwp9kx38NkmkVRVT",
+      "address": "HmikbkhKySFJ5p4LV38rxoA34CM1hgCpeR7d2EFw8Cnz",
       "category": "starter",
       "type": "lp",
-      "group": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "group": "HmikbkhKySFJ5p4LV38rxoA34CM1hgCpeR7d2EFw8Cnz",
       "stats": {
-        "pools30d": 322,
-        "depositSol30d": 3744.3,
-        "pnlSol30d": 102.72,
-        "roiPct30d": 2.7,
-        "winPct30d": 54,
-        "allTimePnlSol": 164.73
+        "pools30d": 197,
+        "depositSol30d": 1253.3,
+        "pnlSol30d": 12.42,
+        "roiPct30d": 1,
+        "winPct30d": 84,
+        "allTimePnlSol": 14.99,
+        "medianOpenMcap": 467620
       }
     },
     {
       "name": "starter-11",
-      "address": "AEBHahxTVz4GyLaiDKjuyS7TfcqhPDKwBGCRaCn1qASD",
+      "address": "BE2LnUdowHSAey9g6ADKi2rWWGyN4th6Q7q5z86np3eZ",
       "category": "starter",
       "type": "lp",
-      "group": "D96kmD2FjJUvihSPAzQzh75ieKKBszx3hVsv6sjq25Ua",
+      "group": "BE2LnUdowHSAey9g6ADKi2rWWGyN4th6Q7q5z86np3eZ",
       "stats": {
-        "pools30d": 99,
-        "depositSol30d": 5441.2,
-        "pnlSol30d": 93.25,
+        "pools30d": 59,
+        "depositSol30d": 186.2,
+        "pnlSol30d": 3.14,
         "roiPct30d": 1.7,
-        "winPct30d": 65,
-        "allTimePnlSol": 267
+        "winPct30d": 88,
+        "allTimePnlSol": 17.9,
+        "medianOpenMcap": 446292
       }
     },
     {
       "name": "starter-12",
-      "address": "3ULyokrApPK6uHwzBzmcvFQAiBRgtWin2zU67FPRupHh",
+      "address": "6Jv4EkPskQBn9shudCZNhKFDHExnUtQjtQVe1VVJeFai",
       "category": "starter",
       "type": "lp",
-      "group": "3ULyokrApPK6uHwzBzmcvFQAiBRgtWin2zU67FPRupHh",
+      "group": "6Jv4EkPskQBn9shudCZNhKFDHExnUtQjtQVe1VVJeFai",
       "stats": {
-        "pools30d": 27,
-        "depositSol30d": 773,
-        "pnlSol30d": 71.86,
-        "roiPct30d": 9.3,
-        "winPct30d": 70,
-        "allTimePnlSol": 214.13
+        "pools30d": 62,
+        "depositSol30d": 270.3,
+        "pnlSol30d": 2.4,
+        "roiPct30d": 0.9,
+        "winPct30d": 61,
+        "allTimePnlSol": 2.01,
+        "medianOpenMcap": 308689
       }
     },
     {
       "name": "starter-13",
-      "address": "KMuEo5oXNnx9EumePDbCAyNMhfZvxLiGpkmkGJR8paH",
+      "address": "6xyt7YEYwVczWb6JizAXbEko5QDsDzKJRw5MCcjnwCWf",
       "category": "starter",
       "type": "lp",
-      "group": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "group": "6xyt7YEYwVczWb6JizAXbEko5QDsDzKJRw5MCcjnwCWf",
       "stats": {
-        "pools30d": 307,
-        "depositSol30d": 4795.2,
-        "pnlSol30d": 68.42,
-        "roiPct30d": 1.4,
-        "winPct30d": 54,
-        "allTimePnlSol": 96.46
+        "pools30d": 110,
+        "depositSol30d": 357.8,
+        "pnlSol30d": 2.19,
+        "roiPct30d": 0.6,
+        "winPct30d": 80,
+        "allTimePnlSol": 2.19,
+        "medianOpenMcap": 467620
       }
     },
     {
       "name": "starter-14",
-      "address": "sh36vHUDHcXqVD8aZJR8GF3Z3PdaU69XG8wJeB1e1xb",
+      "address": "Ap52nHD9vD61w8ycTmmxLMfJLutGqLWoZb9nQryGNqR1",
       "category": "starter",
       "type": "lp",
-      "group": "sh36vHUDHcXqVD8aZJR8GF3Z3PdaU69XG8wJeB1e1xb",
+      "group": "Ap52nHD9vD61w8ycTmmxLMfJLutGqLWoZb9nQryGNqR1",
       "stats": {
-        "pools30d": 28,
-        "depositSol30d": 4704.4,
-        "pnlSol30d": 67.43,
-        "roiPct30d": 1.4,
-        "winPct30d": 50,
-        "allTimePnlSol": 23.86
+        "pools30d": 143,
+        "depositSol30d": 380.5,
+        "pnlSol30d": 2,
+        "roiPct30d": 0.5,
+        "winPct30d": 66,
+        "allTimePnlSol": 2.8,
+        "medianOpenMcap": 467620
       }
     },
     {
       "name": "starter-15",
-      "address": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "address": "548A4aPFjmeuxVNkWrGmvsMXeRN1wfv9sBFTYJhCkzHV",
       "category": "starter",
       "type": "lp",
-      "group": "GvMXZYESzjj8n5mx5q1YXcbnKbiLv2SYeh7reCXPgiby",
+      "group": "548A4aPFjmeuxVNkWrGmvsMXeRN1wfv9sBFTYJhCkzHV",
       "stats": {
-        "pools30d": 345,
-        "depositSol30d": 4482.4,
-        "pnlSol30d": 59.08,
-        "roiPct30d": 1.3,
-        "winPct30d": 60,
-        "allTimePnlSol": 150.76
+        "pools30d": 52,
+        "depositSol30d": 149.1,
+        "pnlSol30d": 1.8,
+        "roiPct30d": 1.2,
+        "winPct30d": 58,
+        "allTimePnlSol": 1.8,
+        "medianOpenMcap": 389326
       }
     },
     {
       "name": "starter-16",
-      "address": "7WrdFScX9fkevTqgUgwiA5TSNmbgRcwqCKyD7RXA52du",
+      "address": "7yZUSxXd548CR734EGXTt8skNYqXWEJPAw59wLSFeNRr",
       "category": "starter",
       "type": "lp",
-      "group": "7WrdFScX9fkevTqgUgwiA5TSNmbgRcwqCKyD7RXA52du",
+      "group": "7yZUSxXd548CR734EGXTt8skNYqXWEJPAw59wLSFeNRr",
       "stats": {
-        "pools30d": 160,
-        "depositSol30d": 2743.7,
-        "pnlSol30d": 55.59,
-        "roiPct30d": 2,
-        "winPct30d": 74,
-        "allTimePnlSol": 126.42
+        "pools30d": 55,
+        "depositSol30d": 26.2,
+        "pnlSol30d": 0.24,
+        "roiPct30d": 0.9,
+        "winPct30d": 62,
+        "allTimePnlSol": 0.24,
+        "medianOpenMcap": 488561
       }
     },
     {
       "name": "starter-17",
-      "address": "2EY79Uxxv5RMUzewhKrrFNkdHpXFPx1EdbTCR4wgiwPe",
+      "address": "6Wk953cVGRv8EFVDfi5YhzukvpujKVxQnYocKbPyKf2Z",
       "category": "starter",
       "type": "lp",
-      "group": "2EY79Uxxv5RMUzewhKrrFNkdHpXFPx1EdbTCR4wgiwPe",
+      "group": "6Wk953cVGRv8EFVDfi5YhzukvpujKVxQnYocKbPyKf2Z",
       "stats": {
-        "pools30d": 24,
-        "depositSol30d": 1952.8,
-        "pnlSol30d": 43.03,
-        "roiPct30d": 2.2,
-        "winPct30d": 83,
-        "allTimePnlSol": 84.74
-      }
-    },
-    {
-      "name": "starter-18",
-      "address": "D96kmD2FjJUvihSPAzQzh75ieKKBszx3hVsv6sjq25Ua",
-      "category": "starter",
-      "type": "lp",
-      "group": "D96kmD2FjJUvihSPAzQzh75ieKKBszx3hVsv6sjq25Ua",
-      "stats": {
-        "pools30d": 100,
-        "depositSol30d": 4006.5,
-        "pnlSol30d": 40.9,
-        "roiPct30d": 1,
-        "winPct30d": 61,
-        "allTimePnlSol": 24.62
-      }
-    },
-    {
-      "name": "starter-19",
-      "address": "B1dmWzc4sGUWRj9r57sG1kwxKMJ2qU8ePwJocrFQgA5Y",
-      "category": "starter",
-      "type": "lp",
-      "group": "B1dmWzc4sGUWRj9r57sG1kwxKMJ2qU8ePwJocrFQgA5Y",
-      "stats": {
-        "pools30d": 30,
-        "depositSol30d": 732.2,
-        "pnlSol30d": 35.76,
-        "roiPct30d": 4.9,
-        "winPct30d": 53,
-        "allTimePnlSol": 215.44
-      }
-    },
-    {
-      "name": "starter-20",
-      "address": "7pBzxXykrLDiyoJ4UgJ4NJj6CWFrcGytfFraRbgk67bs",
-      "category": "starter",
-      "type": "lp",
-      "group": "7pBzxXykrLDiyoJ4UgJ4NJj6CWFrcGytfFraRbgk67bs",
-      "stats": {
-        "pools30d": 41,
-        "depositSol30d": 2318.4,
-        "pnlSol30d": 31.22,
-        "roiPct30d": 1.3,
-        "winPct30d": 63,
-        "allTimePnlSol": 56.34
-      }
-    },
-    {
-      "name": "starter-21",
-      "address": "Gn24wNmH9vvoArJziKBJbtwkNJK1xN8ZdUvLSrmuR1hf",
-      "category": "starter",
-      "type": "lp",
-      "group": "Gn24wNmH9vvoArJziKBJbtwkNJK1xN8ZdUvLSrmuR1hf",
-      "stats": {
-        "pools30d": 60,
-        "depositSol30d": 1921,
-        "pnlSol30d": 29.12,
-        "roiPct30d": 1.5,
-        "winPct30d": 70,
-        "allTimePnlSol": 50.43
-      }
-    },
-    {
-      "name": "starter-22",
-      "address": "2DjfP3UCLyKm2TKjbXRoL7Psz5am3mJepcW2WQnxfktv",
-      "category": "starter",
-      "type": "lp",
-      "group": "2DjfP3UCLyKm2TKjbXRoL7Psz5am3mJepcW2WQnxfktv",
-      "stats": {
-        "pools30d": 60,
-        "depositSol30d": 2486.3,
-        "pnlSol30d": 26.48,
-        "roiPct30d": 1.1,
-        "winPct30d": 78,
-        "allTimePnlSol": 199.83
-      }
-    },
-    {
-      "name": "starter-23",
-      "address": "EUWwzC883pUYZWSLx1kxjddPz7WAQMY1yxFz26bLfXs4",
-      "category": "starter",
-      "type": "lp",
-      "group": "EUWwzC883pUYZWSLx1kxjddPz7WAQMY1yxFz26bLfXs4",
-      "stats": {
-        "pools30d": 13,
-        "depositSol30d": 1194,
-        "pnlSol30d": 20.41,
-        "roiPct30d": 1.7,
-        "winPct30d": 77,
-        "allTimePnlSol": 20.41
-      }
-    },
-    {
-      "name": "starter-24",
-      "address": "CL7TUEBwgz1NbAdRRgpsZHPVyJ3u3XARgEcPTeRsmKXH",
-      "category": "starter",
-      "type": "lp",
-      "group": "CL7TUEBwgz1NbAdRRgpsZHPVyJ3u3XARgEcPTeRsmKXH",
-      "stats": {
-        "pools30d": 85,
-        "depositSol30d": 788.1,
-        "pnlSol30d": 20.35,
-        "roiPct30d": 2.6,
-        "winPct30d": 56,
-        "allTimePnlSol": 28.46
-      }
-    },
-    {
-      "name": "starter-25",
-      "address": "GnuGGWDsPaLgn2H7gxBqF9m6zx7zMph2PXPDZWKJMW5k",
-      "category": "starter",
-      "type": "lp",
-      "group": "Hu99bARove1PHuqbDT4aBBMA8UwZJiFLDcArfxAvYzVh",
-      "stats": {
-        "pools30d": 12,
-        "depositSol30d": 384.3,
-        "pnlSol30d": 15.4,
-        "roiPct30d": 4,
-        "winPct30d": 100,
-        "allTimePnlSol": 164.34
-      }
-    },
-    {
-      "name": "starter-26",
-      "address": "CiS3dTPmdZrGh3DDFht6QsfevPbyvY6W5DvLbUPtS4VP",
-      "category": "starter",
-      "type": "lp",
-      "group": "CiS3dTPmdZrGh3DDFht6QsfevPbyvY6W5DvLbUPtS4VP",
-      "stats": {
-        "pools30d": 124,
-        "depositSol30d": 1280.7,
-        "pnlSol30d": 13.07,
-        "roiPct30d": 1,
-        "winPct30d": 77,
-        "allTimePnlSol": 13.3
-      }
-    },
-    {
-      "name": "starter-27",
-      "address": "EsRXd5Q8LZMUd8gARRxhHJPEZ1v3rZhhP5P9ML2xKvqE",
-      "category": "starter",
-      "type": "lp",
-      "group": "EsRXd5Q8LZMUd8gARRxhHJPEZ1v3rZhhP5P9ML2xKvqE",
-      "stats": {
-        "pools30d": 43,
-        "depositSol30d": 713.4,
-        "pnlSol30d": 11.63,
-        "roiPct30d": 1.6,
-        "winPct30d": 65,
-        "allTimePnlSol": 63.16
-      }
-    },
-    {
-      "name": "starter-28",
-      "address": "HmwKbiPP1kjqbrTvFVtqCf2hNSjB9TU1NF8PRfYRgqUH",
-      "category": "starter",
-      "type": "lp",
-      "group": "HmwKbiPP1kjqbrTvFVtqCf2hNSjB9TU1NF8PRfYRgqUH",
-      "stats": {
-        "pools30d": 8,
-        "depositSol30d": 100,
-        "pnlSol30d": 10.8,
-        "roiPct30d": 10.8,
-        "winPct30d": 88,
-        "allTimePnlSol": 46.8
-      }
-    },
-    {
-      "name": "starter-29",
-      "address": "FSZ6dpJzh6NNmhpntPe6zLV5ecpovw13TQwfiZrx5KcM",
-      "category": "starter",
-      "type": "lp",
-      "group": "FSZ6dpJzh6NNmhpntPe6zLV5ecpovw13TQwfiZrx5KcM",
-      "stats": {
-        "pools30d": 41,
-        "depositSol30d": 150.9,
-        "pnlSol30d": 10.42,
-        "roiPct30d": 6.9,
-        "winPct30d": 54,
-        "allTimePnlSol": 9.45
-      }
-    },
-    {
-      "name": "starter-30",
-      "address": "Hu99bARove1PHuqbDT4aBBMA8UwZJiFLDcArfxAvYzVh",
-      "category": "starter",
-      "type": "lp",
-      "group": "Hu99bARove1PHuqbDT4aBBMA8UwZJiFLDcArfxAvYzVh",
-      "stats": {
-        "pools30d": 12,
-        "depositSol30d": 252.7,
-        "pnlSol30d": 9.66,
-        "roiPct30d": 3.8,
-        "winPct30d": 100,
-        "allTimePnlSol": 33.21
-      }
-    },
-    {
-      "name": "starter-31",
-      "address": "4JV7BZMuQLQXyYmca5HxUcZkQ5hXBDRdN34pk4bizyXf",
-      "category": "starter",
-      "type": "lp",
-      "group": "4JV7BZMuQLQXyYmca5HxUcZkQ5hXBDRdN34pk4bizyXf",
-      "stats": {
-        "pools30d": 35,
-        "depositSol30d": 745.1,
-        "pnlSol30d": 8.19,
-        "roiPct30d": 1.1,
-        "winPct30d": 69,
-        "allTimePnlSol": 20.71
-      }
-    },
-    {
-      "name": "starter-32",
-      "address": "3icwXSEuaWgMM4xtuXFGY3UdvSaT8ohKJKcgR7eGH5YP",
-      "category": "starter",
-      "type": "lp",
-      "group": "3icwXSEuaWgMM4xtuXFGY3UdvSaT8ohKJKcgR7eGH5YP",
-      "stats": {
-        "pools30d": 38,
-        "depositSol30d": 390.7,
-        "pnlSol30d": 6.93,
-        "roiPct30d": 1.8,
-        "winPct30d": 66,
-        "allTimePnlSol": 20.54
-      }
-    },
-    {
-      "name": "starter-33",
-      "address": "95yMJ1wah4keVP4wiQvyhMhvn6zn1v9gjXFPBKJmAGiw",
-      "category": "starter",
-      "type": "lp",
-      "group": "95yMJ1wah4keVP4wiQvyhMhvn6zn1v9gjXFPBKJmAGiw",
-      "stats": {
-        "pools30d": 83,
-        "depositSol30d": 169.4,
-        "pnlSol30d": 6.2,
-        "roiPct30d": 3.7,
-        "winPct30d": 64,
-        "allTimePnlSol": 31.72
-      }
-    },
-    {
-      "name": "starter-34",
-      "address": "2uXwhJ5XwdWZwuNt6KtHK1x3EZ7G9p2psMXgQoJJxSnG",
-      "category": "starter",
-      "type": "lp",
-      "group": "2uXwhJ5XwdWZwuNt6KtHK1x3EZ7G9p2psMXgQoJJxSnG",
-      "stats": {
-        "pools30d": 12,
-        "depositSol30d": 75.7,
-        "pnlSol30d": 4.78,
-        "roiPct30d": 6.3,
-        "winPct30d": 67,
-        "allTimePnlSol": 17.5
-      }
-    },
-    {
-      "name": "starter-35",
-      "address": "FPsQWcxLHtEGUMfodqKVEhVtQBmoP4vdWYZibqYdps6D",
-      "category": "starter",
-      "type": "lp",
-      "group": "FPsQWcxLHtEGUMfodqKVEhVtQBmoP4vdWYZibqYdps6D",
-      "stats": {
-        "pools30d": 35,
-        "depositSol30d": 308.4,
-        "pnlSol30d": 4.45,
-        "roiPct30d": 1.4,
-        "winPct30d": 91,
-        "allTimePnlSol": 58.69
-      }
-    },
-    {
-      "name": "starter-36",
-      "address": "9rF8WzkToCvT5zii2dYndV6mdtq5ifbd5sbJfcQh2YfW",
-      "category": "starter",
-      "type": "lp",
-      "group": "9rF8WzkToCvT5zii2dYndV6mdtq5ifbd5sbJfcQh2YfW",
-      "stats": {
-        "pools30d": 51,
-        "depositSol30d": 87,
-        "pnlSol30d": 3.37,
-        "roiPct30d": 3.9,
-        "winPct30d": 92,
-        "allTimePnlSol": 3.37
-      }
-    },
-    {
-      "name": "starter-37",
-      "address": "DSBA8ZCzqYsP5jec4sEBe7AWPJ3HodhXiA5ruFvKo8RJ",
-      "category": "starter",
-      "type": "lp",
-      "group": "DSBA8ZCzqYsP5jec4sEBe7AWPJ3HodhXiA5ruFvKo8RJ",
-      "stats": {
-        "pools30d": 20,
-        "depositSol30d": 227,
-        "pnlSol30d": 2.68,
-        "roiPct30d": 1.2,
-        "winPct30d": 65,
-        "allTimePnlSol": 28.39
-      }
-    },
-    {
-      "name": "starter-38",
-      "address": "BswdZXecf3CUXL2P7DyxUKmHwv1jG27nuxTVkJ1WcWDF",
-      "category": "starter",
-      "type": "lp",
-      "group": "BswdZXecf3CUXL2P7DyxUKmHwv1jG27nuxTVkJ1WcWDF",
-      "stats": {
-        "pools30d": 43,
-        "depositSol30d": 62.9,
-        "pnlSol30d": 1.43,
-        "roiPct30d": 2.3,
-        "winPct30d": 51,
-        "allTimePnlSol": 29.26
-      }
-    },
-    {
-      "name": "starter-39",
-      "address": "E2XnnMbzjen5opxDzpFk5UyKcntSJYtsBzSbXQUvaUrJ",
-      "category": "starter",
-      "type": "lp",
-      "group": "E2XnnMbzjen5opxDzpFk5UyKcntSJYtsBzSbXQUvaUrJ",
-      "stats": {
-        "pools30d": 45,
-        "depositSol30d": 71,
-        "pnlSol30d": 1.33,
+        "pools30d": 31,
+        "depositSol30d": 6.9,
+        "pnlSol30d": 0.13,
         "roiPct30d": 1.9,
-        "winPct30d": 71,
-        "allTimePnlSol": 1.33
-      }
-    },
-    {
-      "name": "starter-40",
-      "address": "PNy1Y32enPFGg3wFHWjpDx6PKiSWxXsLFTfHu2ABY9a",
-      "category": "starter",
-      "type": "lp",
-      "group": "PNy1Y32enPFGg3wFHWjpDx6PKiSWxXsLFTfHu2ABY9a",
-      "stats": {
-        "pools30d": 48,
-        "depositSol30d": 11.1,
-        "pnlSol30d": 0.17,
-        "roiPct30d": 1.6,
-        "winPct30d": 73,
-        "allTimePnlSol": 0.17
-      }
-    },
-    {
-      "name": "starter-41",
-      "address": "6PuRv2Hh82ZNCGs4MKhvNtsYDqvjP9MsgpAWqBSAMNJg",
-      "category": "starter",
-      "type": "lp",
-      "group": "6PuRv2Hh82ZNCGs4MKhvNtsYDqvjP9MsgpAWqBSAMNJg",
-      "stats": {
-        "pools30d": 18,
-        "depositSol30d": 6.3,
-        "pnlSol30d": 0.1,
-        "roiPct30d": 1.7,
-        "winPct30d": 83,
-        "allTimePnlSol": 0.1
+        "winPct30d": 74,
+        "allTimePnlSol": 0.13,
+        "medianOpenMcap": 467620
       }
     }
   ]
