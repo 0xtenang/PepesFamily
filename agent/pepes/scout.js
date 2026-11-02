@@ -39,15 +39,42 @@ export function features(p, now = Date.now()) {
     holders: num(p.base_token_holders), holdersChange: num(p.base_token_holders_change_pct), top10: num(t.top_holders_pct), dev: num(t.dev_balance_pct),
     organic: num(t.organic_score), binStep: num(p.dlmm_params?.bin_step), baseFee: num(p.fee_pct), volatility: num(p.volatility),
     priceChange: num(p.pool_price_change_pct), lps: num(p.total_lps), netDeposits: num(p.net_deposits),
+    poolAgeH: p.pool_created_at ? Math.round((now - p.pool_created_at) / 360_000) / 10 : null,
+    volumeChange: num(p.volume_change_pct), swapsPerMin: num(p.avg_swap_count), positionsCreated: num(p.positions_created),
   };
 }
 
+/**
+ * How busy a pool is right now, 0-100, from Meteora's feed: fee rate (40), trades per minute (30), new LP positions (20),
+ * liquidity not leaving (10). The idea follows the Degen Score Fabriq describes; these weights are ours, a first guess
+ * that the edge report tests.
+ */
+export function activityScore(f) {
+  const part = (x, full) => Math.min(Math.max(x ?? 0, 0) / full, 1);
+  return Math.round(40 * part(f.feeRate, 5) + 30 * part(f.swapsPerMin, 10) + 20 * part(f.positionsCreated, 5) + ((f.netDeposits ?? -1) >= 0 ? 10 : 0));
+}
+
+/** The fresh lane: a token at most this old with at least this much TVL in the pool. */
+export const FRESH = { maxAgeH: 2, minTvl: 10_000 };
+const rugSafe = (p, f) => {
+  const t = p.token_x ?? {};
+  return !(t.warnings ?? []).some((w) => ["critical", "danger"].includes(w.severity)) && !p.is_blacklisted
+    && t.has_mint_authority === false && t.has_freeze_authority === false && (f.top10 ?? 100) <= 60;
+};
+
+/** A brand new token with real liquidity. It has no history yet, so only the rug checks and the bin range apply. */
+export function isFresh(p, f) {
+  return rugSafe(p, f) && f.ageH != null && f.ageH <= FRESH.maxAgeH && (f.tvl ?? 0) >= FRESH.minTvl && (f.binStep ?? 0) >= 50 && (f.binStep ?? 0) <= 400;
+}
+
+/** Fresh picks skip the history checks in screening (holders, market cap, organic score, token fees), which no token
+ *  this young can pass. Authorities, top 10 and bot holders, warnings and blocklists still apply. */
+export const freshScreening = (s) => ({ ...s, minTvl: FRESH.minTvl, maxTvl: null, minVolume: 0, minHolders: 15, minMcap: 0, maxMcap: Number.MAX_SAFE_INTEGER,
+  minOrganic: 0, minTokenFeesSol: 0, minFeeActiveTvlRatio: 0 });
+
 /** Would a degen still touch this? Only rug checks and a little substance; the edge report tells us the rest. */
 export function isPick(p, f) {
-  const t = p.token_x ?? {};
-  const danger = (t.warnings ?? []).some((w) => ["critical", "danger"].includes(w.severity));
-  return !danger && !p.is_blacklisted && t.has_mint_authority === false && t.has_freeze_authority === false
-    && (f.top10 ?? 100) <= 60 && (f.mcap ?? 0) >= 50_000 && (f.activeTvl ?? 0) >= 3000 && (f.feeRate ?? 0) >= 0.5
+  return rugSafe(p, f) && (f.mcap ?? 0) >= 50_000 && (f.activeTvl ?? 0) >= 3000 && (f.feeRate ?? 0) >= 0.5
     && (f.binStep ?? 0) >= 50 && (f.binStep ?? 0) <= 400;
 }
 
@@ -57,16 +84,22 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
   const following = new Map(d.pools.filter((r) => now - r.at < FOLLOW_MS).map((r) => [r.pool, r]));
   const added = [];
   for (const category of CATEGORIES) {
-    const url = `${DISCOVERY}?${new URLSearchParams({ page_size: "50", timeframe: "1h", category, filter_by: FLOOR })}`;
+    const url = `${DISCOVERY}?${new URLSearchParams({ page_size: category === "new" ? "100" : "50", timeframe: "1h", category, filter_by: FLOOR })}`;
     const res = await fetcher(url);
     for (const p of res.data ?? []) {
       if (p.pool_type !== "dlmm" || p.token_y?.address !== SOL) continue;
       const seen = following.get(p.pool_address);
-      if (seen) { if (!seen.cats.includes(category)) seen.cats.push(category); continue; }
       const price = num(p.pool_price);
       if (!(price > 0)) continue;
       const f = features(p, now);
-      const rec = { pool: p.pool_address, name: p.name, mint: p.token_x?.address, at: now, cats: [category], f, pick: isPick(p, f),
+      const fresh = isFresh(p, f);
+      if (seen) {
+        if (!seen.cats.includes(category)) seen.cats.push(category);
+        // A pool that has just turned hot counts as a new pick from here. The old record keeps following what
+        // happened from when it was first seen, as a non-pick.
+        if (seen.pick || !(fresh || isPick(p, f))) continue;
+      }
+      const rec = { pool: p.pool_address, name: p.name, mint: p.token_x?.address, at: now, cats: [category], f, fresh, pick: fresh || isPick(p, f),
         price, lower: price * (1 + (f.binStep ?? 100) / 10_000) ** -RANGE_BINS, last: price, low: price, feeSum: 0, checkedAt: now, h: {} };
       d.pools.push(rec);
       following.set(rec.pool, rec);
@@ -78,10 +111,21 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
   return added;
 }
 
-/** New picks as entry signals, best fee rate first: the agent opens these without waiting for wallets to agree. */
+/**
+ * Picks not yet tried as entry signals, fresh tokens first, then best fee rate: no wallets need to agree. Marks them,
+ * so each is tried once, including those found before a restart.
+ */
+export function takePendingPicks(now = Date.now(), maxAgeMs = 6 * 3600_000) {
+  const d = load();
+  const pending = d.pools.filter((r) => r.pick && !r.tried && now - r.at < maxAgeMs);
+  for (const r of pending) r.tried = now;
+  if (pending.length) save(d);
+  return pickSignals(pending, now);
+}
+
 export function pickSignals(added, now = Date.now(), deadlineSec = 120) {
-  return added.filter((r) => r.pick).sort((a, b) => (b.f.feeRate ?? 0) - (a.f.feeRate ?? 0)).map((r) => ({
-    source: "scout", mint: r.mint, pool: r.pool, createdAt: now, deadline: now + deadlineSec * 1000, nextCheck: now, events: [], done: false,
+  return added.filter((r) => r.pick).sort((a, b) => (b.fresh ? 1 : 0) - (a.fresh ? 1 : 0) || (b.f.feeRate ?? 0) - (a.f.feeRate ?? 0)).map((r) => ({
+    source: "scout", fresh: !!r.fresh, mint: r.mint, pool: r.pool, createdAt: now, deadline: now + deadlineSec * 1000, nextCheck: now, events: [], done: false,
   }));
 }
 
@@ -132,12 +176,17 @@ const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length 
 const band = (edges, labels) => (x) => { if (x == null) return null; const i = edges.findIndex((e) => x < e); return labels[i < 0 ? labels.length - 1 : i]; };
 const TRAITS = {
   Feed: (r) => r.cats,
-  "Our pick": (r) => (r.pick ? "Pick" : "Not a pick"),
+  "Our pick": (r) => (r.fresh ? "Fresh pick" : r.pick ? "Fee pick" : "Not a pick"),
   "Token age": (r) => band([6, 24, 72, 336], ["Under 6h", "6-24h", "1-3 days", "3-14 days", "Over 14 days"])(r.f.ageH),
   "Market cap": (r) => band([100e3, 500e3, 2e6], ["Under $100K", "$100K-500K", "$500K-2M", "Over $2M"])(r.f.mcap),
   "Fee rate, 1h": (r) => band([0.5, 2, 5], ["Under 0.5%", "0.5-2%", "2-5%", "Over 5%"])(r.f.feeRate),
   Volatility: (r) => band([2, 5, 10], ["Under 2", "2-5", "5-10", "Over 10"])(r.f.volatility),
   "Bin step": (r) => (r.f.binStep == null ? null : String(r.f.binStep)),
+  "Activity score": (r) => band([25, 50, 75], ["Under 25", "25-50", "50-75", "75+"])(activityScore(r.f)),
+  // HawkFi's rule of thumb: enter when price is flat or rising and volume is high; avoid when it dumps or volume dries up
+  "Price, last hour": (r) => band([-15, -3, 3, 15], ["Dumping (-15%+)", "Falling", "Flat", "Rising", "Pumping (+15%+)"])(r.f.priceChange),
+  "Volume trend": (r) => band([-25, 25, 100], ["Drying up", "Steady", "Rising", "Surging"])(r.f.volumeChange),
+  "Pool age": (r) => band([2, 24, 168], ["Under 2h", "2-24h", "1-7 days", "Over 7 days"])(r.f.poolAgeH),
   Organic: (r) => band([40, 70], ["Under 40", "40-70", "Over 70"])(r.f.organic),
   "Top 10 holders": (r) => band([20, 40, 60], ["Under 20%", "20-40%", "40-60%", "Over 60%"])(r.f.top10),
 };
@@ -161,9 +210,12 @@ export function edge(pools, horizon = 4) {
 export function scoutStats(horizon = 4, limit = 12) {
   const d = load();
   const picks = d.pools.filter((r) => r.pick).slice(-limit).reverse();
+  const young = d.pools.filter((r) => (r.f.ageH ?? 1e9) <= FRESH.maxAgeH && Date.now() - r.at < 24 * 3600_000);
   return {
+    // young tokens seen in the last day, and how many had the TVL the fresh lane asks for
+    fresh: { maxAgeH: FRESH.maxAgeH, minTvl: FRESH.minTvl, seen: young.length, matched: young.filter((r) => r.fresh).length, bestTvl: Math.max(0, ...young.map((r) => r.f.tvl ?? 0)) },
     lastScanAt: d.lastScanAt || null, tracked: d.pools.length, picks: d.pools.filter((r) => r.pick).length, withResults: d.pools.filter((r) => r.h?.[horizon]).length, horizon,
-    latest: picks.map((r) => ({ at: r.at, pool: r.pool, name: r.name, cats: r.cats, ageH: r.f.ageH, mcap: r.f.mcap, activeTvl: r.f.activeTvl, feeRate: r.f.feeRate, binStep: r.f.binStep, result: r.h?.[horizon] ?? null })),
+    latest: picks.map((r) => ({ at: r.at, pool: r.pool, name: r.name, fresh: !!r.fresh, score: activityScore(r.f), cats: r.cats, ageH: r.f.ageH, mcap: r.f.mcap, activeTvl: r.f.activeTvl, feeRate: r.f.feeRate, binStep: r.f.binStep, result: r.h?.[horizon] ?? null })),
     edge: edge(d.pools, horizon),
   };
 }

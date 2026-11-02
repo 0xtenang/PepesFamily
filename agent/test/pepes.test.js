@@ -171,3 +171,53 @@ test("scout picks become entry signals, best fee rate first, with no wallets beh
   assert.equal(signals[0].deadline, 121_000);
 });
 
+test("fresh lane: a token at most 2 hours old with at least $10K TVL, rug checks still on", async () => {
+  const { isFresh, isPick, pickSignals, freshScreening, features } = await import("../pepes/scout.js");
+  const now = 1_800_000_000_000;
+  const pool = (hours, tvl, over = {}) => ({ tvl, active_tvl: tvl, fee_active_tvl_ratio: 0, dlmm_params: { bin_step: 100 }, is_blacklisted: false,
+    token_x: { created_at: now - hours * 3600_000, top_holders_pct: 30, has_mint_authority: false, has_freeze_authority: false, warnings: [], market_cap: 1000, ...over } });
+  const fresh = (p) => isFresh(p, features(p, now));
+  assert.equal(fresh(pool(1.5, 10_000)), true);
+  assert.equal(fresh(pool(1.5, 9_999)), false);
+  assert.equal(fresh(pool(2.5, 50_000)), false);
+  assert.equal(fresh(pool(1, 50_000, { has_mint_authority: true })), false);
+  assert.equal(fresh(pool(1, 50_000, { top_holders_pct: 80 })), false);
+  assert.equal(fresh(pool(1, 50_000, { warnings: [{ severity: "critical" }] })), false);
+  assert.equal(isPick(pool(1, 50_000), features(pool(1, 50_000), now)), false); // no fee history: only the fresh lane takes it
+  const s = pickSignals([{ pick: true, mint: "A", pool: "PA", f: { feeRate: 9 } }, { pick: true, fresh: true, mint: "B", pool: "PB", f: { feeRate: 0 } }], now);
+  assert.deepEqual(s.map((x) => [x.pool, x.fresh]), [["PB", true], ["PA", false]]);
+  const screening = freshScreening({ maxTop10Pct: 60, maxBotHoldersPct: 30, minHolders: 100, minOrganic: 30, minBinStep: 50 });
+  assert.equal(screening.maxTop10Pct, 60);       // rug limits untouched
+  assert.equal(screening.maxBotHoldersPct, 30);
+  assert.equal(screening.minBinStep, 50);
+  assert.equal(screening.minOrganic, 0);         // history limits off
+  assert.equal(screening.minTvl, 10_000);
+});
+
+test("a pool that turns hot becomes a pick, and every pick is tried once, even after a restart", async () => {
+  const { scan, takePendingPicks } = await import("../pepes/scout.js");
+  const fs = await import("node:fs");
+  fs.rmSync(process.env.DATA_DIR + "/scout.json", { force: true });
+  const t0 = 1_900_000_000_000;
+  const feed = (feeRate) => ({ pool_address: "PH", name: "H-SOL", pool_type: "dlmm", pool_price: 1, is_blacklisted: false, active_tvl: 5000, fee_active_tvl_ratio: feeRate,
+    dlmm_params: { bin_step: 100 }, token_y: { address: "So11111111111111111111111111111111111111112" },
+    token_x: { address: "MH", market_cap: 200000, top_holders_pct: 30, created_at: t0 - 86400_000, has_mint_authority: false, has_freeze_authority: false, warnings: [] } });
+  const onlyTop = (p) => async (url) => ({ data: url.includes("category=top") ? [p] : [] });
+  await scan(onlyTop(feed(0.1)), t0);                 // quiet: tracked, not a pick
+  assert.equal(takePendingPicks(t0).length, 0);
+  assert.equal((await scan(onlyTop(feed(0.1)), t0 + 300_000)).length, 0); // still quiet: nothing new
+  assert.equal((await scan(onlyTop(feed(2)), t0 + 600_000)).length, 1);   // turned hot: a new pick from here
+  const first = takePendingPicks(t0 + 600_000);
+  assert.deepEqual(first.map((x) => x.pool), ["PH"]);
+  assert.equal(takePendingPicks(t0 + 600_000).length, 0);                 // tried once
+  assert.equal((await scan(onlyTop(feed(3)), t0 + 900_000)).length, 0);   // already a pick
+});
+
+test("activity score rewards a busy pool and stays within 0-100", async () => {
+  const { activityScore } = await import("../pepes/scout.js");
+  assert.equal(activityScore({}), 0);
+  assert.equal(activityScore({ feeRate: 5, swapsPerMin: 10, positionsCreated: 5, netDeposits: 1 }), 100);
+  assert.equal(activityScore({ feeRate: 50, swapsPerMin: 500, positionsCreated: 99, netDeposits: 9 }), 100);
+  assert.equal(activityScore({ feeRate: 2.5, netDeposits: -5 }), 20);
+});
+

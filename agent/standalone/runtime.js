@@ -23,7 +23,13 @@ import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
 import { activeUsers, managedUsers, multiUser, reduceOnly } from "../pepes/users.js";
 import { recordSignal, followSignals, followLps } from "../pepes/signals.js";
-import { scan as scoutScan, follow as scoutFollow, pickSignals } from "../pepes/scout.js";
+import { scan as scoutScan, follow as scoutFollow, takePendingPicks, freshScreening } from "../pepes/scout.js";
+
+/** How a signal is screened: its own pool if it names one, with the fresh lane's checks if it's a fresh pick. */
+const screenFor = (signal) => screenMint(signal.mint, {
+  ...(signal.pool ? { poolAddress: signal.pool } : {}),
+  ...(signal.fresh ? { screening: freshScreening(config.screening) } : {}),
+});
 import { startAdmin } from "./telegram-admin.js";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -75,7 +81,7 @@ async function drainSignals() {
 async function pursueSignal(signal) {
   if (!multiUser()) return pursueOne(signal, store);
   // The shared record comes first: shadow mode shows it even when nobody has started the agent or deposited.
-  const screened = await screenMint(signal.mint, signal.pool ? { poolAddress: signal.pool } : {}).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
+  const screened = await screenFor(signal).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
   try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
   log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
   if (reduceOnly()) { finishSignal(store, signal, "exits only", config.standalone); return; }
@@ -128,7 +134,7 @@ async function attemptEntry(signal, st) {
   // Focused screening: this mint and its eligible pools only.
   let screened;
   try {
-    screened = await screenMint(mint, signal.pool ? { poolAddress: signal.pool } : {});
+    screened = await screenFor(signal);
   } catch (e) {
     return `screening error: ${e.message}`;
   }
@@ -398,7 +404,7 @@ export async function startStandalone() {
   if (multiUser()) {
     const scout = () => void scoutScan().then(added => {
       if (added.length) log("scout", `${added.length} new pool(s), ${added.filter(r => r.pick).length} pick(s)`);
-      for (const signal of pickSignals(added)) onSignal(signal);
+      for (const signal of takePendingPicks()) onSignal(signal);
     }).catch(e => log("scout_warn", e.message));
     timers.scout = setInterval(scout, 5 * 60_000);
     timers.scoutFollow = setInterval(() => { void scoutFollow().catch(e => log("scout_warn", e.message)); }, 30 * 60_000);

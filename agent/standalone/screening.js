@@ -65,11 +65,11 @@ export async function checkMintOnChain(mint) {
   if (account.owner.toString() === TOKEN_PROGRAMS[1] && !Array.isArray(info.extensions)) throw new Error('Token-2022 extensions unavailable');
   for (const extension of info.extensions || []) if (!allowed.has(extension.extension)) throw new Error(`Unsupported Token-2022 extension: ${extension.extension}`);
 }
-export async function screenMint(mint, { poolAddress = null } = {}) {
+export async function screenMint(mint, { poolAddress = null, screening = config.screening } = {}) {
   if (isBlacklisted(mint) || isBaseMintOnCooldown(mint)) return { pass: false, terminal: true, reason: 'Token is blocked or on cooldown' };
   const assets = await fetchJson(`https://datapi.jup.ag/v1/assets/search?query=${mint}`);
   const token = (Array.isArray(assets) ? assets : []).find(t => t.id === mint);
-  const reason = rejectToken(token, mint, config.screening);
+  const reason = rejectToken(token, mint, screening);
   if (reason) return { pass: false, reason };
   if (token.dev ? isDevBlocked(token.dev) : Object.keys(getBlockedDevs()).length > 0) return { pass: false, terminal: true, reason: 'Deployer blocked or unavailable' };
   await checkMintOnChain(mint);
@@ -87,7 +87,7 @@ export async function screenMint(mint, { poolAddress = null } = {}) {
       const p = await poolDetail(address);
       const minutes = { '5m': 5, '30m': 30, '1h': 60, '2h': 120, '4h': 240, '12h': 720, '24h': 1440 };
       if ((minutes[config.screening.timeframe] || 5) < 30) p.volatility = (await poolDetail(address, '30m')).volatility;
-      const why = rejectPool(p, mint, config.screening);
+      const why = rejectPool(p, mint, screening);
       if (why) { rejected.push(why); continue; }
       candidates.push(p);
     } catch (e) { rejected.push(e.message); }
