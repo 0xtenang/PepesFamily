@@ -137,7 +137,7 @@ test("scout: scans feeds, follows pools, and reports outcomes by trait", async (
   const rug = pool({ token_x: { ...pool().token_x, has_mint_authority: true } });
   assert.equal(isPick(rug, features(rug, t0)), false);
   const notSol = pool({ pool_address: "PB", token_y: { address: "USDC" } });
-  assert.equal(await scan(async (url) => ({ data: url.includes("category=top") ? [pool(), notSol] : url.includes("category=new") ? [pool()] : [] }), t0), 1); // once, SOL only
+  assert.equal((await scan(async (url) => ({ data: url.includes("category=top") ? [pool(), notSol] : url.includes("category=new") ? [pool()] : [] }), t0)).length, 1); // once, SOL only
 
   // losses: none above entry; half the drop at the bottom of a wide range is about right for spot
   assert.equal(positionLossPct(1, 0.5, 1.2), 0);
@@ -156,5 +156,18 @@ test("scout: scans feeds, follows pools, and reports outcomes by trait", async (
   const rows = edge([r], 4);
   assert.deepEqual(rows.find((x) => x.trait === "Feed"), { trait: "Feed", bucket: "top", n: 1, est: 4, winPct: 100, fees: 4, halvedPct: 0 });
   assert.equal(rows.find((x) => x.trait === "Token age").bucket, "Under 6h");
+});
+
+test("scout picks become entry signals, best fee rate first, with no wallets behind them", async () => {
+  const { pickSignals } = await import("../pepes/scout.js");
+  const signals = pickSignals([
+    { pick: false, mint: "M0", pool: "P0", f: { feeRate: 99 } },
+    { pick: true, mint: "M1", pool: "P1", f: { feeRate: 1 } },
+    { pick: true, mint: "M2", pool: "P2", f: { feeRate: 5 } },
+  ], 1000);
+  assert.deepEqual(signals.map((x) => x.pool), ["P2", "P1"]);
+  assert.equal(signals[0].source, "scout");
+  assert.deepEqual(signals[0].events, []);
+  assert.equal(signals[0].deadline, 121_000);
 });
 

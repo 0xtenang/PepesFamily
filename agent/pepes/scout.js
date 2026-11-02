@@ -51,11 +51,11 @@ export function isPick(p, f) {
     && (f.binStep ?? 0) >= 50 && (f.binStep ?? 0) <= 400;
 }
 
-/** Scans the feeds; adds pools not already being followed. Returns how many were new. */
+/** Scans the feeds; adds pools not already being followed. Returns the new pools. */
 export async function scan(fetcher = fetchJson, now = Date.now()) {
   const d = load();
   const following = new Map(d.pools.filter((r) => now - r.at < FOLLOW_MS).map((r) => [r.pool, r]));
-  let added = 0;
+  const added = [];
   for (const category of CATEGORIES) {
     const url = `${DISCOVERY}?${new URLSearchParams({ page_size: "50", timeframe: "1h", category, filter_by: FLOOR })}`;
     const res = await fetcher(url);
@@ -70,12 +70,19 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
         price, lower: price * (1 + (f.binStep ?? 100) / 10_000) ** -RANGE_BINS, last: price, low: price, feeSum: 0, checkedAt: now, h: {} };
       d.pools.push(rec);
       following.set(rec.pool, rec);
-      added++;
+      added.push(rec);
     }
   }
   d.lastScanAt = now;
   save(d);
   return added;
+}
+
+/** New picks as entry signals, best fee rate first: the agent opens these without waiting for wallets to agree. */
+export function pickSignals(added, now = Date.now(), deadlineSec = 120) {
+  return added.filter((r) => r.pick).sort((a, b) => (b.f.feeRate ?? 0) - (a.f.feeRate ?? 0)).map((r) => ({
+    source: "scout", mint: r.mint, pool: r.pool, createdAt: now, deadline: now + deadlineSec * 1000, nextCheck: now, events: [], done: false,
+  }));
 }
 
 /** A single-sided SOL position's result at `price`, as % of the SOL put in, before fees. Spot shape from entry to lower. */

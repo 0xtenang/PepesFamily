@@ -25,7 +25,7 @@ export function recordSignal(signal, screened) {
   const price = Number(p?.pool_price);
   const list = load();
   list.push({
-    at: Date.now(), mint: signal.mint, wallets: signal.events.length,
+    at: Date.now(), mint: signal.mint, source: signal.source ?? "wallets", wallets: signal.events.length,
     lps: signal.events.map(e => ({ wallet: e.wallet, pool: e.pool, position: e.position })),
     symbol: screened?.token?.symbol ?? null,
     pass: !!screened?.pass, reason: screened?.pass ? null : String(screened?.reason ?? "unknown").slice(0, 160),
@@ -94,7 +94,7 @@ export function signalStats(limit = 20) {
     since: list[0]?.at ?? null,
     outcomes: { passed: outcome(list.filter(s => s.pass)), rejected: outcome(list.filter(s => !s.pass)) },
     recent: list.slice(-limit).reverse().map(s => ({
-      at: s.at, mint: s.mint, symbol: s.symbol, name: s.name, wallets: s.wallets, pass: s.pass, reason: s.reason, pool: s.pool,
+      at: s.at, mint: s.mint, source: s.source ?? "wallets", symbol: s.symbol, name: s.name, wallets: s.wallets, pass: s.pass, reason: s.reason, pool: s.pool,
       lpPct: s.lpPct ?? null, lpClosed: !!s.lpClosed,
       movePct: pct(s.priceNow, s.price), highPct: pct(s.high, s.price), lowPct: pct(s.low, s.price),
     })),

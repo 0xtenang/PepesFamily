@@ -23,7 +23,7 @@ import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
 import { activeUsers, managedUsers, multiUser, reduceOnly } from "../pepes/users.js";
 import { recordSignal, followSignals, followLps } from "../pepes/signals.js";
-import { scan as scoutScan, follow as scoutFollow } from "../pepes/scout.js";
+import { scan as scoutScan, follow as scoutFollow, pickSignals } from "../pepes/scout.js";
 import { startAdmin } from "./telegram-admin.js";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -75,7 +75,7 @@ async function drainSignals() {
 async function pursueSignal(signal) {
   if (!multiUser()) return pursueOne(signal, store);
   // The shared record comes first: shadow mode shows it even when nobody has started the agent or deposited.
-  const screened = await screenMint(signal.mint).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
+  const screened = await screenMint(signal.mint, signal.pool ? { poolAddress: signal.pool } : {}).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
   try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
   log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
   if (reduceOnly()) { finishSignal(store, signal, "exits only", config.standalone); return; }
@@ -87,7 +87,7 @@ async function pursueSignal(signal) {
 
 async function pursueOne(signal, st) {
   const wallets = signal.events.map(e => `${e.wallet.slice(0, 6)}(◎${e.depositSol.toFixed(1)})`).join(", ");
-  log("signal", `Convergence on ${signal.mint.slice(0, 8)}: ${signal.events.length} wallets [${wallets}] — screening with ${config.standalone.screeningDeadlineSec}s deadline`);
+  log("signal", signal.source === "scout" ? `Scout pick ${signal.mint.slice(0, 8)}: pool ${signal.pool.slice(0, 8)}` : `Convergence on ${signal.mint.slice(0, 8)}: ${signal.events.length} wallets [${wallets}] — screening with ${config.standalone.screeningDeadlineSec}s deadline`);
   let lastReason = "no attempt";
   while (!shuttingDown && !signal.done && Date.now() < signal.deadline) {
     const reason = await attemptEntry(signal, st);
@@ -128,7 +128,7 @@ async function attemptEntry(signal, st) {
   // Focused screening: this mint and its eligible pools only.
   let screened;
   try {
-    screened = await screenMint(mint);
+    screened = await screenMint(mint, signal.pool ? { poolAddress: signal.pool } : {});
   } catch (e) {
     return `screening error: ${e.message}`;
   }
@@ -207,12 +207,15 @@ async function attemptEntry(signal, st) {
 // exposure, the market has not run away since screening, and spendable funds
 // cover the entry. Returns null when everything holds, else the reason.
 async function finalRecheck(signal, screened) {
-  let present = 0;
-  for (const e of signal.events) {
-    try { if (await exposureStillPresent(e)) present++; } catch { /* unreadable position = not confirmed */ }
-  }
-  if (present < config.standalone.walletThreshold) {
-    return `wallet exposure gone (${present}/${signal.events.length} remain)`;
+  // A scout pick has no wallets behind it to recheck; the price and funds checks below still apply.
+  if (signal.source !== "scout") {
+    let present = 0;
+    for (const e of signal.events) {
+      try { if (await exposureStillPresent(e)) present++; } catch { /* unreadable position = not confirmed */ }
+    }
+    if (present < config.standalone.walletThreshold) {
+      return `wallet exposure gone (${present}/${signal.events.length} remain)`;
+    }
   }
   try {
     const fresh = await poolDetail(screened.pool.pool_address);
@@ -393,7 +396,10 @@ export async function startStandalone() {
   startPnlPoller();
   startHeartbeat();
   if (multiUser()) {
-    const scout = () => void scoutScan().then(n => { if (n) log("scout", `${n} new pool(s)`); }).catch(e => log("scout_warn", e.message));
+    const scout = () => void scoutScan().then(added => {
+      if (added.length) log("scout", `${added.length} new pool(s), ${added.filter(r => r.pick).length} pick(s)`);
+      for (const signal of pickSignals(added)) onSignal(signal);
+    }).catch(e => log("scout_warn", e.message));
     timers.scout = setInterval(scout, 5 * 60_000);
     timers.scoutFollow = setInterval(() => { void scoutFollow().catch(e => log("scout_warn", e.message)); }, 30 * 60_000);
     scout();
