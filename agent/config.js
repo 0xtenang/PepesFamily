@@ -189,6 +189,7 @@ if (process.env.PRIVY_APP_ID) {
   Object.assign(config.screening, {
     minTvl: 3_000, maxTvl: null, minVolume: 500, minOrganic: 30, minHolders: 100, minMcap: 50_000, maxMcap: 50_000_000,
     minBinStep: 50, maxBinStep: 400, minTokenFeesSol: 5, minFeeActiveTvlRatio: 0.05,
+    timeframe: "1h", // the scout's window: a pick shouldn't fail on one quiet 5 minutes
   });
   config.standalone.windowSec = u.walletWindowSec ?? 300;
 }

@@ -85,6 +85,12 @@ async function pursueSignal(signal) {
   try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
   log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
   if (reduceOnly()) { finishSignal(store, signal, "exits only", config.standalone); return; }
+  if (signal.source === "scout") {
+    // A rejected pick doesn't wait in the queue retrying: another scan comes in 5 minutes. A kept one gets its full
+    // time to enter from now, however long it queued.
+    if (!screened.pass) { signal.done = true; return; }
+    signal.deadline = Date.now() + config.standalone.screeningDeadlineSec * 1000;
+  }
   const users = activeUsers();
   await Promise.all(users.map(u => runAs(u, () => pursueOne({ ...signal, done: false }, u.store)
     .catch(e => log("signal_error", `Signal ${signal.mint.slice(0, 8)} for ${u.address.slice(0, 6)}: ${e.message}`)))));
