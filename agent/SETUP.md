@@ -92,6 +92,9 @@ Service `pepes-agent` (https://pepes-agent.onrender.com): Web Service from `0xte
 Variables, entered in Render only: `DATA_DIR=/data`, `RPC_URL` and `MONITOR_WS_URL` (Helius), `PRIVY_APP_ID`,
 `PRIVY_APP_SECRET`, `PRIVY_AUTHORIZATION_KEY`, `PRIVY_SIGNER_ID`, `PRIVY_POLICY_IDS`, `AGENT_LIVE=false`.
 
+**Emergency switch:** set `AGENT_REDUCE_ONLY=true` in Render (it restarts in about a minute). No new positions for anyone;
+exits, fee claims and the signal log keep running. Set `AGENT_LIVE=false` only to stop everything being sent, exits included.
+
 ## 3. Going live
 
 1. Watch shadow results for a week or two (the Agent page's signal list, Render logs, `/agent/stats`).

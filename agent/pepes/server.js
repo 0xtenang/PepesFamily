@@ -4,6 +4,7 @@
 //   GET  /agent/stats      public: users running, wallets watched, recent decisions (shadow proposals included)
 //   GET  /agent/me         the signed-in user's agent: settings, balance, open positions, closed history, fees
 //   POST /agent/start      { preset, positionSol, maxPositions }: start (or update) the agent for the user
+//   POST /agent/accept     records that the user accepted the risk agreement (needed before starting)
 //   POST /agent/stop       stop entering new positions (open positions still get managed and closed by the rules)
 //
 // Signed-in calls carry the Privy access token (Authorization: Bearer). The user's wallets are read from Privy,
@@ -11,13 +12,29 @@
 // signer on it, limited by the agent's policy (walletOf), and withdrawals and the fee never use an address the request names.
 
 import http from "node:http";
-import { runAs } from "./context.js";
-import { loadUsers, saveUsers, activeUsers, isLive } from "./users.js";
+import fs from "node:fs";
+import { runAs, dataPath } from "./context.js";
+import { loadUsers, saveUsers, activeUsers, managedUsers, isLive, reduceOnly } from "./users.js";
 import { PrivySigner } from "./signer.js";
 import { FEE_PCT, FEE_ADDRESS } from "./fee.js";
 import { signalStats } from "./signals.js";
 import { config } from "../config.js";
 import { log } from "../logger.js";
+
+/** Bump when the agreement on the Agent page changes materially: everyone accepts again. */
+const TERMS_VERSION = 1;
+const termsFile = () => dataPath("terms.json");
+function loadTerms() { try { return JSON.parse(fs.readFileSync(termsFile(), "utf8")); } catch { return {}; } }
+const acceptedTerms = (id) => loadTerms()[id]?.version === TERMS_VERSION;
+function acceptTerms(who) {
+  const all = loadTerms();
+  all[who.id] = { version: TERMS_VERSION, at: new Date().toISOString(), phantom: who.phantom?.address ?? null };
+  fs.mkdirSync(dataPath(), { recursive: true });
+  fs.writeFileSync(`${termsFile()}.tmp`, JSON.stringify(all, null, 2), { mode: 0o600 });
+  fs.renameSync(`${termsFile()}.tmp`, termsFile());
+  log("agent_user", `${who.id.slice(-6)} accepted the risk agreement v${TERMS_VERSION}`);
+  return { accepted: true };
+}
 
 /** The beta caps every user's settings: SOL per position and open positions. */
 const MAX_POSITION_SOL = Number(process.env.MAX_POSITION_SOL ?? 1);
@@ -90,7 +107,7 @@ const view = (u) => u && { active: !!u.active, live: isLive(u), address: u.addre
 async function me(who) {
   const record = loadUsers().find(u => u.id === who.id) || null;
   const { approved } = await walletOf(who);
-  const out = { user: view(record), agentWallet: who.agent?.address || null, approved, phantom: who.phantom?.address || null };
+  const out = { user: view(record), acceptedTerms: acceptedTerms(who.id), agentWallet: who.agent?.address || null, approved, phantom: who.phantom?.address || null };
   if (!who.agent?.address) return out;
   const user = { ...(record || {}), id: who.id, address: who.agent.address, live: false, // read-only here
     signer: new PrivySigner({ walletId: who.agent.id || "none", address: who.agent.address }) };
@@ -111,6 +128,7 @@ async function start(who, body) {
   const { walletId, approved } = await walletOf(who);
   if (!who.agent?.address || !walletId) throw Object.assign(new Error("Create your agent wallet first"), { status: 400 });
   if (!approved) throw Object.assign(new Error("Approve the agent for your agent wallet first"), { status: 400 });
+  if (!acceptedTerms(who.id)) throw Object.assign(new Error("Accept the risk agreement first"), { status: 400 });
   if (!who.phantom?.address) throw Object.assign(new Error("Sign in with Phantom first"), { status: 400 });
   const users = loadUsers();
   let u = users.find(x => x.id === who.id);
@@ -129,6 +147,21 @@ function stop(who) {
   return view(u);
 }
 
+/** Real closed positions across all users (nothing until the agent is live), from each user's own record. */
+async function agentRecord() {
+  const { getPerformanceSummary } = await import("../performance.js");
+  let closed = 0, wins = 0, pctSum = 0, pnlUsd = 0;
+  for (const u of managedUsers()) {
+    const s = runAs(u, () => getPerformanceSummary());
+    if (!s) continue;
+    closed += s.total_positions_closed;
+    wins += s.total_positions_closed * s.win_rate_pct / 100;
+    pctSum += s.total_positions_closed * s.avg_pnl_pct;
+    pnlUsd += s.total_pnl_usd;
+  }
+  return { closed, winPct: closed ? Math.round(wins / closed * 100) : null, avgPct: closed ? Math.round(pctSum / closed * 10) / 10 : null, pnlUsd: Math.round(pnlUsd * 100) / 100 };
+}
+
 async function stats() {
   const { listSmartWallets } = await import("../smart-wallets.js");
   const { getRecentDecisions } = await import("../decision-log.js").catch(() => ({}));
@@ -138,6 +171,8 @@ async function stats() {
     shadow: config.standalone.shadow || process.env.AGENT_LIVE !== "true",
     decisions: typeof getRecentDecisions === "function" ? getRecentDecisions(20) : [],
     signals: signalStats(20),
+    record: await agentRecord(),
+    reduceOnly: reduceOnly(),
   };
 }
 
@@ -145,7 +180,7 @@ const publicConfig = () => ({
   signerId: process.env.PRIVY_SIGNER_ID || null,
   policyIds: (process.env.PRIVY_POLICY_IDS || "").split(",").filter(Boolean),
   presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, { label: v.label, ...v.management }])),
-  feePct: FEE_PCT, feeAddress: FEE_ADDRESS, maxPositionSol: MAX_POSITION_SOL, maxPositions: MAX_POSITIONS,
+  feePct: FEE_PCT, feeAddress: FEE_ADDRESS, reduceOnly: reduceOnly(), termsVersion: TERMS_VERSION, maxPositionSol: MAX_POSITION_SOL, maxPositions: MAX_POSITIONS,
   shadow: config.standalone.shadow || process.env.AGENT_LIVE !== "true",
 });
 
@@ -173,6 +208,7 @@ export function startServer(port = Number(process.env.PORT || 8080)) {
       if (req.method === "GET" && path === "/agent/stats") return send(200, await stats());
       if (req.method === "GET" && path === "/agent/me") return send(200, await me(await whoIs(req)));
       if (req.method === "POST" && path === "/agent/start") { const b = await body(req); return send(200, await start(await whoIs(req), b)); }
+      if (req.method === "POST" && path === "/agent/accept") return send(200, acceptTerms(await whoIs(req)));
       if (req.method === "POST" && path === "/agent/stop") return send(200, stop(await whoIs(req)));
       return send(404, { error: "Not found" });
     } catch (e) {

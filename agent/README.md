@@ -2,7 +2,7 @@
 
 An automated Meteora DLMM liquidity agent on Solana for PepesFamily users: connect Phantom on
 pepesdotfamily.fun, start the agent, and it opens, manages and closes liquidity positions for you within your
-limits. A 10% fee is taken on the realised profit of each closed position; nothing on losses or deposits.
+limits. A 10% fee is taken on profit above the user's previous best when a position closes; losses carry forward.
 
 **Based on [Meridian](https://github.com/yunus-0x/meridian) by yunus-0x**, used with the author's permission. Its
 standalone bot (wallet-convergence signals, focused screening, deterministic exits) is the core; the original
@@ -17,8 +17,11 @@ README follows below.
 - **Privy agent wallets** (`pepes/signer.js`). Each user's agent wallet is a Privy embedded Solana wallet; the
   worker signs with an authorization key the user approved once, and a Privy policy limits what can be signed
   (Meteora DLMM, Jupiter, system/token programs; SOL only to the fee address, capped).
-- **Profit fee** (`pepes/fee.js`): `FEE_PCT` (10) of the smaller of reported and actually-received profit, sent to
-  `FEE_ADDRESS` after a profitable close.
+- **Profit fee** (`pepes/fee.js`): `FEE_PCT` (10) of the user's running result above its previous best, sent to
+  `FEE_ADDRESS` on close. A close's result is the smaller of reported and actually-received profit.
+- **Track record** (`pepes/signals.js`): every signal, its screening result and price, and what the LPs behind it made.
+- **Risk agreement:** users accept it on the Agent page before starting (`terms.json` on the disk).
+- **`AGENT_REDUCE_ONLY=true`:** the emergency switch. No new positions; exits, claims and the signal log go on.
 - **Fixes to Meridian:** finished signals no longer throw (`finishSignal` without options); queued wallet work runs
   as the user who queued it; the positions cache is per wallet; Jupiter referral is off by default (Meridian sent
   0.5% of each swap to its author's account).

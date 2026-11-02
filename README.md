@@ -416,8 +416,8 @@ They add funds by sending ETH, BNB or HYPE to the address in the wallet menu, an
 
 An automated Meteora DLMM liquidity agent on Solana: `agent/` (the worker: bot and API, run on Render) and the
 site's Agent page (`#/agent`). Visitors sign in with Phantom through Privy, get a Solana agent wallet, approve the
-agent's key once (a Privy policy limits what it can sign), deposit SOL and pick a preset. 10% of the realised
-profit of each closed position goes to the team's Solana wallet; nothing on losses. It is built on
+agent's key once (a Privy policy limits what it can sign), deposit SOL and pick a preset. 10% of a user's profit above
+their previous best goes to the team's Solana wallet when a position closes; losses carry forward. It is built on
 [Meridian](https://github.com/yunus-0x/meridian) by yunus-0x, with the author's permission. Setup and going live:
 [agent/SETUP.md](agent/SETUP.md). The page shows "opening soon" until `CONFIG.agentApi` is set.
 

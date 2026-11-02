@@ -32,14 +32,24 @@ export const isLive = (u) => process.env.AGENT_LIVE === "true" && u.live !== fal
 /** Multi-user mode: on when PRIVY_APP_ID is set (the hosted agent); off for a single local wallet. */
 export const multiUser = () => !!process.env.PRIVY_APP_ID;
 
-/** Users the agent runs for now, each with its signer and its own attempt store. */
+/** Exits only (AGENT_REDUCE_ONLY=true): the emergency switch. No new positions; exits, claims and the signal log go on. */
+export const reduceOnly = () => process.env.AGENT_REDUCE_ONLY === "true";
+
+const withSigner = (u) => ({
+  ...u,
+  live: isLive(u),
+  signer: new PrivySigner({ walletId: u.walletId, address: u.address }),
+  store: storeFor(u.id),
+});
+
+/** Users the agent opens new positions for. */
 export function activeUsers() {
-  return loadUsers().filter(u => u.active && u.address && u.walletId).map(u => ({
-    ...u,
-    live: isLive(u),
-    signer: new PrivySigner({ walletId: u.walletId, address: u.address }),
-    store: storeFor(u.id),
-  }));
+  return loadUsers().filter(u => u.active && u.address && u.walletId).map(withSigner);
+}
+
+/** Users whose positions the agent looks after: everyone who ever started it, so Stop still lets positions close. */
+export function managedUsers() {
+  return loadUsers().filter(u => u.address && u.walletId).map(withSigner);
 }
 
 /** Each user's entry attempts (duplicate guard and crash recovery) live apart from the shared signal store. */

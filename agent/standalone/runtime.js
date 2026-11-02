@@ -21,8 +21,8 @@ import { getTrackedPositions, confirmPeak, updatePnlAndCheckExits, registerExitS
 import { recordPositionSnapshot } from "../pool-memory.js";
 import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
-import { activeUsers, multiUser } from "../pepes/users.js";
-import { recordSignal, followSignals } from "../pepes/signals.js";
+import { activeUsers, managedUsers, multiUser, reduceOnly } from "../pepes/users.js";
+import { recordSignal, followSignals, followLps } from "../pepes/signals.js";
 import { startAdmin } from "./telegram-admin.js";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -77,6 +77,7 @@ async function pursueSignal(signal) {
   const screened = await screenMint(signal.mint).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
   try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
   log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
+  if (reduceOnly()) { finishSignal(store, signal, "exits only", config.standalone); return; }
   const users = activeUsers();
   await Promise.all(users.map(u => runAs(u, () => pursueOne({ ...signal, done: false }, u.store)
     .catch(e => log("signal_error", `Signal ${signal.mint.slice(0, 8)} for ${u.address.slice(0, 6)}: ${e.message}`)))));
@@ -237,7 +238,7 @@ export async function manageOnce() {
   manageBusy = true;
   try {
     if (!multiUser()) return await manageFor();
-    for (const u of activeUsers()) await runAs(u, () => manageFor().catch(e => log("manage_warn", `${u.address.slice(0, 6)}: ${e.message}`)));
+    for (const u of managedUsers()) await runAs(u, () => manageFor().catch(e => log("manage_warn", `${u.address.slice(0, 6)}: ${e.message}`)));
     return null;
   } finally {
     manageBusy = false;
@@ -289,7 +290,7 @@ function startPnlPoller() {
     pollBusy = true;
     try {
       if (!multiUser()) await pollFor(confirmTicks);
-      else for (const u of activeUsers()) await runAs(u, () => pollFor(confirmTicks).catch(e => log("poll_warn", `${u.address.slice(0, 6)}: ${e.message}`)));
+      else for (const u of managedUsers()) await runAs(u, () => pollFor(confirmTicks).catch(e => log("poll_warn", `${u.address.slice(0, 6)}: ${e.message}`)));
     } finally {
       pollBusy = false;
     }
@@ -390,7 +391,10 @@ export async function startStandalone() {
   timers.manage = setInterval(() => { void manageOnce(); }, Math.max(1, config.schedule.managementIntervalMin) * 60_000);
   startPnlPoller();
   startHeartbeat();
-  if (multiUser()) timers.signals = setInterval(() => { void followSignals().catch(e => log("signals_warn", e.message)); }, 15 * 60_000);
+  if (multiUser()) timers.signals = setInterval(() => {
+    void followSignals().catch(e => log("signals_warn", e.message));
+    void followLps().catch(e => log("signals_warn", e.message));
+  }, 15 * 60_000);
   void manageOnce();
   stopAdmin = startAdmin({
     monitor,

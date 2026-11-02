@@ -9,7 +9,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "pepes-agent-"));
 delete process.env.DRY_RUN;
 
 const { runAs, currentUser, userPath, overlay, isDryRun } = await import("../pepes/context.js");
-const { feeFor } = await import("../pepes/fee.js");
+const { realisedProfit, feeAfterLosses } = await import("../pepes/fee.js");
 const { withWalletLock } = await import("../standalone/transactions.js");
 
 const alice = { id: "alice", address: "A1", live: true, settings: { risk: { maxPositions: 1 } } };
@@ -51,16 +51,29 @@ test("queued wallet work runs as the user who queued it", async () => {
 // Fees round down to the lamport, never up.
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 2e-9, `${actual} != ${expected}`);
 
-test("profit fee: 10% of the smaller of reported and received profit", () => {
-  // 1 SOL in, +20% reported, 1.3 SOL back (incl. ~0.057 rent): received profit 0.24 > reported 0.2 -> 0.02 fee
-  near(feeFor({ amountSol: 1, pnlPct: 20, solBefore: 5, solAfter: 6.3, pct: 10 }), 0.02);
-  // reported +20% but only 1.1 SOL came back (swap failed): received 0.04 -> 0.004
-  near(feeFor({ amountSol: 1, pnlPct: 20, solBefore: 5, solAfter: 6.1, pct: 10 }), 0.004);
-  // a loss, a flat close, or missing data: nothing
-  assert.equal(feeFor({ amountSol: 1, pnlPct: -10, solBefore: 5, solAfter: 5.95, pct: 10 }), 0);
-  assert.equal(feeFor({ amountSol: 1, pnlPct: 0.1, solBefore: 5, solAfter: 6.06, pct: 10 }), 0);
-  assert.equal(feeFor({ amountSol: 1, pnlPct: 20, solBefore: NaN, solAfter: 6.3, pct: 10 }), 0);
-  assert.equal(feeFor({ amountSol: NaN, pnlPct: 20, solBefore: 5, solAfter: 6.3, pct: 10 }), 0);
+test("a close's result is the smaller of reported and received, and a gain needs both", () => {
+  // 1 SOL in, +20% reported, 1.3 SOL back: received 0.24 > reported 0.2
+  near(realisedProfit({ amountSol: 1, pnlPct: 20, solBefore: 5, solAfter: 6.3 }), 0.2);
+  // reported +20% but only 1.1 SOL came back (swap failed): received 0.04
+  near(realisedProfit({ amountSol: 1, pnlPct: 20, solBefore: 5, solAfter: 6.1 }), 0.04);
+  near(realisedProfit({ amountSol: 1, pnlPct: -10, solBefore: 5, solAfter: 5.95 }), -0.11);
+  assert.equal(realisedProfit({ amountSol: 1, pnlPct: 20, solBefore: NaN, solAfter: 6.3 }), null); // gain unconfirmed
+  near(realisedProfit({ amountSol: 1, pnlPct: -20, solBefore: NaN, solAfter: 6.3 }), -0.2);        // a loss still counts
+  assert.equal(realisedProfit({ amountSol: NaN, pnlPct: 20, solBefore: 5, solAfter: 6.3 }), null);
+});
+
+test("no fee until losses are earned back, and only on what rises above the best", () => {
+  let r = feeAfterLosses({ cum: 0, high: 0 }, -1, 10);       // lose 1 SOL
+  assert.equal(r.fee, 0);
+  r = feeAfterLosses({ cum: r.cum, high: r.high }, 0.5, 10); // make 0.5: still down
+  assert.equal(r.fee, 0);
+  r = feeAfterLosses({ cum: r.cum, high: r.high }, 1, 10);   // make 1: 0.5 above the best
+  near(r.fee, 0.05);
+  r = feeAfterLosses({ cum: r.cum, high: r.cum }, -0.2, 10); // fee paid, then a loss
+  assert.equal(r.fee, 0);
+  r = feeAfterLosses({ cum: r.cum, high: r.high }, 0.3, 10); // only 0.1 is new profit
+  near(r.fee, 0.01);
+  assert.equal(feeAfterLosses({ cum: 0, high: 0 }, 0.001, 10).fee, 0); // too small to send: charged with a later one
 });
 
 test("shadow signal log records results and works out price moves", async () => {
@@ -85,4 +98,31 @@ test("wallets of one operator count as one vote", async () => {
   const opts = { windowSec: 120, minDepositSol: 0.1, walletGroups: { A: "op", B: "op" } };
   assert.equal(qualifyingEvents(events.slice(0, 2), "M", opts, now).length, 1); // A and B are one operator
   assert.equal(qualifyingEvents(events, "M", opts, now).length, 2);             // C is independent
+});
+
+test("the track record follows the real positions of the LPs behind each signal", async () => {
+  const { recordSignal, followLps, signalStats } = await import("../pepes/signals.js");
+  const ev = (w) => ({ wallet: w, pool: "P", position: "pos-" + w });
+  recordSignal({ mint: "MintC", events: [ev("a"), ev("b")] }, { pass: true, token: {}, pool: { pool_address: "P", pool_price: "1" } });
+  recordSignal({ mint: "MintD", events: [ev("c")] }, { pass: false, reason: "no" });
+  const data = { a: ["10", true], b: ["-4", true], c: ["-20", false] };
+  await followLps(async (lp) => ({ positions: [{ positionAddress: "pos-" + lp.wallet, pnlSolPctChange: data[lp.wallet][0], isClosed: data[lp.wallet][1] }] }));
+  const st = signalStats();
+  assert.equal(st.recent[1].lpPct, 3);                 // average of the two LPs
+  assert.equal(st.recent[1].lpClosed, true);
+  assert.equal(st.recent[0].lpClosed, false);          // still open: not counted yet
+  assert.deepEqual(st.outcomes.passed, { closed: 1, avgPct: 3, winPct: 100 });
+  assert.equal(st.outcomes.rejected.closed, 0);
+});
+
+test("Stop ends new positions but the agent keeps looking after open ones", async () => {
+  const { saveUsers, activeUsers, managedUsers, reduceOnly } = await import("../pepes/users.js");
+  const address = "Gy1Ub83ERYtC4y7PNyTKEbuokZUWnt2TQ4DPaX77anQ";
+  saveUsers([{ id: "on", address, walletId: "w1", active: true }, { id: "off", address, walletId: "w2", active: false }, { id: "new" }]);
+  assert.deepEqual(activeUsers().map(u => u.id), ["on"]);
+  assert.deepEqual(managedUsers().map(u => u.id), ["on", "off"]);
+  assert.equal(reduceOnly(), false);
+  process.env.AGENT_REDUCE_ONLY = "true";
+  assert.equal(reduceOnly(), true);
+  delete process.env.AGENT_REDUCE_ONLY;
 });

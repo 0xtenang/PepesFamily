@@ -3390,7 +3390,7 @@ async function renderMint() {
 // An automated Meteora DLMM liquidity agent on Solana (agent/ in the repo, run on Railway). The visitor signs in with
 // Phantom through Privy, gets a Solana agent wallet, approves the agent's key once (Privy limits it to Meteora,
 // Jupiter and SOL only to the fee address), deposits SOL from Phantom and picks a preset. Withdrawals go back to
-// Phantom. 10% of the realised profit of each closed position goes to the team; nothing on losses.
+// Phantom. 10% of a user's profit above their previous best goes to the team when a position closes.
 const solFmt = (x, d = 4) => (x == null || !Number.isFinite(Number(x)) ? "—" : Number(x).toLocaleString(undefined, { maximumFractionDigits: d }));
 /// The agent's API; `auth` sends the visitor's Privy sign-in (the public figures don't need Privy at all).
 async function agentFetch(path, opts = {}, auth = true) {
@@ -3408,8 +3408,8 @@ async function renderAgent() {
     <b style="color:var(--text)">2. Screen.</b> The pool must pass liquidity, volume, fee, holder and rug checks.<br/>
     <b style="color:var(--text)">3. Enter.</b> It adds your SOL just below the price, sized to your settings, and earns fees as the token trades.<br/>
     <b style="color:var(--text)">4. Exit.</b> Take profit (trailing), stop loss, out of range too long, or fees too low. Tokens are swapped back to SOL.<br/>
-    <b style="color:var(--text)">Fee.</b> 10% of the profit of each closed position. Nothing on losses, deposits or withdrawals.<br/>
-    <b style="color:var(--text)">Limits.</b> The agent can only use your agent wallet for Meteora liquidity and Jupiter swaps. SOL can only leave it to your Phantom or as the profit fee.</div></div>
+    <b style="color:var(--text)">Fee.</b> 10% of your profit above your previous best, taken when a position closes. Losses carry forward: no fee until they're earned back. Nothing on deposits or withdrawals.<br/>
+    <b style="color:var(--text)">Limits.</b> Privy only lets the agent's key use your agent wallet for Meteora, Jupiter and the standard token programs, and caps each SOL transfer at 1.1 SOL (opening a position needs one). The agent only sends SOL into positions or as the profit fee; withdrawals to your Phantom are yours alone. A leak of the agent's keys could still move SOL within those caps, so keep to amounts you can afford to lose.</div></div>
     <div class="card" style="margin-top:14px"><span class="h">Risk</span><div class="stat">Providing liquidity on memecoins loses money often: prices dump and pools get rugged. The rules limit losses; they don't prevent them. Only deposit what you can afford to lose.</div></div>`;
   if (!CONFIG.agentApi) {
     app.innerHTML = `${head}<div class="card empty" style="padding:24px">Opening soon. The agent is running in shadow mode first: it records what it would do and trades nothing.</div>${how}`;
@@ -3420,16 +3420,24 @@ async function renderAgent() {
   try { [cfg, stats] = await Promise.all([agentFetch("/agent/config", {}, false), agentFetch("/agent/stats", {}, false)]); }
   catch (e) { if (gen === routeGen) $("#agmain").innerHTML = `<div class="card empty">The agent isn't reachable right now: ${esc(errMsg(e))}</div>`; return; }
   if (gen !== routeGen) return;
-  $("#agstats").innerHTML = `<div class="card"><div class="k">Mode</div><div class="v">${cfg.shadow ? "Shadow" : "Live"}</div><div class="stat">${cfg.shadow ? "recording, not trading yet" : "trading"}</div></div>
+  $("#agstats").innerHTML = `<div class="card"><div class="k">Mode</div><div class="v">${cfg.reduceOnly ? "Exits only" : cfg.shadow ? "Shadow" : "Live"}</div><div class="stat">${cfg.reduceOnly ? "no new positions for now" : cfg.shadow ? "recording, not trading yet" : "trading"}</div></div>
     <div class="card"><div class="k">Agents running</div><div class="v">${stats.users}</div></div>
     <div class="card"><div class="k">LPs followed</div><div class="v">${stats.walletsWatched}</div></div>
-    <div class="card"><div class="k">Fee</div><div class="v">${cfg.feePct}%</div><div class="stat">of profit only</div></div>`;
+    <div class="card"><div class="k">Fee</div><div class="v">${cfg.feePct}%</div><div class="stat">of profit above your best</div></div>`;
   // what the agent has seen: every signal, whether or not anyone has funds in (the shadow record)
   const sg = stats.signals || { total: 0, passed: 0, recent: [] };
   const pctCell = (x) => (x == null ? `<td class="r stat">—</td>` : `<td class="r ${x >= 0 ? "up" : "dn"}">${x > 0 ? "+" : ""}${solFmt(x, 1)}%</td>`);
-  $("#agsig").innerHTML = `${sec(3, "Signals so far", `<span class="stat">${sg.total} seen · ${sg.passed} passed screening</span>`)}${sg.recent.length ? `<div class="card scroll-x"><table><thead><tr><th>When</th><th>Token</th><th class="r">LPs</th><th>Screening</th><th class="r">Price now</th><th class="r">High</th><th class="r">Low</th></tr></thead><tbody>${sg.recent.map((x) =>
-      `<tr><td class="stat">${esc(new Date(x.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${x.pool ? `<a href="https://app.meteora.ag/dlmm/${esc(x.pool)}" target="_blank" rel="noopener noreferrer">${esc(x.symbol || x.name || short(x.mint))}</a>` : esc(x.symbol || short(x.mint))}</td><td class="r">${Number(x.wallets) || 0}</td><td class="${x.pass ? "up" : "stat"}">${x.pass ? "Passed" : esc(x.reason || "Rejected")}</td>${pctCell(x.movePct)}${pctCell(x.highPct)}${pctCell(x.lowPct)}</tr>`).join("")}</tbody></table>
-      <p class="stat" style="margin:10px 0 0">Price moves since the signal, followed for 24 hours. They show what the agent picked, not what a position would have earned: fees and exits aren't counted.</p></div>`
+  const outCard = (title, o, note) => `<div class="card"><div class="k">${title}</div><div class="v ${o.avgPct == null ? "" : o.avgPct >= 0 ? "up" : "dn"}">${o.avgPct == null ? "—" : (o.avgPct > 0 ? "+" : "") + solFmt(o.avgPct, 1) + "%"}</div><div class="stat">${o.closed ? `${o.closed} closed · ${o.winPct}% made money` : note}</div></div>`;
+  const rec = stats.record || { closed: 0 };
+  const noRes = { closed: 0, avgPct: null, winPct: null };
+  const trackRecord = `${sec(3, "Track record")}<div class="stats q" style="margin:0 0 6px">
+      ${outCard("Agent, real closes", rec.closed ? { closed: rec.closed, avgPct: rec.avgPct, winPct: rec.winPct } : noRes, "none yet: not trading")}
+      ${outCard("LPs on signals that passed", sg.outcomes?.passed || noRes, "none closed yet")}
+      ${outCard("LPs on signals rejected", sg.outcomes?.rejected || noRes, "none closed yet")}</div>
+    <p class="stat" style="margin:0 0 14px">The LP figures are what the wallets behind each signal actually made in SOL, fees included, averaged per signal. They aren't the agent's results: its range, size and exits differ.</p>`;
+  $("#agsig").innerHTML = `${trackRecord}${sec(4, "Signals so far", `<span class="stat">${sg.total} seen · ${sg.passed} passed screening</span>`)}${sg.recent.length ? `<div class="card scroll-x"><table><thead><tr><th>When</th><th>Token</th><th class="r">LPs</th><th>Screening</th><th class="r">LPs' result</th><th class="r">Price now</th><th class="r">High</th><th class="r">Low</th></tr></thead><tbody>${sg.recent.map((x) =>
+      `<tr><td class="stat">${esc(new Date(x.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${x.pool ? `<a href="https://app.meteora.ag/dlmm/${esc(x.pool)}" target="_blank" rel="noopener noreferrer">${esc(x.symbol || x.name || short(x.mint))}</a>` : esc(x.symbol || short(x.mint))}</td><td class="r">${Number(x.wallets) || 0}</td><td class="${x.pass ? "up" : "stat"}">${x.pass ? "Passed" : esc(x.reason || "Rejected")}</td>${x.lpPct == null ? `<td class="r stat">—</td>` : `<td class="r ${x.lpPct >= 0 ? "up" : "dn"}">${x.lpPct > 0 ? "+" : ""}${solFmt(x.lpPct, 1)}%${x.lpClosed ? "" : ` <span class="stat">open</span>`}</td>`}${pctCell(x.movePct)}${pctCell(x.highPct)}${pctCell(x.lowPct)}</tr>`).join("")}</tbody></table>
+      <p class="stat" style="margin:10px 0 0">Price moves since the signal, followed for 24 hours. LPs' result is followed for 7 days.</p></div>`
     : `<div class="card empty">Watching ${stats.walletsWatched} LPs. A signal appears here when two of them add liquidity to the same token within two minutes.</div>`}`;
   let P;
   try { P = await loadPrivy(); } catch (e) { $("#agmain").innerHTML = `<div class="card empty">${esc(errMsg(e))}</div>`; return; }
@@ -3449,11 +3457,23 @@ async function renderAgent() {
     let me;
     try { me = await agentFetch("/agent/me"); } catch (e) { box.innerHTML = `<div class="card empty">${esc(errMsg(e))}</div>`; return; }
     if (gen !== routeGen) return;
+    if (!me.acceptedTerms) {
+      box.innerHTML = `<div class="card"><span class="h">Before you start</span>
+        <div class="stat" style="margin-bottom:12px"><b style="color:var(--text)">You can lose money.</b> You can lose some or all of what you deposit. An automated agent trades your agent wallet and can lose money on bad trades, falling prices and rugged pools. Bugs in this software or in Meteora, Jupiter, Privy or Solana, wrong data, and a leak of the agent's keys can also cause losses. Past results don't predict future results.<br/><br/>
+        <b style="color:var(--text)">Software, not advice.</b> PepesFamily provides software. It isn't a regulated entity, and nothing here is financial, investment, legal or tax advice. You decide what to deposit and when to stop.<br/><br/>
+        <b style="color:var(--text)">Where you can use it.</b> PepesAgent isn't for people in sanctioned or restricted places, or anywhere local law prohibits it. By agreeing you confirm you're not accessing it from such a place.</div>
+        <button class="primary" id="agaccept" style="width:100%">I understand and agree</button></div>`;
+      $("#agaccept").onclick = async () => {
+        $("#agaccept").disabled = true;
+        try { await agentFetch("/agent/accept", { method: "POST" }); step(); } catch (e) { toast(errMsg(e), 8000); $("#agaccept").disabled = false; }
+      };
+      return;
+    }
     const s = me.user?.settings || { preset: "balanced", positionSol: Math.min(0.25, cfg.maxPositionSol), maxPositions: Math.min(2, cfg.maxPositions) };
     const running = !!me.user?.active;
     const status = running ? (me.user.live ? "Running" : "Running (shadow)") : "Stopped";
     const approve = me.approved ? "" : `<div class="card" style="margin-bottom:14px"><span class="h">Approve the agent</span>
-      <div class="stat" style="margin-bottom:10px">One approval lets the agent trade your agent wallet within its limits: Meteora liquidity and Jupiter swaps only, SOL out only to you or as the ${cfg.feePct}% profit fee. You can remove it any time.</div>
+      <div class="stat" style="margin-bottom:10px">One approval lets the agent trade your agent wallet: Meteora, Jupiter and the standard token programs only, with each SOL transfer capped at 1.1 SOL. You can remove it any time.</div>
       <button class="primary" id="agapprove" style="width:100%" ${cfg.signerId ? "" : "disabled"}>${cfg.signerId ? "Approve PepesAgent" : "Approval opens soon"}</button></div>`;
     const presets = Object.entries(cfg.presets).map(([k, v]) => `<button type="button" data-p="${k}" class="${s.preset === k ? "on" : ""}">${esc(v.label)}</button>`).join("");
     box.innerHTML = `${approve}<div class="card">
