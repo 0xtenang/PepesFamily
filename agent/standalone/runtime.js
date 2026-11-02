@@ -22,6 +22,7 @@ import { recordPositionSnapshot } from "../pool-memory.js";
 import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
 import { activeUsers, multiUser } from "../pepes/users.js";
+import { recordSignal, followSignals } from "../pepes/signals.js";
 import { startAdmin } from "./telegram-admin.js";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -72,6 +73,10 @@ async function drainSignals() {
 // balance and signer (pepes/context.js). Without users (a local wallet) it runs once, as Meridian does.
 async function pursueSignal(signal) {
   if (!multiUser()) return pursueOne(signal, store);
+  // The shared record comes first: shadow mode shows it even when nobody has started the agent or deposited.
+  const screened = await screenMint(signal.mint).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
+  try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
+  log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
   const users = activeUsers();
   await Promise.all(users.map(u => runAs(u, () => pursueOne({ ...signal, done: false }, u.store)
     .catch(e => log("signal_error", `Signal ${signal.mint.slice(0, 8)} for ${u.address.slice(0, 6)}: ${e.message}`)))));
@@ -385,6 +390,7 @@ export async function startStandalone() {
   timers.manage = setInterval(() => { void manageOnce(); }, Math.max(1, config.schedule.managementIntervalMin) * 60_000);
   startPnlPoller();
   startHeartbeat();
+  if (multiUser()) timers.signals = setInterval(() => { void followSignals().catch(e => log("signals_warn", e.message)); }, 15 * 60_000);
   void manageOnce();
   stopAdmin = startAdmin({
     monitor,

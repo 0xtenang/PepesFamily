@@ -62,3 +62,17 @@ test("profit fee: 10% of the smaller of reported and received profit", () => {
   assert.equal(feeFor({ amountSol: 1, pnlPct: 20, solBefore: NaN, solAfter: 6.3, pct: 10 }), 0);
   assert.equal(feeFor({ amountSol: NaN, pnlPct: 20, solBefore: 5, solAfter: 6.3, pct: 10 }), 0);
 });
+
+test("shadow signal log records results and works out price moves", async () => {
+  const { recordSignal, signalStats } = await import("../pepes/signals.js");
+  const signal = { mint: "MintA", events: [{}, {}] };
+  recordSignal(signal, { pass: false, reason: "Insufficient holders" });
+  recordSignal({ ...signal, mint: "MintB" }, { pass: true, token: { symbol: "B" }, pool: { pool_address: "PoolB", name: "B-SOL", pool_price: "2", tvl: 5000 } });
+  const st = signalStats();
+  assert.equal(st.total, 2);
+  assert.equal(st.passed, 1);
+  assert.equal(st.recent[0].symbol, "B");
+  assert.equal(st.recent[0].movePct, 0);
+  assert.equal(st.recent[1].reason, "Insufficient holders");
+  assert.equal(st.recent[1].movePct, null);
+});

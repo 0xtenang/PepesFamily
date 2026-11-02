@@ -3415,7 +3415,7 @@ async function renderAgent() {
     app.innerHTML = `${head}<div class="card empty" style="padding:24px">Opening soon. The agent is running in shadow mode first: it records what it would do and trades nothing.</div>${how}`;
     return;
   }
-  app.innerHTML = `${head}<div class="stats q" id="agstats"></div><div id="agmain"><div class="card"><div class="skel" style="height:120px"></div></div></div><div id="agpos"></div>${how}`;
+  app.innerHTML = `${head}<div class="stats q" id="agstats"></div><div id="agmain"><div class="card"><div class="skel" style="height:120px"></div></div></div><div id="agpos"></div><div id="agsig"></div>${how}`;
   let cfg, stats;
   try { [cfg, stats] = await Promise.all([agentFetch("/agent/config", {}, false), agentFetch("/agent/stats", {}, false)]); }
   catch (e) { if (gen === routeGen) $("#agmain").innerHTML = `<div class="card empty">The agent isn't reachable right now: ${esc(errMsg(e))}</div>`; return; }
@@ -3424,6 +3424,13 @@ async function renderAgent() {
     <div class="card"><div class="k">Agents running</div><div class="v">${stats.users}</div></div>
     <div class="card"><div class="k">LPs followed</div><div class="v">${stats.walletsWatched}</div></div>
     <div class="card"><div class="k">Fee</div><div class="v">${cfg.feePct}%</div><div class="stat">of profit only</div></div>`;
+  // what the agent has seen: every signal, whether or not anyone has funds in (the shadow record)
+  const sg = stats.signals || { total: 0, passed: 0, recent: [] };
+  const pctCell = (x) => (x == null ? `<td class="r stat">—</td>` : `<td class="r ${x >= 0 ? "up" : "dn"}">${x > 0 ? "+" : ""}${solFmt(x, 1)}%</td>`);
+  $("#agsig").innerHTML = `${sec(3, "Signals so far", `<span class="stat">${sg.total} seen · ${sg.passed} passed screening</span>`)}${sg.recent.length ? `<div class="card scroll-x"><table><thead><tr><th>When</th><th>Token</th><th class="r">LPs</th><th>Screening</th><th class="r">Price now</th><th class="r">High</th><th class="r">Low</th></tr></thead><tbody>${sg.recent.map((x) =>
+      `<tr><td class="stat">${esc(new Date(x.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${x.pool ? `<a href="https://app.meteora.ag/dlmm/${esc(x.pool)}" target="_blank" rel="noopener noreferrer">${esc(x.symbol || x.name || short(x.mint))}</a>` : esc(x.symbol || short(x.mint))}</td><td class="r">${Number(x.wallets) || 0}</td><td class="${x.pass ? "up" : "stat"}">${x.pass ? "Passed" : esc(x.reason || "Rejected")}</td>${pctCell(x.movePct)}${pctCell(x.highPct)}${pctCell(x.lowPct)}</tr>`).join("")}</tbody></table>
+      <p class="stat" style="margin:10px 0 0">Price moves since the signal, followed for 24 hours. They show what the agent picked, not what a position would have earned: fees and exits aren't counted.</p></div>`
+    : `<div class="card empty">Watching ${stats.walletsWatched} LPs. A signal appears here when two of them add liquidity to the same token within two minutes.</div>`}`;
   let P;
   try { P = await loadPrivy(); } catch (e) { $("#agmain").innerHTML = `<div class="card empty">${esc(errMsg(e))}</div>`; return; }
   const step = async () => {
