@@ -114,16 +114,26 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
   return added;
 }
 
+/** Picks waiting in this process's signal queue. The queue is lost on a restart, so this is too, and they get queued again. */
+const queued = new Set();
+export const forgetQueued = () => queued.clear();
+
 /**
- * Picks not yet tried as entry signals, fresh tokens first, then best fee rate: no wallets need to agree. Marks them,
- * so each is tried once, including those found before a restart.
+ * Picks not yet screened, fresh tokens first, then best fee rate: no wallets need to agree. A pick counts as tried only
+ * when markAttempted says screening ran, so one waiting in the queue during a restart isn't lost.
  */
 export function takePendingPicks(now = Date.now(), maxAgeMs = 6 * 3600_000) {
-  const d = load();
-  const pending = d.pools.filter((r) => r.pick && !r.tried && now - r.at < maxAgeMs);
-  for (const r of pending) r.tried = now;
-  if (pending.length) save(d);
+  const pending = load().pools.filter((r) => r.pick && !r.attempted && !queued.has(r.pool) && now - r.at < maxAgeMs);
+  for (const r of pending) queued.add(r.pool);
   return pickSignals(pending, now);
+}
+
+/** Screening ran for this pool: don't try this pick again. */
+export function markAttempted(pool, now = Date.now()) {
+  const d = load();
+  for (const r of d.pools) if (r.pool === pool && r.pick && !r.attempted) r.attempted = now;
+  save(d);
+  queued.delete(pool);
 }
 
 /** Notes that a signal just passed screening, so the fallback below can wait. */

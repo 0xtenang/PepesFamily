@@ -195,7 +195,7 @@ test("fresh lane: a token at most 2 hours old with at least $10K TVL, rug checks
 });
 
 test("a pool that turns hot becomes a pick, and every pick is tried once, even after a restart", async () => {
-  const { scan, takePendingPicks } = await import("../pepes/scout.js");
+  const { scan, takePendingPicks, markAttempted, forgetQueued } = await import("../pepes/scout.js");
   const fs = await import("node:fs");
   fs.rmSync(process.env.DATA_DIR + "/scout.json", { force: true });
   const t0 = 1_900_000_000_000;
@@ -209,7 +209,12 @@ test("a pool that turns hot becomes a pick, and every pick is tried once, even a
   assert.equal((await scan(onlyTop(feed(2)), t0 + 600_000)).length, 1);   // turned hot: a new pick from here
   const first = takePendingPicks(t0 + 600_000);
   assert.deepEqual(first.map((x) => x.pool), ["PH"]);
-  assert.equal(takePendingPicks(t0 + 600_000).length, 0);                 // tried once
+  assert.equal(takePendingPicks(t0 + 600_000).length, 0);                 // already queued
+  forgetQueued();                                                         // a restart empties the queue...
+  assert.deepEqual(takePendingPicks(t0 + 600_000).map((x) => x.pool), ["PH"]); // ...and the pick isn't lost
+  markAttempted("PH", t0 + 600_000);
+  forgetQueued();
+  assert.equal(takePendingPicks(t0 + 600_000).length, 0);                 // screened: tried once
   assert.equal((await scan(onlyTop(feed(3)), t0 + 900_000)).length, 0);   // already a pick
 });
 

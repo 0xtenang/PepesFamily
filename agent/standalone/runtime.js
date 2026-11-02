@@ -23,7 +23,7 @@ import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
 import { activeUsers, managedUsers, multiUser, reduceOnly } from "../pepes/users.js";
 import { recordSignal, followSignals, followLps } from "../pepes/signals.js";
-import { scan as scoutScan, follow as scoutFollow, takePendingPicks, bestPoolSignal, markPassed, freshScreening } from "../pepes/scout.js";
+import { scan as scoutScan, follow as scoutFollow, takePendingPicks, bestPoolSignal, markPassed, markAttempted, freshScreening } from "../pepes/scout.js";
 
 /** Picks from the scout have no wallets behind them. */
 const hasNoWallets = (signal) => signal.source === "scout" || signal.source === "best";
@@ -85,7 +85,7 @@ async function pursueSignal(signal) {
   if (!multiUser()) return pursueOne(signal, store);
   // The shared record comes first: shadow mode shows it even when nobody has started the agent or deposited.
   const screened = await screenFor(signal).catch(e => ({ pass: false, reason: `screening error: ${e.message}` }));
-  try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
+  try { recordSignal(signal, screened); if (signal.pool) markAttempted(signal.pool); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
   log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
   if (reduceOnly()) { finishSignal(store, signal, "exits only", config.standalone); return; }
   if (screened.pass) { try { markPassed(); } catch (e) { log("signal_error", `Signal log: ${e.message}`); } }
