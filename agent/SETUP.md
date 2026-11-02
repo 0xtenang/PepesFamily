@@ -1,6 +1,6 @@
 # PepesAgent: going live
 
-The worker (this folder) runs the bot and the Agent page's API. Everything stays in shadow mode (nothing is sent)
+The worker (this folder, on Render) runs the bot and the Agent page's API. Everything stays in shadow mode (nothing is sent)
 until `AGENT_LIVE=true` is set.
 
 ## 1. Privy (dashboard.privy.io, app `cmvqjognl02en0hle77o94cri`)
@@ -83,29 +83,22 @@ policy `aq37pdzg0k081xuwuwh0icqm` (`PRIVY_POLICY_IDS`), made in the dashboard fo
 agent wallets are therefore signed and sent directly, not through Jupiter's `/execute`; check in the beta that the
 routes `/order` returns land this way (RFQ routes may need `/execute`).
 
-## 2. Railway
+## 2. Hosting: Render (running)
 
-1. New project > Deploy from GitHub repo `0xtenang/PepesFamily`, root directory `agent`.
-2. Add a **volume** mounted at `/data`.
-3. Variables (Settings > Variables), typed in by you:
+Service `pepes-agent` (https://pepes-agent.onrender.com): Web Service from `0xtenang/PepesFamily`, root directory
+`agent`, build `npm install`, start `node index.js`, Starter plan ($7/month), 1 GB disk at `/data`, health check
+`/health`, auto-deploy on commit. Railway had sign-ups closed. A deploy makes the API unreachable for a minute or so.
 
-| Variable | Value |
-|---|---|
-| `DATA_DIR` | `/data` |
-| `RPC_URL` | Helius mainnet URL (with your key) |
-| `MONITOR_WS_URL` | Helius websocket URL |
-| `PRIVY_APP_ID` | `cmvqjognl02en0hle77o94cri` |
-| `PRIVY_APP_SECRET` | from the Privy dashboard |
-| `PRIVY_AUTHORIZATION_KEY` | from step 1.2 |
-| `PRIVY_SIGNER_ID` | the key quorum id |
-| `PRIVY_POLICY_IDS` | the policy id |
-| `AGENT_LIVE` | `false` (shadow) until the beta |
-
-4. Generate a public domain (Settings > Networking). Put that URL in `CONFIG.agentApi` in `web/index.html`.
+Variables, entered in Render only: `DATA_DIR=/data`, `RPC_URL` and `MONITOR_WS_URL` (Helius), `PRIVY_APP_ID`,
+`PRIVY_APP_SECRET`, `PRIVY_AUTHORIZATION_KEY`, `PRIVY_SIGNER_ID`, `PRIVY_POLICY_IDS`, `AGENT_LIVE=false`.
 
 ## 3. Going live
 
-1. Watch shadow results for a week or two (Railway logs, `/agent/stats`).
+**Before any real money:** replace the agent key (`PRIVY_AUTHORIZATION_KEY`). The current one was pasted into a chat
+on 2026-11-01. Make a new key in Privy, put its id in `PRIVY_SIGNER_ID`, and recreate the policy under it if it can't be
+moved. Users who approved the old key must approve the new one.
+
+1. Watch shadow results for a week or two (the Agent page's signal list, Render logs, `/agent/stats`).
 2. Beta: set `AGENT_LIVE=true`, keep the caps
    (`MAX_POSITION_SOL=1`, `MAX_POSITIONS=3`), and trade small amounts from the team's own wallets first.
 3. Raise the caps when the policy limit above is resolved.
