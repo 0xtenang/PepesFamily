@@ -23,7 +23,10 @@ import { getDeterministicCloseRule, computeBinsBelow } from "../exit-rules.js";
 import { runAs } from "../pepes/context.js";
 import { activeUsers, managedUsers, multiUser, reduceOnly } from "../pepes/users.js";
 import { recordSignal, followSignals, followLps } from "../pepes/signals.js";
-import { scan as scoutScan, follow as scoutFollow, takePendingPicks, freshScreening } from "../pepes/scout.js";
+import { scan as scoutScan, follow as scoutFollow, takePendingPicks, bestPoolSignal, markPassed, freshScreening } from "../pepes/scout.js";
+
+/** Picks from the scout have no wallets behind them. */
+const hasNoWallets = (signal) => signal.source === "scout" || signal.source === "best";
 
 /** How a signal is screened: its own pool if it names one, with the fresh lane's checks if it's a fresh pick. */
 const screenFor = (signal) => screenMint(signal.mint, {
@@ -85,7 +88,8 @@ async function pursueSignal(signal) {
   try { recordSignal(signal, screened); } catch (e) { log("signal_error", `Signal log: ${e.message}`); }
   log("signal", `${signal.mint.slice(0, 8)}: ${screened.pass ? "passed screening" : `rejected (${screened.reason})`}`);
   if (reduceOnly()) { finishSignal(store, signal, "exits only", config.standalone); return; }
-  if (signal.source === "scout") {
+  if (screened.pass) { try { markPassed(); } catch (e) { log("signal_error", `Signal log: ${e.message}`); } }
+  if (hasNoWallets(signal)) {
     // A rejected pick doesn't wait in the queue retrying: another scan comes in 5 minutes. A kept one gets its full
     // time to enter from now, however long it queued.
     if (!screened.pass) { signal.done = true; return; }
@@ -99,7 +103,7 @@ async function pursueSignal(signal) {
 
 async function pursueOne(signal, st) {
   const wallets = signal.events.map(e => `${e.wallet.slice(0, 6)}(◎${e.depositSol.toFixed(1)})`).join(", ");
-  log("signal", signal.source === "scout" ? `Scout pick ${signal.mint.slice(0, 8)}: pool ${signal.pool.slice(0, 8)}` : `Convergence on ${signal.mint.slice(0, 8)}: ${signal.events.length} wallets [${wallets}] — screening with ${config.standalone.screeningDeadlineSec}s deadline`);
+  log("signal", hasNoWallets(signal) ? `Scout pick ${signal.mint.slice(0, 8)}: pool ${signal.pool.slice(0, 8)}` : `Convergence on ${signal.mint.slice(0, 8)}: ${signal.events.length} wallets [${wallets}] — screening with ${config.standalone.screeningDeadlineSec}s deadline`);
   let lastReason = "no attempt";
   while (!shuttingDown && !signal.done && Date.now() < signal.deadline) {
     const reason = await attemptEntry(signal, st);
@@ -220,7 +224,7 @@ async function attemptEntry(signal, st) {
 // cover the entry. Returns null when everything holds, else the reason.
 async function finalRecheck(signal, screened) {
   // A scout pick has no wallets behind it to recheck; the price and funds checks below still apply.
-  if (signal.source !== "scout") {
+  if (!hasNoWallets(signal)) {
     let present = 0;
     for (const e of signal.events) {
       try { if (await exposureStillPresent(e)) present++; } catch { /* unreadable position = not confirmed */ }
@@ -410,7 +414,13 @@ export async function startStandalone() {
   if (multiUser()) {
     const scout = () => void scoutScan().then(added => {
       if (added.length) log("scout", `${added.length} new pool(s), ${added.filter(r => r.pick).length} pick(s)`);
-      for (const signal of takePendingPicks()) onSignal(signal);
+      const picks = takePendingPicks();
+      for (const signal of picks) onSignal(signal);
+      // Nothing to work with for a while: take the most rewarding pool that qualifies right now.
+      if (!picks.length && !signalQueue.length && !pursuing) {
+        const best = bestPoolSignal();
+        if (best) { log("scout", `No signal for 30 min: trying the best pool ${best.pool.slice(0, 8)}`); onSignal(best); }
+      }
     }).catch(e => log("scout_warn", e.message));
     timers.scout = setInterval(scout, 5 * 60_000);
     timers.scoutFollow = setInterval(() => { void scoutFollow().catch(e => log("scout_warn", e.message)); }, 30 * 60_000);

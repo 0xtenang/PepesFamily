@@ -83,6 +83,7 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
   const d = load();
   const following = new Map(d.pools.filter((r) => now - r.at < FOLLOW_MS).map((r) => [r.pool, r]));
   const added = [];
+  const hot = new Map(); // what qualifies right now, at this scan's fee rates (records keep their first-seen stats)
   for (const category of CATEGORIES) {
     const url = `${DISCOVERY}?${new URLSearchParams({ page_size: category === "new" ? "100" : "50", timeframe: "1h", category, filter_by: FLOOR })}`;
     const res = await fetcher(url);
@@ -93,6 +94,7 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
       if (!(price > 0)) continue;
       const f = features(p, now);
       const fresh = isFresh(p, f);
+      if (fresh || isPick(p, f)) hot.set(p.pool_address, { pool: p.pool_address, mint: p.token_x?.address, name: p.name, feeRate: f.feeRate ?? 0, fresh });
       if (seen) {
         if (!seen.cats.includes(category)) seen.cats.push(category);
         // A pool that has just turned hot counts as a new pick from here. The old record keeps following what
@@ -107,6 +109,7 @@ export async function scan(fetcher = fetchJson, now = Date.now()) {
     }
   }
   d.lastScanAt = now;
+  d.hot = [...hot.values()];
   save(d);
   return added;
 }
@@ -121,6 +124,29 @@ export function takePendingPicks(now = Date.now(), maxAgeMs = 6 * 3600_000) {
   for (const r of pending) r.tried = now;
   if (pending.length) save(d);
   return pickSignals(pending, now);
+}
+
+/** Notes that a signal just passed screening, so the fallback below can wait. */
+export function markPassed(now = Date.now()) {
+  const d = load();
+  d.lastPassAt = now;
+  save(d);
+}
+
+/**
+ * The fallback: when nothing has passed screening for `idleMs`, the qualifying pool with the best fee rate right now, as
+ * a signal. It goes through the same screening and limits; the same pool isn't tried again within `repeatMs`.
+ */
+export function bestPoolSignal(now = Date.now(), { idleMs = 30 * 60_000, repeatMs = 6 * 3600_000, deadlineSec = 120 } = {}) {
+  const d = load();
+  if (now - (d.lastPassAt ?? 0) < idleMs) return null;
+  const tried = d.bestTried ?? {};
+  const best = (d.hot ?? []).filter((p) => now - (tried[p.pool] ?? 0) >= repeatMs).sort((a, b) => b.feeRate - a.feeRate)[0];
+  if (!best) return null;
+  d.bestTried = Object.fromEntries(Object.entries(tried).filter(([, at]) => now - at < repeatMs));
+  d.bestTried[best.pool] = now;
+  save(d);
+  return { source: "best", fresh: !!best.fresh, mint: best.mint, pool: best.pool, createdAt: now, deadline: now + deadlineSec * 1000, nextCheck: now, events: [], done: false };
 }
 
 export function pickSignals(added, now = Date.now(), deadlineSec = 120) {

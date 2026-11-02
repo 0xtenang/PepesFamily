@@ -221,3 +221,21 @@ test("activity score rewards a busy pool and stays within 0-100", async () => {
   assert.equal(activityScore({ feeRate: 2.5, netDeposits: -5 }), 20);
 });
 
+test("no signal for 30 minutes: the best qualifying pool is tried, once, and it waits after a pass", async () => {
+  const { scan, bestPoolSignal, markPassed } = await import("../pepes/scout.js");
+  const fs = await import("node:fs");
+  fs.rmSync(process.env.DATA_DIR + "/scout.json", { force: true });
+  const t0 = 1_950_000_000_000, MIN = 60_000;
+  const feed = (pool, feeRate, over = {}) => ({ pool_address: pool, name: pool, pool_type: "dlmm", pool_price: 1, is_blacklisted: false, active_tvl: 5000, fee_active_tvl_ratio: feeRate,
+    dlmm_params: { bin_step: 100 }, token_y: { address: "So11111111111111111111111111111111111111112" },
+    token_x: { address: "M" + pool, market_cap: 200000, top_holders_pct: 30, created_at: t0 - 86400_000, has_mint_authority: false, has_freeze_authority: false, warnings: [], ...over } });
+  await scan(async (url) => ({ data: url.includes("category=top") ? [feed("LOW", 1), feed("HIGH", 4), feed("BEST", 90, { has_mint_authority: true }), feed("QUIET", 0.1)] : [] }), t0);
+  assert.equal(bestPoolSignal(t0).pool, "HIGH");          // highest fee rate that qualifies; the mintable one doesn't
+  assert.equal(bestPoolSignal(t0).pool, "LOW");           // HIGH was tried: the next best
+  assert.equal(bestPoolSignal(t0), null);                 // nothing else qualifies (QUIET doesn't)
+  assert.equal(bestPoolSignal(t0 + 6 * 60 * MIN).pool, "HIGH"); // tryable again after 6 hours
+  markPassed(t0 + 6 * 60 * MIN);
+  assert.equal(bestPoolSignal(t0 + 6 * 60 * MIN + 29 * MIN), null);  // something passed recently: wait
+  assert.equal(bestPoolSignal(t0 + 6 * 60 * MIN + 31 * MIN).source, "best");
+});
+
