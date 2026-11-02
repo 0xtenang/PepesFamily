@@ -4,7 +4,7 @@
 //   { id, address, walletId, owner, active, live, settings, startedAt }
 //   id        Privy user id          address   the agent wallet (Solana)   walletId  its Privy wallet id
 //   owner     their Phantom address (withdrawals and the profit fee never go anywhere else but owner / FEE_ADDRESS)
-//   active    the agent runs for them  live      false holds just this user in shadow (AGENT_LIVE gates everyone)
+//   active    the agent runs for them  live      false holds just this user in shadow (AGENT_LIVE and AGENT_LIVE_WALLETS gate everyone)
 //   settings  { risk, management, strategy } overrides of config.js (the presets on the site)
 // The site's API (pepes/server.js) adds and updates records; the runtime reads them each cycle.
 
@@ -26,8 +26,11 @@ export function saveUsers(list) {
   fs.renameSync(`${FILE()}.tmp`, FILE());
 }
 
-/** A user's trades are sent only when the agent is live (AGENT_LIVE=true) and the user hasn't been held back. */
-export const isLive = (u) => process.env.AGENT_LIVE === "true" && u.live !== false;
+/** Phantom addresses allowed to trade for real (AGENT_LIVE_WALLETS, comma separated). Empty: nobody. */
+const liveWallets = () => (process.env.AGENT_LIVE_WALLETS || "").split(",").map(s => s.trim()).filter(Boolean);
+
+/** A user's trades are sent only when the agent is live (AGENT_LIVE=true), their Phantom is listed, and they haven't been held back. */
+export const isLive = (u) => process.env.AGENT_LIVE === "true" && u.live !== false && liveWallets().includes(u.owner);
 
 /** Multi-user mode: on when PRIVY_APP_ID is set (the hosted agent); off for a single local wallet. */
 export const multiUser = () => !!process.env.PRIVY_APP_ID;

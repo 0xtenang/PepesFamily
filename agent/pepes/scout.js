@@ -175,6 +175,8 @@ export function positionLossPct(entry, lower, price) {
 }
 
 const round1 = (x) => Math.round(x * 10) / 10;
+// % per 30 minutes: above this the rate comes from near-zero active TVL, which a real position would dilute at once
+const MAX_FEE_RATE = 25;
 
 /** One follow-up: adds fees earned while in range since the last check, and records any horizon just reached. */
 export function applyCheck(r, poolNow, now = Date.now()) {
@@ -183,7 +185,7 @@ export function applyCheck(r, poolNow, now = Date.now()) {
   const inRange = price <= r.price && price >= r.lower;
   const hours = (now - r.checkedAt) / 3600_000;
   // the feed gives the fee rate per 30 minutes (timeframe below): scale to the time since the last check
-  if (inRange) r.feeSum += (num(poolNow.fee_active_tvl_ratio) ?? 0) * Math.min(hours * 2, 4);
+  if (inRange) r.feeSum += Math.min(num(poolNow.fee_active_tvl_ratio) ?? 0, MAX_FEE_RATE) * Math.min(hours * 2, 4);
   r.last = price; r.low = Math.min(r.low, price); r.checkedAt = now;
   const ageH = (now - r.at) / 3600_000;
   for (const h of HORIZONS) {

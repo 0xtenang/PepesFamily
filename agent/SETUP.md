@@ -30,7 +30,7 @@ until `AGENT_LIVE=true` is set.
       "method": "*",
       "conditions": [{ "field_source": "solana_program_instruction", "field": "programId", "operator": "in", "value": [
         "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",
-        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QAvbyto4",
+        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
         "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
         "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
         "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
@@ -80,8 +80,7 @@ key's signature (`partialSign`), and that only top-level instructions are checke
 **Done 2026-11-01:** Phantom/Solana sign-in on; agent key `gtfdxu6nd0kfmr8wjchzisnd` (`PRIVY_SIGNER_ID`);
 policy `aq37pdzg0k081xuwuwh0icqm` (`PRIVY_POLICY_IDS`), made in the dashboard form with the four rules above, all on
 `signAndSendTransaction` only (the agent never uses `*`, which would also allow exporting keys). Jupiter swaps for
-agent wallets are therefore signed and sent directly, not through Jupiter's `/execute`; check in the beta that the
-routes `/order` returns land this way (RFQ routes may need `/execute`).
+agent wallets are therefore built from Jupiter's `/build` (Metis routes, made to be sent by the wallet), not `/order` and `/execute`.
 
 ## 2. Hosting: Render (running)
 
@@ -90,7 +89,7 @@ Service `pepes-agent` (https://pepes-agent.onrender.com): Web Service from `0xte
 `/health`, auto-deploy on commit. Railway had sign-ups closed. A deploy makes the API unreachable for a minute or so.
 
 Variables, entered in Render only: `DATA_DIR=/data`, `RPC_URL` and `MONITOR_WS_URL` (Helius), `PRIVY_APP_ID`,
-`PRIVY_APP_SECRET`, `PRIVY_AUTHORIZATION_KEY`, `PRIVY_SIGNER_ID`, `PRIVY_POLICY_IDS`, `AGENT_LIVE=false`.
+`PRIVY_APP_SECRET`, `PRIVY_AUTHORIZATION_KEY`, `PRIVY_SIGNER_ID`, `PRIVY_POLICY_IDS`, `AGENT_LIVE=false`, `AGENT_LIVE_WALLETS` (Phantom addresses allowed to trade for real, comma separated; empty means nobody).
 
 **Emergency switch:** set `AGENT_REDUCE_ONLY=true` in Render (it restarts in about a minute). No new positions for anyone;
 exits, fee claims and the signal log keep running. Set `AGENT_LIVE=false` only to stop everything being sent, exits included.
@@ -98,6 +97,6 @@ exits, fee claims and the signal log keep running. Set `AGENT_LIVE=false` only t
 ## 3. Going live
 
 1. Watch shadow results for a week or two (the Agent page's signal list, Render logs, `/agent/stats`).
-2. Beta: set `AGENT_LIVE=true`, keep the caps
+2. Beta: set `AGENT_LIVE=true` and `AGENT_LIVE_WALLETS` to the test wallets, keep the caps
    (`MAX_POSITION_SOL=1`, `MAX_POSITIONS=3`), and trade small amounts from the team's own wallets first.
 3. Raise the caps when the policy limit above is resolved.

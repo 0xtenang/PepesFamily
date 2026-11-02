@@ -4,6 +4,10 @@ import {
   LAMPORTS_PER_SOL,
   VersionedTransaction,
   Keypair,
+  TransactionInstruction,
+  TransactionMessage,
+  AddressLookupTableAccount,
+  ComputeBudgetProgram,
 } from "@solana/web3.js";
 import { currentUser, isDryRun } from "../pepes/context.js";
 import { LocalSigner } from "../pepes/signer.js";
@@ -29,6 +33,45 @@ function getWallet() {
     _wallet = new LocalSigner(Keypair.fromSecretKey(bs58.decode(process.env.WALLET_PRIVATE_KEY)));
   }
   return _wallet;
+}
+
+// PepesAgent: a swap transaction from Jupiter's /build response, for wallets that send their own (see sendBuiltSwap).
+export function swapTxFromBuild(build, payer, blockhash, unitLimit) {
+  const ix = (i) => new TransactionInstruction({
+    programId: new PublicKey(i.programId),
+    keys: i.accounts.map(a => ({ pubkey: new PublicKey(a.pubkey), isSigner: a.isSigner, isWritable: a.isWritable })),
+    data: Buffer.from(i.data, "base64"),
+  });
+  const isUnitLimit = (i) => i.programId === ComputeBudgetProgram.programId.toString() && Buffer.from(i.data, "base64")[0] === 2;
+  const instructions = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: unitLimit }),
+    ...(build.computeBudgetInstructions ?? []).filter(i => !isUnitLimit(i)).map(ix),
+    ...(build.setupInstructions ?? []).map(ix),
+    ix(build.swapInstruction),
+    ...(build.cleanupInstruction ? [ix(build.cleanupInstruction)] : []),
+    ...(build.otherInstructions ?? []).map(ix),
+  ];
+  const tables = Object.entries(build.addressesByLookupTableAddress ?? {}).map(([key, addresses]) => new AddressLookupTableAccount({
+    key: new PublicKey(key),
+    state: { deactivationSlot: 2n ** 64n - 1n, lastExtendedSlot: 0, lastExtendedSlotStartIndex: 0, addresses: addresses.map(a => new PublicKey(a)) },
+  }));
+  return new VersionedTransaction(new TransactionMessage({ payerKey: payer, recentBlockhash: blockhash, instructions }).compileToV0Message(tables));
+}
+
+// /order transactions are made for Jupiter's /execute (some routes need a market maker's signature); a Privy agent
+// wallet's policy allows only signAndSendTransaction, so it swaps through /build, which is made to be sent by the wallet.
+async function sendBuiltSwap(wallet, connection, { input_mint, output_mint, amountStr, apiKey }) {
+  const search = new URLSearchParams({ inputMint: input_mint, outputMint: output_mint, amount: amountStr, taker: wallet.publicKey.toString(), slippageBps: "300" });
+  const res = await fetch(`${JUPITER_SWAP_V2_API}/build?${search}`, { headers: apiKey ? { "x-api-key": apiKey } : {} });
+  if (!res.ok) throw new Error(`Swap V2 build failed: ${res.status} ${await res.text()}`);
+  const build = await res.json();
+  if (!build.swapInstruction) throw new Error(`Swap V2 build error: ${build.error || build.errorMessage || "no route"}`);
+  const { blockhash } = await connection.getLatestBlockhash("confirmed");
+  const sim = await connection.simulateTransaction(swapTxFromBuild(build, wallet.publicKey, blockhash, 1_400_000), { sigVerify: false, replaceRecentBlockhash: true });
+  if (sim.value.err) throw new Error(`Swap simulation failed: ${JSON.stringify(sim.value.err)}`);
+  const units = Math.min(1_400_000, Math.ceil((sim.value.unitsConsumed || 1_000_000) * 1.2));
+  const sig = await wallet.sendVersioned(connection, swapTxFromBuild(build, wallet.publicKey, blockhash, units));
+  return { sig, outAmount: build.outAmount ?? null };
 }
 
 const JUPITER_PRICE_API = "https://api.jup.ag/price/v3";
@@ -118,6 +161,12 @@ export async function swapToken({
     }
     const amountStr = Math.floor(amount * Math.pow(10, decimals)).toString();
 
+    if (wallet.sendVersioned) {
+      const { sig, outAmount } = await sendBuiltSwap(wallet, connection, { input_mint, output_mint, amountStr, apiKey: getJupiterApiKey() });
+      log("swap", `SUCCESS tx: ${sig}`);
+      return { success: true, tx: sig, input_mint, output_mint, amount_in: amountStr, amount_out: outAmount };
+    }
+
     // ─── Get Swap V2 order (unsigned tx + requestId) ───────────
     const search = new URLSearchParams({
       inputMint: input_mint,
@@ -147,15 +196,6 @@ export async function swapToken({
     }
 
     const { transaction: unsignedTx, requestId } = order;
-
-    // PepesAgent: a Privy agent wallet signs and sends in one call (its policy allows only signAndSendTransaction),
-    // so its swaps skip Jupiter's /execute. Amounts out aren't reported on this path.
-    if (wallet.sendVersioned) {
-      const sig = await wallet.sendVersioned(connection, VersionedTransaction.deserialize(Buffer.from(unsignedTx, "base64")));
-      log("swap", `SUCCESS tx: ${sig}`);
-      return { success: true, tx: sig, input_mint, output_mint, amount_in: amountStr, amount_out: order.outAmount ?? null,
-        referral_account: referralParams?.referralAccount || null, referral_fee_bps_requested: referralParams?.referralFee || 0, fee_bps_applied: order.feeBps ?? null };
-    }
 
     // ─── Deserialize and sign ─────────────────────────────────
     const tx = await wallet.signVersioned(VersionedTransaction.deserialize(Buffer.from(unsignedTx, "base64")));

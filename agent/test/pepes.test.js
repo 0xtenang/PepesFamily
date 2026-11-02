@@ -244,3 +244,39 @@ test("no signal for 30 minutes: the best qualifying pool is tried, once, and it 
   assert.equal(bestPoolSignal(t0 + 6 * 60 * MIN + 31 * MIN).source, "best");
 });
 
+test("real trading needs AGENT_LIVE and a listed Phantom", async () => {
+  const { isLive } = await import("../pepes/users.js");
+  const u = { owner: "Mine" };
+  const set = (live, wallets) => { process.env.AGENT_LIVE = live; process.env.AGENT_LIVE_WALLETS = wallets; };
+  try {
+    set("true", ""); assert.equal(isLive(u), false);
+    set("true", "Other, Mine"); assert.equal(isLive(u), true);
+    assert.equal(isLive({ ...u, live: false }), false);
+    assert.equal(isLive({ owner: "Stranger" }), false);
+    set("false", "Mine"); assert.equal(isLive(u), false);
+  } finally { delete process.env.AGENT_LIVE; delete process.env.AGENT_LIVE_WALLETS; }
+});
+
+test("a /build response becomes one transaction, with our unit limit and its lookup tables", async () => {
+  const { swapTxFromBuild } = await import("../tools/wallet.js");
+  const { Keypair } = await import("@solana/web3.js");
+  const payer = Keypair.generate().publicKey, inTable = Keypair.generate().publicKey.toString(), table = Keypair.generate().publicKey.toString();
+  const JUP = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4", BUDGET = "ComputeBudget111111111111111111111111111111";
+  const tx = swapTxFromBuild({
+    computeBudgetInstructions: [
+      { programId: BUDGET, accounts: [], data: Buffer.from([2, 0, 0, 0, 0]).toString("base64") },
+      { programId: BUDGET, accounts: [], data: Buffer.from([3, 1, 0, 0, 0, 0, 0, 0, 0]).toString("base64") },
+    ],
+    setupInstructions: [],
+    swapInstruction: { programId: JUP, accounts: [{ pubkey: payer.toString(), isSigner: true, isWritable: true }, { pubkey: inTable, isSigner: false, isWritable: true }], data: "AQ==" },
+    cleanupInstruction: null,
+    otherInstructions: [],
+    addressesByLookupTableAddress: { [table]: [inTable] },
+  }, payer, Keypair.generate().publicKey.toString(), 123456);
+  const m = tx.message;
+  assert.equal(m.compiledInstructions.length, 3); // our limit, Jupiter's price, the swap: Jupiter's limit is dropped
+  assert.equal(Buffer.from(m.compiledInstructions[0].data).readUInt32LE(1), 123456);
+  assert.equal(m.staticAccountKeys[0].toString(), payer.toString());
+  assert.equal(m.addressTableLookups[0].accountKey.toString(), table);
+  assert.equal(m.compiledInstructions.filter(i => m.staticAccountKeys[i.programIdIndex].toString() === JUP).length, 1);
+});

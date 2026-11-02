@@ -24,6 +24,8 @@ export function recordSignal(signal, screened) {
   const p = screened?.pass ? screened.pool : null;
   const price = Number(p?.pool_price);
   const list = load();
+  // the same token with the same verdict within the hour is the same signal, whatever lane it came from
+  if (list.some(s => s.mint === signal.mint && s.pass === !!screened?.pass && Date.now() - s.at < 3600_000)) return;
   list.push({
     at: Date.now(), mint: signal.mint, source: signal.source ?? "wallets", wallets: signal.events.length,
     lps: signal.events.map(e => ({ wallet: e.wallet, pool: e.pool, position: e.position })),
