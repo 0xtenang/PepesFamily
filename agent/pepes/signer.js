@@ -42,7 +42,9 @@ async function privy() {
 }
 
 function authorization() {
-  const key = process.env.PRIVY_AUTHORIZATION_KEY; // base64 PKCS8, no PEM headers (Privy's format)
+  // base64 PKCS8 without PEM headers; the dashboard shows its keys as "wallet-auth:<base64>"
+  const key = (process.env.PRIVY_AUTHORIZATION_KEY || "").trim().replace(/^wallet-auth:/, "")
+    .replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
   if (!key) throw new Error("PRIVY_AUTHORIZATION_KEY not set");
   return { authorization_private_keys: [key] };
 }
