@@ -2631,6 +2631,7 @@ async function renderAdmin() {
         <div id="rcy" class="stat">Not checked yet.</div>
         <div class="row" style="margin-top:10px"><button id="rcyscan">Find expired rewards</button><button class="primary" id="rcysend" hidden></button></div>
       </div>` : ""}
+    <div id="earnadmin"></div>
     `;
   // One button for every claim: each launchpad's protocol fees (chain by chain, worth more than 5 cents), then
   // Relay's swap fees when the fee address itself is connected.
@@ -2657,6 +2658,7 @@ async function renderAdmin() {
     } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
   };
   nftAdmin($("#nftadmin"));
+  earnAdmin($("#earnadmin"));
   // v4: find wallets with expired rewards (every address that ever sent or received the token, from Blockscout)
   // and send them to the fee address with recycleMany, in batches.
   let found = [];
@@ -2805,8 +2807,14 @@ async function tokenParticipants(token, ch = CHAINS.robinhood) {
   const seen = new Set();
   let next = null;
   for (let page = 0; page < 200; page++) {
-    const r = await fetch(`${ch.blockscoutApi}/tokens/${token}/transfers` + (next ? "?" + new URLSearchParams(next) : ""),
-      { signal: AbortSignal.timeout(10000) });
+    let r;
+    // Blockscout rate-limits bursts, and a long history takes many pages: wait and ask again
+    for (let attempt = 0; attempt < 5; attempt++) {
+      r = await fetch(`${ch.blockscoutApi}/tokens/${token}/transfers` + (next ? "?" + new URLSearchParams(next) : ""),
+        { signal: AbortSignal.timeout(10000) });
+      if (r.status !== 429) break;
+      await new Promise((res) => setTimeout(res, 3000 * (attempt + 1)));
+    }
     // 404: the explorer hasn't indexed this token (no transfers it knows of); what was read so far still counts
     if (r.status === 404) break;
     if (!r.ok) throw new Error(`Blockscout answered ${r.status}`);
@@ -3273,6 +3281,89 @@ async function nftAdmin(el) {
     act("#nftopen", () => w().setMintConfig(price, !open, perTx), open ? "Mint closed" : "Mint open");
     act("#nftwd", () => w().withdrawProceeds(FEES.recipient), "Proceeds sent to the fee address");
   } catch (e) { el.innerHTML = `<div class="card" style="margin-bottom:14px"><span class="h">PEPES FAMILY NFT</span><div class="stat">Couldn't read it: ${esc(errMsg(e))}</div></div>`; }
+}
+
+const EARN_ABI = [
+  "function expiredRewardsOf(address) view returns (uint256)",
+  "function recycleMany(address[]) returns (uint256)",
+  "function buybackReserve() view returns (uint256)",
+  "function totalRecycled() view returns (uint256)",
+  "function totalPepesBurned() view returns (uint256)",
+  "function lastBuyback() view returns (uint256)",
+  "function maxBuyback() view returns (uint256)",
+  "function BUYBACK_INTERVAL() view returns (uint256)",
+  "function buybackAndBurnPepes(uint256 minPepesOut, uint256 deadline) returns (uint256)",
+];
+/// $EARN expiry: 30 days, not the launchpad tokens' 7, and the token has no owner or fee address: expired rewards can
+/// only go to its reserve, which can only buy $Pepes and burn them. Anyone may press these; the wallet only pays gas.
+async function earnAdmin(el) {
+  if (!el) return;
+  const ch = CHAINS.robinhood, card = (body) => `<div class="card" style="margin-top:14px"><span class="h">Expired $EARN rewards</span>${body}</div>`;
+  const tok = new ethers.Contract(CONFIG.earn.token, EARN_ABI, ch.reader);
+  let reserve, recycled, burned, last, cap, wait;
+  try {
+    [reserve, recycled, burned, last, cap, wait] = await Promise.all([tok.buybackReserve(), tok.totalRecycled(), tok.totalPepesBurned(), tok.lastBuyback(), tok.maxBuyback(), tok.BUYBACK_INTERVAL()]);
+  } catch (e) { el.innerHTML = card(`<div class="stat">Couldn't read it: ${esc(errMsg(e))}</div>`); return; }
+  const next = Number(last + wait) - Date.now() / 1000;
+  const spend = reserve < cap ? reserve : cap;
+  el.innerHTML = card(`
+    <p class="stat" style="margin:0 0 10px">Rewards of wallets inactive for more than 30 days (no claim or send, and no whole $EARN received), except what they earned in those 30 days. They can't go to the fee address: they can only move to the token's reserve, which buys $Pepes and burns them, at most once an hour and up to 2% of the $Pepes pool's IMD per burn. Until they're moved, a returning holder can still claim them.</p>
+    <div class="stat" style="margin-bottom:10px">In the reserve: ${usd(reserve, CONFIG.imd)} (${fmt(reserve, 6)} IMD) · moved so far: ${fmt(recycled, 6)} IMD · burned so far: ${fmt(burned, 2)} $Pepes</div>
+    <div id="ern" class="stat">Not checked yet.</div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px"><button id="ernscan">Find expired $EARN rewards</button><button class="primary" id="ernsend" hidden></button>
+      <button class="primary" id="ernburn" ${reserve === 0n || next > 0 ? "disabled" : ""}>${reserve === 0n ? "Nothing to burn yet" : next > 0 ? `Next burn in ${dur(next)}` : `Burn: buy $Pepes with ${fmt(spend, 6)} IMD`}</button></div>`);
+  let hits = [];
+  $("#ernscan").onclick = async () => {
+    const b = $("#ernscan");
+    b.disabled = true; $("#ernsend").hidden = true;
+    try {
+      $("#ern").textContent = "Reading the holders…";
+      const who = await tokenParticipants(CONFIG.earn.token, ch);
+      hits = [];
+      let unread = 0; // a failed read must not pass for "nothing expired"
+      for (let k = 0; k < who.length; k += 25) {
+        $("#ern").textContent = `Checking wallets (${Math.min(k + 25, who.length)} of ${who.length})…`;
+        const part = who.slice(k, k + 25);
+        const ex = await Promise.all(part.map((a) => tok.expiredRewardsOf(a).catch(() => { unread++; return 0n; })));
+        part.forEach((a, j) => { if (ex[j] > 0n) hits.push({ a, ex: ex[j] }); });
+      }
+      const total = hits.reduce((s, h) => s + h.ex, 0n);
+      $("#ern").textContent = hits.length ? `${hits.length} wallet${hits.length === 1 ? "" : "s"} with ${fmt(total, 6)} IMD expired (${usd(total, CONFIG.imd)}).` : `No expired rewards right now (${who.length} wallets checked).`;
+      if (unread) $("#ern").textContent += ` ${unread} wallet${unread === 1 ? "" : "s"} couldn't be read: check again.`;
+      if (hits.length) {
+        const txs = Math.ceil(hits.length / 50);
+        $("#ernsend").textContent = `Move them to the burn reserve${txs > 1 ? ` (${txs} transactions)` : ""}`;
+        $("#ernsend").hidden = false;
+      }
+    } catch (e) { $("#ern").textContent = "Couldn't check: " + errMsg(e); }
+    b.disabled = false;
+  };
+  $("#ernsend").onclick = async () => {
+    $("#ernsend").disabled = true;
+    let moved = 0;
+    try {
+      await requireWallet(ch);
+      const w = new ethers.Contract(CONFIG.earn.token, EARN_ABI, signer);
+      for (let k = 0; k < hits.length; k += 50) {
+        toast("Confirm moving the expired $EARN rewards in your wallet…", 8000);
+        await (await w.recycleMany(hits.slice(k, k + 50).map((h) => h.a))).wait();
+        moved++;
+      }
+      toast("Expired $EARN rewards moved to the burn reserve", 6000);
+      earnAdmin(el);
+    } catch (e) { toast((moved ? "Some were moved before stopping. " : "") + errMsg(e), 7000); $("#ernsend").disabled = false; }
+  };
+  $("#ernburn").onclick = async () => {
+    $("#ernburn").disabled = true;
+    try {
+      await requireWallet(ch);
+      toast("Confirm the $Pepes burn in your wallet…", 10000);
+      // minPepesOut 0, as the contract documents: the 2% cap and the hourly limit are its guard against sandwiching
+      await (await new ethers.Contract(CONFIG.earn.token, EARN_ABI, signer).buybackAndBurnPepes(0, Math.floor(Date.now() / 1000) + 1200)).wait();
+      toast("$Pepes bought and burned", 6000);
+      earnAdmin(el);
+    } catch (e) { toast(errMsg(e), 8000); $("#ernburn").disabled = false; }
+  };
 }
 
 async function renderMint() {
