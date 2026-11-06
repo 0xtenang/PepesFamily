@@ -2689,8 +2689,8 @@ async function renderAdmin() {
             <tr><td><a href="#/t/${f.t.token}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} ${qsym(f.t.quote)}</div></td></tr>`).join("")}</tbody></table></div>`
         : "No expired rewards right now.") + skipNote;
       if (found.length) {
-        const txs = found.reduce((n, f) => n + Math.ceil(f.hits.length / 50), 0);
-        $("#rcysend").textContent = `Send the expired rewards to the fee address${txs > 1 ? ` (${txs} transactions)` : ""}`;
+        const chains = new Set(found.map((f) => f.P.ch.key)).size;
+        $("#rcysend").textContent = `Send the expired rewards to the fee address${chains > 1 ? ` (one confirmation per chain, ${chains} chains)` : ""}`;
         $("#rcysend").hidden = false;
       }
     } catch (e) { $("#rcy").textContent = "Couldn't check: " + errMsg(e); }
@@ -2699,22 +2699,16 @@ async function renderAdmin() {
   if ($("#rcysend")) $("#rcysend").onclick = async () => {
     const b = $("#rcysend");
     b.disabled = true;
-    let sent = 0n;
+    // recycleMany can be sent by anyone, so every batch on a chain goes in one confirmation (a wallet batch, else
+    // Multicall3): one per chain instead of one per token and 50 wallets
+    const TOKI = new ethers.Interface(TOKEN_ABI);
+    const calls = found.flatMap((f) => Array.from({ length: Math.ceil(f.hits.length / 50) }, (_, i) => ({ ch: f.P.ch,
+      label: `$${f.t.symbol}`, to: f.t.token, data: TOKI.encodeFunctionData("recycleMany", [f.hits.slice(i * 50, i * 50 + 50).map((h) => h.a)]) })));
     try {
-      for (const f of found) {
-        await requireWallet(f.P.ch);
-        const tok = new ethers.Contract(f.t.token, TOKEN_ABI, signer);
-        for (let k = 0; k < f.hits.length; k += 50) {
-          toast(`Confirm sending $${f.t.symbol} expired rewards in your wallet…`, 8000);
-          const tx = await tok.recycleMany(f.hits.slice(k, k + 50).map((h) => h.a));
-          toast("Sending…", 15000);
-          await tx.wait();
-          sent += f.hits.slice(k, k + 50).reduce((s, h) => s + h.ex, 0n);
-        }
-      }
-      toast("Expired rewards sent to the fee address");
+      const r = await sendAll(calls, (m2) => toast(m2, 30000), { anyone: true });
+      toast(r.failed.length ? `Sent ${r.done}. Not sent: ${r.failed.join("; ")}` : "Expired rewards sent to the fee address", r.failed.length ? 12000 : 6000);
       renderAdmin();
-    } catch (e) { toast((sent ? "Some were sent before stopping. " : "") + errMsg(e), 7000); b.disabled = false; }
+    } catch (e) { toast(errMsg(e), 7000); b.disabled = false; }
   };
   // Pay out all: flush() on the launchpad sends its pending holder fees and distributes them; when only quote already
   // sitting in the token is left, distribute() on the token does it. Sent from a wallet transaction, outside any
@@ -3331,8 +3325,7 @@ async function earnAdmin(el) {
       $("#ern").textContent = hits.length ? `${hits.length} wallet${hits.length === 1 ? "" : "s"} with ${fmt(total, 6)} IMD expired (${usd(total, CONFIG.imd)}).` : `No expired rewards right now (${who.length} wallets checked).`;
       if (unread) $("#ern").textContent += ` ${unread} wallet${unread === 1 ? "" : "s"} couldn't be read: check again.`;
       if (hits.length) {
-        const txs = Math.ceil(hits.length / 50);
-        $("#ernsend").textContent = `Move them to the burn reserve${txs > 1 ? ` (${txs} transactions)` : ""}`;
+        $("#ernsend").textContent = "Move them to the burn reserve";
         $("#ernsend").hidden = false;
       }
     } catch (e) { $("#ern").textContent = "Couldn't check: " + errMsg(e); }
@@ -3340,18 +3333,15 @@ async function earnAdmin(el) {
   };
   $("#ernsend").onclick = async () => {
     $("#ernsend").disabled = true;
-    let moved = 0;
+    // batches of 50 wallets, all in one confirmation (a wallet batch, else Multicall3: recycleMany is open to anyone)
+    const I = new ethers.Interface(EARN_ABI);
+    const calls = Array.from({ length: Math.ceil(hits.length / 50) }, (_, i) => ({ ch, label: `wallets ${i * 50 + 1}-${Math.min(i * 50 + 50, hits.length)}`,
+      to: CONFIG.earn.token, data: I.encodeFunctionData("recycleMany", [hits.slice(i * 50, i * 50 + 50).map((h) => h.a)]) }));
     try {
-      await requireWallet(ch);
-      const w = new ethers.Contract(CONFIG.earn.token, EARN_ABI, signer);
-      for (let k = 0; k < hits.length; k += 50) {
-        toast("Confirm moving the expired $EARN rewards in your wallet…", 8000);
-        await (await w.recycleMany(hits.slice(k, k + 50).map((h) => h.a))).wait();
-        moved++;
-      }
-      toast("Expired $EARN rewards moved to the burn reserve", 6000);
+      const r = await sendAll(calls, (m2) => toast(m2, 30000), { anyone: true });
+      toast(r.failed.length ? `Moved ${r.done}. Not moved: ${r.failed.join("; ")}` : "Expired $EARN rewards moved to the burn reserve", r.failed.length ? 12000 : 6000);
       earnAdmin(el);
-    } catch (e) { toast((moved ? "Some were moved before stopping. " : "") + errMsg(e), 7000); $("#ernsend").disabled = false; }
+    } catch (e) { toast(errMsg(e), 7000); $("#ernsend").disabled = false; }
   };
   $("#ernburn").onclick = async () => {
     $("#ernburn").disabled = true;
