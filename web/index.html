@@ -256,6 +256,21 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .lrow .act { justify-self: end; min-height: 32px; padding: 5px 16px; border: 1px solid var(--control); border-radius: 999px; font-size: 13px; font-weight: 500; }
 .lrow:hover .act { background: #fff; color: #000; border-color: #fff; }
 .more { display: flex; justify-content: center; padding: 10px; }
+/* Holder rewards page */
+.hrk .v.big { font-size: 34px; line-height: 42px; font-weight: 700; color: var(--positive); }
+.hrtop { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); }
+.hrtop .tc { position: relative; }
+.hrtop .tc.first { box-shadow: inset 0 0 0 1px #c9a227; background: linear-gradient(160deg, rgba(201,162,39,.16), var(--surface) 60%); }
+.hrtop .rank { position: absolute; top: 16px; right: 18px; font-weight: 700; color: var(--muted); }
+.hrtop .tc.first .rank { color: #e0b83a; }
+.hrtop .earn { font-size: 26px; line-height: 32px; font-weight: 700; color: var(--positive); }
+.hrtop .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.hrrow, .hrhead { grid-template-columns: 26px 48px minmax(0, 1fr) 150px 120px 104px 80px; }
+@media (max-width: 1300px) { .hrtop { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hrtop > :nth-child(n+4) { display: none; } }
+@media (max-width: 700px) {
+  .hrtop { grid-template-columns: 1fr 1fr; } .hrtop > :nth-child(n+3) { display: none; }
+  .hrrow .wait, .hrrow .hold { display: none; }
+}
 @media (max-width: 700px) {
   .thead { display: none; }
   .lrow { grid-template-columns: 44px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 2px; min-height: 68px; padding: 10px 16px; }
@@ -404,7 +419,7 @@ td.n, th.n { text-align: right; }
 <a class="skip" href="#app">Skip to content</a>
 <aside class="side" aria-label="PepesFamily">
   <a class="brand" href="#/"><img class="logo" src="/pepes-logo.gif" alt="" width="32" height="32" /><span>PepesFamily</span></a>
-  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/bridge" data-r="/bridge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17v-4M19 17v-4M12 17V9"/><path d="M3 13c3-5 6-6 9-6s6 1 9 6"/></svg><span>Bridge</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
+  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/holder-rewards" data-r="/holder-rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v4a4 4 0 0 1-8 0z"/><path d="M8 5H5v1a3 3 0 0 0 3 3M16 5h3v1a3 3 0 0 1-3 3M12 12v4M9 16h6v4H9z"/></svg><span>Holder rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/bridge" data-r="/bridge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17v-4M19 17v-4M12 17V9"/><path d="M3 13c3-5 6-6 9-6s6 1 9 6"/></svg><span>Bridge</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
   <div class="glabel">Networks</div>
   <div id="netlist"></div>
   <div class="foot">
@@ -1165,6 +1180,92 @@ async function renderBridge() {
   };
 }
 
+// ---------------------------------------------------------------- Holder rewards
+/// Every PepesFamily token's holder rewards since its launch: paid out to holders (totalDividendsDistributed: claimed,
+/// waiting to be claimed, or expired and recycled) plus fees on their way (pendingHolderFees), in its pair asset,
+/// valued at today's prices. Waiting to be claimed = the token's accountedBalance (from the feed) + pending.
+async function renderHolderRewards() {
+  const app = $("#app"), gen = routeGen;
+  const bar = (w, h) => `<div class="skel" style="height:${h}px;width:${w}"></div>`;
+  app.innerHTML = `
+    <div class="hero"><div><h1>Holder rewards</h1>
+      <p>Every PepesFamily token pays its holders a share of every trade, in its pair asset, automatically. These are the rewards generated for holders since day one.</p></div>
+      <span class="spacer"></span><a class="btn primary" href="#/create">Launch a token</a></div>
+    <div class="kpis hrk" id="hrk">${`<div>${bar("50%", 13)}<div style="height:10px"></div>${bar("70%", 34)}</div>`.repeat(4)}</div>
+    <div class="hsec"><h2>Top paying tokens</h2><span class="stat">the tokens that have paid their holders the most</span></div>
+    <div class="hrtop" id="hrtop">${`<div class="tc">${bar("60%", 16)}${bar("80%", 28)}</div>`.repeat(5)}</div>
+    <div class="hsec"><h2>All tokens</h2><span class="stat" id="hrcount"></span></div>
+    <section class="card listcard">
+      <div class="tools"><div class="seg" id="hrsort"></div><div class="seg" id="hrq"></div><div class="seg" id="hrch"></div></div>
+      <div id="hrlist">${`<div class="lrow"><span></span><div class="avatar"></div>${bar("40%", 14)}</div>`.repeat(6)}</div>
+    </section>`;
+  let list, f;
+  try { [list, f] = await Promise.all([allTokenInfos(), feed()]); }
+  catch (e) { if (gen === routeGen) $("#hrlist").innerHTML = `<div class="empty">Couldn't read the launchpads: ${esc(errMsg(e))}</div>`; return; }
+  if (gen !== routeGen) return;
+  const unc = f && feedFresh(f, 600_000) ? f.unclaimed || {} : null;
+  const rows = list.filter(({ t }) => isListed(t)).map(({ t, P }) => {
+    const earned = t.totalDividendsDistributed + t.pendingHolderFees, k = tokKey(P.ch, t.token);
+    const waiting = unc && unc[k] != null ? unc[k] + t.pendingHolderFees : null;
+    return { t, P, ch: P.ch, earned, waiting, usd: toUsdNum(earned, t.quote), waitUsd: waiting == null ? null : toUsdNum(waiting, t.quote),
+      mc: toUsdNum(t.marketCap, t.quote), created: Number(t.createdAt), sym: qsym(t.quote), href: tokHref(t.token, P.ch) };
+  });
+  const paying = rows.filter((r) => r.earned > 0n);
+  const total = rows.reduce((s, r) => s + r.usd, 0);
+  const known = rows.every((r) => r.waitUsd != null);
+  const waitTotal = known ? rows.reduce((s, r) => s + r.waitUsd, 0) : null;
+  // per pair asset, largest first: "1.24 ETH · 38.6 HYPE · …"
+  const bySym = {};
+  for (const r of paying) (bySym[r.sym] ||= { w: 0n, usd: 0 }), (bySym[r.sym].w += r.earned), (bySym[r.sym].usd += r.usd);
+  const assets = Object.entries(bySym).filter(([, v]) => v.usd >= 0.01).sort((a, b) => b[1].usd - a[1].usd).map(([sym, v]) => `${fmt(v.w, 4)} ${sym}`).join(" · ");
+  $("#hrk").innerHTML = `
+    <div><div class="k">Holder rewards since day one</div><div class="v big">${fmtUsd(total)}</div><div class="s" title="${esc(assets)}">${esc(assets) || "at today's prices"}</div></div>
+    <div><div class="k">Claimed by holders</div><div class="v">${waitTotal == null ? "—" : fmtUsd(Math.max(0, total - waitTotal))}</div><div class="s">already in holders' wallets</div></div>
+    <div><div class="k">Waiting to be claimed</div><div class="v">${waitTotal == null ? "—" : fmtUsd(waitTotal)}</div><div class="s"><a href="#/rewards" style="text-decoration:underline">Claim yours on Rewards</a></div></div>
+    <div><div class="k">Tokens paying holders</div><div class="v">${paying.length}</div><div class="s">on ${new Set(paying.map((r) => r.ch.key)).size} chains · at today's prices</div></div>`;
+  const top = [...paying].sort((a, b) => b.usd - a.usd).slice(0, 5);
+  $("#hrtop").innerHTML = top.map((r, i) => `<a class="tc${i === 0 ? " first" : ""}" href="${r.href}"><span class="rank">${i === 0 ? "👑 " : ""}${i + 1}</span>
+      <div class="head">${avatar(r.t)}<div style="min-width:0"><div class="nm">${esc(r.t.name)}</div><div class="meta">$${esc(r.t.symbol)} · ${chainAv(r.ch)}${esc(r.ch.short)}${r.created ? " · " + ago(r.created) : ""}</div></div></div>
+      <div><div class="lbl">Holder rewards</div><div class="earn">${fmtUsd(r.usd)}</div><div class="meta">${fmt(r.earned, 4)} ${esc(r.sym)} · market cap ${r.mc ? fmtUsd(r.mc) : "—"}</div></div></a>`).join("")
+    || `<div class="card empty" style="grid-column:1/-1">No token has paid its holders yet.</div>`;
+  // the table: sort, pair asset, chain
+  let sort = "usd", q = "all", chk = "all";
+  const syms = [...new Set(rows.map((r) => r.sym))], chains = chainsFirst([...new Set(rows.map((r) => r.ch))]);
+  const holders = new Map(); // "<chain>:<token>" -> holder count (Blockscout, where the chain has it)
+  const seg = (el, opts, cur, set) => {
+    $(el).innerHTML = opts.map(([v, l]) => `<button type="button" data-v="${esc(v)}" class="${v === cur ? "on" : ""}">${l}</button>`).join("");
+    $(el).querySelectorAll("button").forEach((b) => (b.onclick = () => { set(b.dataset.v); draw(); }));
+  };
+  const draw = () => {
+    if (gen !== routeGen || !$("#hrlist")) return;
+    seg("#hrsort", [["usd", "Holder rewards"], ["mc", "Market cap"], ["new", "Newest"]], sort, (v) => (sort = v));
+    seg("#hrq", [["all", "Any pair"], ...syms.map((x) => [x, esc(x)])], q, (v) => (q = v));
+    seg("#hrch", [["all", "All chains"], ...chains.map((c) => [c.key, chainAv(c) + esc(c.short)])], chk, (v) => (chk = v));
+    const shown = rows.filter((r) => (q === "all" || r.sym === q) && (chk === "all" || r.ch.key === chk))
+      .sort((a, b) => (sort === "mc" ? b.mc - a.mc : sort === "new" ? b.created - a.created : b.usd - a.usd || b.mc - a.mc));
+    $("#hrcount").textContent = `${shown.length} token${shown.length === 1 ? "" : "s"}`;
+    $("#hrlist").innerHTML = `<div class="thead hrhead"><span class="n">#</span><span></span><span>Token</span><span>Holder rewards</span><span>Waiting to claim</span><span>Market cap</span><span>Holders</span></div>`
+      + (shown.map((r, i) => `<a class="lrow hrrow" href="${r.href}"><span class="rk">${i + 1}</span>${avatar(r.t)}
+          <div class="tn" style="min-width:0"><div class="nm"><b>${esc(r.t.name)}</b></div><div class="sub">$${esc(r.t.symbol)} · ${chainAv(r.ch)}${esc(r.ch.short)}${r.created ? " · " + ago(r.created) : ""}</div></div>
+          <span class="r"><b style="color:var(--positive)">${fmtUsd(r.usd)}</b><div class="sub">${fmt(r.earned, 4)} ${esc(r.sym)}</div></span>
+          <span class="r wait dim">${r.waitUsd == null ? "—" : fmtUsd(r.waitUsd)}</span>
+          <span class="r">${r.mc ? fmtUsd(r.mc) : "—"}</span>
+          <span class="r hold dim" data-h="${tokKey(r.ch, r.t.token)}">${holders.get(tokKey(r.ch, r.t.token)) ?? "—"}</span></a>`).join("")
+        || `<div class="empty">No token matches.</div>`);
+    // holder counts for the first rows, from the chain's explorer where it has one
+    for (const r of shown.slice(0, 25)) {
+      const k = tokKey(r.ch, r.t.token);
+      if (holders.has(k) || !r.ch.blockscoutApi) continue;
+      holders.set(k, "…");
+      fetch(`${r.ch.blockscoutApi}/tokens/${r.t.token}/counters`, { signal: AbortSignal.timeout(8000) }).then((x) => x.json())
+        .then((j) => { const n = Number(j.token_holders_count); holders.set(k, n >= 0 ? n.toLocaleString("en-US") : "—"); })
+        .catch(() => holders.set(k, "—"))
+        .finally(() => { const el = gen === routeGen && document.querySelector(`[data-h="${k}"]`); if (el) el.textContent = holders.get(k); });
+    }
+  };
+  draw();
+}
+
 // ---------------------------------------------------------------- USD prices
 const STATEVIEW_ABI = ["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"];
 const prices = { ethUsd: 0, imdEth: 0, pepeEth: 0, cashcatEth: 0, hypeUsd: 0, bnbUsd: 0 };
@@ -1732,7 +1833,7 @@ window.addEventListener("hashchange", route);
 const sec = (n, title, extra = "") => `<div class="hsec"><h2>${esc(title)}</h2>${extra}</div>`;
 
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
-const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/bridge": "Bridge to Elysium", "/admin": "Admin" };
+const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/bridge": "Bridge to Elysium", "/holder-rewards": "Holder rewards", "/admin": "Admin" };
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
@@ -1749,6 +1850,7 @@ function route() {
   if (h === "/admin") return renderAdmin();
   if (h === "/mint") return renderMint();
   if (h === "/bridge") return renderBridge();
+  if (h === "/holder-rewards") return renderHolderRewards();
   if (h.startsWith("/rewards")) return renderRewards(h.slice(9) || null);
   return renderHome();
 }

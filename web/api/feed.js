@@ -8,6 +8,8 @@
 //              (only where the explorer answers a server: Robinhood's and Base's Blockscout refuse servers, and free
 //              RPCs serve no 24 h of logs, so the page reads those launchpads' history itself, in the background)
 //     prices   the same USD prices the page computes (ETH, IMD/ETH, PEPE/ETH, CASHCAT/ETH, HYPE, BNB)
+//     unclaimed "<chain>:<token>" -> holder rewards paid out but not claimed yet (the token's accountedBalance), for
+//              the Holder rewards page (earned since launch = claimed + this + still pending)
 // Big numbers travel as {"$n": "<decimal>"}. The launchpad list is the page's own CONFIG.pads, read from the deployed
 // index.html, so it never needs a second copy here. Cached 30 s at the edge, served stale while it refreshes.
 
@@ -30,6 +32,7 @@ const PAD = new ethers.Interface([
   `function getTokens(uint256 offset, uint256 limit) view returns (${INFO_T}[])`,
   "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 quoteAmount, uint256 tokenAmount, uint256 fee, uint160 sqrtPriceX96)",
 ]);
+const TOKEN = new ethers.Interface(["function accountedBalance() view returns (uint256)"]);
 const SV = new ethers.Interface(["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"]);
 const STATE_VIEW = { robinhood: "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b", ethereum: "0x7ffe42c4a5deea5b0fec41c94c136cf115597227" };
 const POOLS = {
@@ -124,7 +127,7 @@ async function prices() {
 async function build(origin) {
   const pads = await padList(origin);
   const key = (p) => `${p.chain}:${p.pad.toLowerCase()}`;
-  const live = {}, tokens = {}, market = {}, remotes = [];
+  const live = {}, tokens = {}, market = {}, remotes = [], unclaimed = {};
   await Promise.all([
     ...pads.map(async (p) => {
       try {
@@ -132,14 +135,18 @@ async function build(origin) {
         live[key(p)] = [a, b];
         if (!a) return;
         await Promise.all([
-          tokensOf(p).then((t) => (tokens[key(p)] = t)).catch(() => {}),
+          tokensOf(p).then(async (t) => {
+            tokens[key(p)] = t;
+            await Promise.all(t.map((x) => call(p.chain, x.token, TOKEN, "accountedBalance")
+              .then((v) => (unclaimed[`${p.chain}:${x.token.toLowerCase()}`] = v)).catch(() => {})));
+          }).catch(() => {}),
           CHAINS[p.chain].blockscout ? marketOf(p).then((m) => (market[key(p)] = m)).catch(() => {}) : null,
         ]);
       } catch {} // unknown: the page checks this launchpad itself
     }),
     ...Object.entries(CHAINS).filter(([, c]) => c.remote).map(([k, c]) => hasCode(k, c.remote).then((y) => y && remotes.push(k)).catch(() => {})),
   ]);
-  return { at: Date.now(), live, remotes, tokens, market, prices: await prices() };
+  return { at: Date.now(), live, remotes, tokens, market, unclaimed, prices: await prices() };
 }
 
 const ORIGINS = ["https://pepesdotfamily.fun", "https://www.pepesdotfamily.fun", "https://pepesfamily.vercel.app"];
