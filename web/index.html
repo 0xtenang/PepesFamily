@@ -401,7 +401,7 @@ td.n, th.n { text-align: right; }
 <a class="skip" href="#app">Skip to content</a>
 <aside class="side" aria-label="PepesFamily">
   <a class="brand" href="#/"><img class="logo" src="/pepes-logo.gif" alt="" width="32" height="32" /><span>PepesFamily</span></a>
-  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
+  <nav class="navs" id="nav" aria-label="Pages"><a href="#/" data-r="/"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg><span>Discover</span></a><a href="#/create" data-r="/create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 2.5 4.5 6 4 10l-2 3h-4l-2-3c-.5-4 1-7.5 4-10z"/><circle cx="12" cy="9.5" r="1.6"/><path d="M8 13l-3 3 3 1M16 13l3 3-3 1M11 19.5l1 1.5 1-1.5"/></svg><span>Launch</span></a><a href="#/rewards" data-r="/rewards"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></svg><span>Rewards</span></a><a href="#/mint" data-r="/mint"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 15l2.5-3 2 2 2.5-3.5"/><circle cx="9" cy="9" r="1.2"/></svg><span>Mint</span></a><a href="#/bridge" data-r="/bridge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17h18M5 17v-4M19 17v-4M12 17V9"/><path d="M3 13c3-5 6-6 9-6s6 1 9 6"/></svg><span>Bridge</span></a><a href="#/admin" data-r="/admin" id="adminlink" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg><span>Admin</span></a></nav>
   <div class="glabel">Networks</div>
   <div id="netlist"></div>
   <div class="foot">
@@ -750,6 +750,7 @@ const BACKUP_RPC = {
   base: "https://mainnet.base.org",
   hyperevm: "https://hyperliquid.drpc.org",
   bsc: "https://bsc-dataseed.bnbchain.org",
+  elysium: "https://rpc.volta.family",
 };
 for (const ch of Object.values(CHAINS)) {
   // one read per request: free RPCs refuse a whole batch when one read in it is too old for them (PublicNode's BSC
@@ -1023,6 +1024,106 @@ async function gasDropFor(dest) {
   const want = ethers.parseEther(GAS_DROP[dest.key] || "0");
   if (!want || !account) return want;
   try { return (await dest.reader.getBalance(account)) < want ? want : 0n; } catch { return want; }
+}
+
+// ---------------------------------------------------------------- Bridge to Elysium
+/// Elysium's rollup inbox on HyperEVM (Arbitrum Nitro; HYPE is the native coin on both sides). A retryable ticket
+/// names the Elysium address that receives the HYPE, so it reaches the user's own address whoever sends it: the user
+/// from HyperEVM, or Relay's solver for a payment made on another chain (contracts/test/ElysiumBridge.fork.t.sol).
+const ELYSIUM_INBOX = "0xce59f8B65ad41C9DAE4c07A0571a39824bD92cff";
+const INBOX_IFACE = new ethers.Interface([
+  "function calculateRetryableSubmissionFee(uint256 dataLength, uint256 baseFee) view returns (uint256)",
+  "function createRetryableTicket(address to, uint256 l2CallValue, uint256 maxSubmissionCost, address excessFeeRefundAddress, address callValueRefundAddress, uint256 gasLimit, uint256 maxFeePerGas, bytes data) payable returns (uint256)",
+]);
+/// The HyperEVM call that delivers `amount` HYPE to `to` on Elysium, and the HYPE it takes: `amount` plus Elysium's
+/// fees (about 0.0001 HYPE; what isn't used is refunded to `to` on Elysium).
+async function elysiumTicket(to, amount) {
+  const hyper = CHAINS.hyperevm;
+  const [blk, elyGas] = await Promise.all([hyper.reader.getBlock("latest"), CHAINS.elysium.reader.send("eth_gasPrice", []).then(BigInt).catch(() => 0n)]);
+  // 4x today's submission fee and 3x Elysium's gas price (at least 1 gwei): room for fees to rise before it runs
+  const sub = (await new ethers.Contract(ELYSIUM_INBOX, INBOX_IFACE, hyper.reader).calculateRetryableSubmissionFee(0, blk.baseFeePerGas || 0n)) * 4n + 1n;
+  const gasLimit = 100_000n, maxFee = elyGas * 3n > 10n ** 9n ? elyGas * 3n : 10n ** 9n;
+  return { to: ELYSIUM_INBOX, value: amount + sub + gasLimit * maxFee,
+    data: INBOX_IFACE.encodeFunctionData("createRetryableTicket", [to, amount, sub, to, to, gasLimit, maxFee, "0x"]) };
+}
+
+async function renderBridge() {
+  const app = $("#app"), gen = routeGen, hyper = CHAINS.hyperevm, ely = CHAINS.elysium;
+  const opts = payOptions(hyper); // other chains' coins: Relay delivers them as HYPE on HyperEVM, into the inbox
+  app.innerHTML = `
+    <div class="hero"><div><h1>Bridge to Elysium</h1>
+      <p>Bring HYPE to Elysium, where its tokens launch and trade: from HyperEVM through Elysium's own rollup inbox, or from another chain's coin through Relay. It arrives at your own address in about a minute.</p></div></div>
+    <div class="card" style="max-width:520px">
+      <label for="bfrom" style="margin-top:0">Pay with</label>
+      <select id="bfrom"><option value="">HYPE on HyperEVM (no bridge fee)</option>${opts.map((o) => `<option value="${esc(o.id)}">${esc(o.sym)} on ${esc(o.ch.short)}</option>`).join("")}</select>
+      <label for="bamt">HYPE to receive on Elysium</label>
+      <input id="bamt" inputmode="decimal" placeholder="0.0" autocomplete="off" />
+      <div class="quick" id="bquick">${["0.5", "1", "5", "10"].map((v) => `<button type="button" data-v="${v}">${v}</button>`).join("")}</div>
+      <div class="stat" id="bbal" style="margin-top:8px"></div>
+      <div class="preview" id="bpv">&nbsp;</div>
+      <button class="primary full" id="bgo" style="margin-top:6px">${account ? "Bridge to Elysium" : "Connect wallet"}</button>
+      <p class="stat" style="margin:12px 0 0">From HyperEVM you pay only Elysium's own fee (about 0.0001 HYPE, the unused part refunded on Elysium). From another chain Relay converts your coin to HYPE first, for its fee plus 0.5%. Going back to HyperEVM isn't on this page: Elysium withdrawals take 6 to 7 days.</p>
+    </div>`;
+  const amount = () => { try { const v = ethers.parseEther(($("#bamt").value || "").trim() || "0"); return v > 0n ? v : 0n; } catch { return 0n; } };
+  const balances = async () => {
+    if (!account) return;
+    const [e, h] = await Promise.all([ely.reader.getBalance(account).catch(() => null), hyper.reader.getBalance(account).catch(() => null)]);
+    if (gen !== routeGen) return;
+    $("#bbal").textContent = [e !== null && `On Elysium: ${fmt(e, 4)} HYPE`, h !== null && `on HyperEVM: ${fmt(h, 4)} HYPE`].filter(Boolean).join(" · ");
+  };
+  balances();
+  let seq = 0;
+  const preview = async () => {
+    const my = ++seq, amt = amount(), o = payOptionById(hyper, $("#bfrom").value);
+    if (!amt) return ($("#bpv").innerHTML = "&nbsp;");
+    try {
+      const t = await elysiumTicket(account || ZERO_ADDR, amt);
+      if (!o) { if (my === seq) $("#bpv").textContent = `You send ${fmt(t.value, 6)} HYPE on HyperEVM · ~1 min`; return; }
+      $("#bpv").textContent = "Getting a price…";
+      const q = await relayApi("quote/v2", { user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
+        originChainId: o.ch.chainId, destinationChainId: hyper.chainId, originCurrency: o.addr, destinationCurrency: ZERO_ADDR,
+        amount: t.value.toString(), tradeType: "EXACT_OUTPUT", appFees: appFees(FEES.xcBps), txs: [{ to: t.to, value: t.value.toString(), data: t.data }] });
+      if (my === seq) $("#bpv").innerHTML = xcSummary(q);
+    } catch (e) { if (my === seq) $("#bpv").textContent = errMsg(e); }
+  };
+  let timer = null;
+  $("#bamt").oninput = () => { clearTimeout(timer); timer = setTimeout(preview, 400); };
+  $("#bfrom").onchange = preview;
+  $("#bquick").querySelectorAll("button").forEach((b) => (b.onclick = () => { $("#bamt").value = b.dataset.v; preview(); }));
+  $("#bgo").onclick = async () => {
+    const b = $("#bgo");
+    if (!account) { await connect(hyper).catch((e) => toast(errMsg(e), 6000)); if (account && gen === routeGen) renderBridge(); return; }
+    const amt = amount(), o = payOptionById(hyper, $("#bfrom").value);
+    if (!amt) return toast("Enter how much HYPE to bring to Elysium");
+    b.disabled = true;
+    const status = (m) => (b.textContent = m);
+    try {
+      const before = await ely.reader.getBalance(account).catch(() => null);
+      const t = await elysiumTicket(account, amt);
+      if (!o) {
+        await requireWallet(hyper);
+        status("Confirm in your wallet…");
+        const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: t.to, data: t.data, value: ethers.toQuantity(t.value) }] });
+        status("Sent. Waiting for HyperEVM…");
+        await waitReceipt(hyper, hash);
+      } else {
+        status("Getting a price…");
+        const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: o.ch.chainId, destinationChainId: hyper.chainId,
+          originCurrency: o.addr, destinationCurrency: ZERO_ADDR, amount: t.value.toString(), tradeType: "EXACT_OUTPUT",
+          appFees: appFees(FEES.xcBps), txs: [{ to: t.to, value: t.value.toString(), data: t.data }] });
+        await xcExecute(q, { ...o, verb: "Bridging…" }, status);
+      }
+      status("On its way to Elysium…");
+      let arrived = false;
+      for (let i = 0; i < 90 && before !== null && !arrived; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        arrived = (await ely.reader.getBalance(account).catch(() => 0n)) >= before + (amt * 99n) / 100n;
+      }
+      toast(arrived ? `${fmt(amt, 4)} HYPE arrived on Elysium` : "Sent to Elysium: it should show in your wallet there within a few minutes", 8000);
+      if (gen === routeGen) { $("#bamt").value = ""; $("#bpv").innerHTML = "&nbsp;"; balances(); }
+    } catch (e) { toast(errMsg(e), 8000); }
+    b.disabled = false; status("Bridge to Elysium");
+  };
 }
 
 // ---------------------------------------------------------------- USD prices
@@ -1575,7 +1676,7 @@ window.addEventListener("hashchange", route);
 const sec = (n, title, extra = "") => `<div class="hsec"><h2>${esc(title)}</h2>${extra}</div>`;
 
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
-const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/admin": "Admin" };
+const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/bridge": "Bridge to Elysium", "/admin": "Admin" };
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
@@ -1591,6 +1692,7 @@ function route() {
   if (h.startsWith("/perps")) return (location.hash = "#/"); // long/short was dropped: old links land on Discover
   if (h === "/admin") return renderAdmin();
   if (h === "/mint") return renderMint();
+  if (h === "/bridge") return renderBridge();
   if (h.startsWith("/rewards")) return renderRewards(h.slice(9) || null);
   return renderHome();
 }
@@ -3957,7 +4059,7 @@ async function renderToken(addr) {
   const links = [["website", "Website"], ["x", "X"], ["telegram", "Telegram"]]
     .map(([k, l]) => safeUrl(m[k]) ? `<a href="${esc(safeUrl(m[k]))}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "").filter(Boolean).join(" · ");
 
-  app.innerHTML = `${P.ch.testnet ? `<div class="card" style="margin-bottom:12px;border-color:var(--accent)"><b>${esc(P.ch.name)}</b>: a test network. This token and the HYPE you trade it with have no real value. <a href="https://testnet.elysium.kinetiq.xyz/faucet" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Free test HYPE ↗</a></div>` : ""}
+  app.innerHTML = `${P.ch.key === "elysium" ? `<div class="card" style="margin-bottom:12px">Trading on Elysium needs HYPE there. <a href="#/bridge" style="color:var(--accent)">Bridge HYPE to Elysium →</a></div>` : ""}${P.ch.testnet ? `<div class="card" style="margin-bottom:12px;border-color:var(--accent)"><b>${esc(P.ch.name)}</b>: a test network. This token and the HYPE you trade it with have no real value. <a href="https://testnet.elysium.kinetiq.xyz/faucet" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Free test HYPE ↗</a></div>` : ""}
     <div class="two mfirst">
       <div class="mflat">
         <div class="card mlead">
