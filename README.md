@@ -171,6 +171,14 @@ the chain itself (`Chains.pad("elysium-whype")`):
 - **Test:** `FORK_RPC_ELYSIUM=https://rpc-live.boxa.club forge test --mc ElysiumV6ForkTest -vv` deploys all three through
   the CREATE2 factory exactly as the deploy page does, then launches, quotes, buys and sells with HYPE and collects fees.
 
+**Other Elysium tokens.** Discover also lists the busiest tokens launched elsewhere that trade in Elysium's Uniswap v4
+pools against HYPE (GeckoTerminal's list, through `/api/feed`, our own pools left out), and their pages trade them
+here: `PepesFamilySwapRouter` (`src/PepesFamilySwapRouter.sol`, CREATE2 `0x28f811b093210f0c209d518cC813D8FAF3f4E7E5`,
+`V6DeployData` `PART=swaprouter`) buys with HYPE and sells for HYPE in any v4 pool whose other side is HYPE or WHYPE,
+settling from the delta the PoolManager returns (hook fees included), with the caller's `minOut`. No owner, no fee, no
+state. Not audited. Test against real pools (Volta's hook, WHYPE on either side, another launchpad's hook):
+`FORK_RPC_ELYSIUM=https://rpc.volta.family forge test --mc ElysiumSwapRouterForkTest -vv`.
+
 The Elysium testnet launchpad (v5, chain 99801, on our own PoolManager `0x13DA…2203` under v4-core's non-production
 license) is no longer on the site.
 

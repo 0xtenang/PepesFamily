@@ -5,6 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {PepesFamilyV6} from "../src/PepesFamilyV6.sol";
 import {PadTokenFactory} from "../src/PadTokenFactory.sol";
 import {PepesFamilyQuoter} from "../src/PepesFamilyQuoter.sol";
+import {PepesFamilySwapRouter} from "../src/PepesFamilySwapRouter.sol";
 import {PepesFamilyNFT} from "../src/nft/PepesFamilyNFT.sol";
 import {PepesFamilyArt} from "../src/nft/PepesFamilyArt.sol";
 import {DeployLib} from "./DeployLib.sol";
@@ -15,7 +16,8 @@ import {Chains} from "./Chains.sol";
 ///           0. ART=1                 the on-chain art (Robinhood Chain only); the owner then uploads art/pieces and seals
 ///           1. NFT=1                 the PEPES FAMILY NFT (Robinhood Chain only)
 ///           2. PAD=<key> PART=factory the launchpad's token factory (salt 0); PART=quoter: PepesFamilyQuoter, on
-///              chains without Uniswap's V4Quoter (Elysium), deployed before the launchpad
+///              chains without Uniswap's V4Quoter (Elysium), deployed before the launchpad; PART=swaprouter:
+///              PepesFamilySwapRouter, for trading other launchpads' tokens there (Elysium)
 ///           3. PAD=<key>              the launchpad, bound to that factory in its constructor
 ///         Keys: robinhood-weth, ethereum-weth, base-weth, hyperevm-whype, bsc-wbnb, elysium-whype (script/Chains.sol `pad`).
 ///         The NFT 1% goes to the NFT contract on Robinhood Chain and to the team address (Chains.OWNER) elsewhere,
@@ -33,6 +35,11 @@ contract V6DeployData is Script {
         if (keccak256(bytes(vm.envOr("PART", string("")))) == keccak256("quoter")) {
             // chains without Uniswap's V4Quoter (Elysium): PepesFamilyQuoter for this launchpad's PoolManager, salt 0
             return _print("quoter", bytes32(0), abi.encodePacked(type(PepesFamilyQuoter).creationCode, abi.encode(Chains.pad(key).poolManager)));
+        }
+        if (keccak256(bytes(vm.envOr("PART", string("")))) == keccak256("swaprouter")) {
+            // PepesFamilySwapRouter: trade other launchpads' tokens in this chain's Uniswap v4 pools with its coin
+            Chains.Pad memory sp = Chains.pad(key);
+            return _print("swaprouter", bytes32(0), abi.encodePacked(type(PepesFamilySwapRouter).creationCode, abi.encode(sp.poolManager, sp.quote)));
         }
         bytes memory factoryCode = type(PadTokenFactory).creationCode;
         if (keccak256(bytes(vm.envOr("PART", string("")))) == keccak256("factory")) {

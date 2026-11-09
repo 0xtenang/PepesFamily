@@ -577,6 +577,10 @@ const CHAINS = {
     walletRpc: "https://rpc-live.boxa.club", explorer: "", blockscoutApi: "",
     quoter: "0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793", gmgn: "", dex: "elysium", native: { name: "HYPE", symbol: "HYPE" },
     keepSells: true, // sells pay out in HYPE here: not moved on to Robinhood
+    // PepesFamilySwapRouter: other launchpads' tokens in Elysium's Uniswap v4 pools, traded with HYPE (trading turns on
+    // once it is deployed)
+    swapRouter: "0x28f811b093210f0c209d518cC813D8FAF3f4E7E5",
+    poolManager: "0xE2e105d3F7209A9DA11f83cCf3E7398a753823F1", wrappedCoin: "0xbA876237B0F021A6c6D852d6c26E107997cC5E81",
     blurb: "Elysium: Kinetiq's fast chain on Hyperliquid, paired with HYPE.",
   },
 };
@@ -1943,8 +1947,18 @@ async function renderHome() {
         <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
       || `<div class="card empty" style="grid-column:1/-1">No tokens yet. <a class="lnk" href="#/create">Launch the first one</a></div>`;
   };
-  // Discover lists only tokens launched here; other launchpads' tokens are no longer shown
-  const loadMarket = () => { market = []; showList(); showTrend(); saveCache(); };
+  // Besides our launches: tokens launched elsewhere that trade in Elysium's Uniswap v4 pools against HYPE (the feed's
+  // GeckoTerminal list), traded here through PepesFamilySwapRouter
+  const loadMarket = () => {
+    market = [];
+    showList(); showTrend(); saveCache();
+    feed().then((f) => {
+      if (!f?.ext?.length || gen !== routeGen) return;
+      market = f.ext.map((x) => ({ address: x.address, name: x.name, symbol: x.symbol, image: x.image, ch: CHAINS.elysium,
+        mc: x.mc, vol: x.vol, chg: x.chg, created: x.created, liq: x.liq }));
+      showList(); showTrend(); saveCache();
+    });
+  };
   // Your positions: the connected wallet's cash on every chain and its tokens, biggest first
   let posSeq = 0;
   const showPositions = window.refreshPositions = async () => {
@@ -2190,6 +2204,38 @@ const MARKET_POOL = new Map(); // chain key + token -> its most liquid pool ({ p
 /// A token's picture from the market data (falls back to its ticker letters like our own tokens).
 const mAvatar = (x, cls = "") => (x.image ? `<img class="avatar ${cls}" width="${cls === "lg" ? 64 : 48}" height="${cls === "lg" ? 64 : 48}" src="${esc(x.image)}" alt="${esc(String(x.symbol).slice(0, 2))}" loading="lazy" referrerpolicy="no-referrer">`
   : `<div class="avatar ${cls}">${esc(String(x.symbol || "?").slice(0, 2))}</div>`);
+// ---------------------------------------------------------------- Direct pool trades (Elysium)
+// Relay doesn't serve Elysium, so tokens launched elsewhere there are traded straight in their Uniswap v4 pool through
+// PepesFamilySwapRouter (contracts/src/PepesFamilySwapRouter.sol): HYPE in, the token out, or the other way.
+const SWAP_ROUTER_ABI = [
+  `function buy(${KEY_T} key, uint256 minOut, uint256 deadline) payable returns (uint256)`,
+  `function sell(${KEY_T} key, uint256 amountIn, uint256 minOut, uint256 deadline) returns (uint256)`,
+];
+const INIT_IFACE = new ethers.Interface(["event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)"]);
+/// How to trade `addr` on `ch` in a pool against its coin: { key, coinIs0, live } (live: the router is deployed), or
+/// null. The pool comes from the feed's list, else the token's pools on GeckoTerminal (their keys from the
+/// PoolManager's Initialize events).
+async function directRoute(ch, addr) {
+  const w = ch.wrappedCoin.toLowerCase(), isCoin = (a) => a === ZERO_ADDR || a.toLowerCase() === w;
+  const f = await feed();
+  const keys = [];
+  const known = f?.ext?.find((x) => x.address.toLowerCase() === addr.toLowerCase());
+  if (known) keys.push(known.key);
+  else {
+    const j = await gtGet(`/networks/${ch.gt}/tokens/${addr.toLowerCase()}?include=top_pools`, 300_000);
+    for (const p of (j.included || []).filter((x) => x.type === "pool" && /^0x[0-9a-f]{64}$/i.test(x.attributes.address))) {
+      const logs = await ch.reader.getLogs({ address: ch.poolManager, topics: [INIT_IFACE.getEvent("Initialize").topicHash, p.attributes.address], fromBlock: 0, toBlock: "latest" }).catch(() => []);
+      if (logs[0]) { const a = INIT_IFACE.parseLog(logs[0]).args; keys.push([a.currency0, a.currency1, Number(a.fee), Number(a.tickSpacing), a.hooks]); }
+    }
+  }
+  const k = keys.find(([c0, c1]) => (isCoin(c0) && c1.toLowerCase() === addr.toLowerCase()) || (isCoin(c1) && c0.toLowerCase() === addr.toLowerCase()));
+  if (!k) return null;
+  const live = (await ch.reader.getCode(ch.swapRouter)).length > 2;
+  return { key: [k[0], k[1], k[2], k[3], k[4]], coinIs0: isCoin(k[0]), live };
+}
+/// What `amount` in gets out (tokens for a buy, the coin for a sell), from the chain's quoter.
+const directQuote = (ch, r, buy, amount) => quoteExact(r.key, buy === r.coinIs0, amount, ch);
+
 /// One token's market data on `ch`: DexScreener first (its most liquid pair), GeckoTerminal if DexScreener has
 /// nothing. { name, symbol, image, price, mc, liq, vol, chg, chart (an embeddable chart URL or "") }.
 async function marketToken(ch, addr) {
@@ -2388,6 +2434,9 @@ async function renderMarketToken(chKey, addrIn) {
   }
   if (stale()) return;
   const NAT = ch.native?.symbol || "ETH";
+  // Elysium: traded straight in its Uniswap v4 pool through PepesFamilySwapRouter, with HYPE (see directRoute)
+  const direct = ch.swapRouter ? await directRoute(ch, addr).catch(() => null) : null;
+  if (stale()) return;
   const x = { symbol: t.symbol, image: t.image }, price = t.price, mc = t.mc, chg = t.chg;
   document.title = `$${t.symbol} · PepesFamily`;
   app.innerHTML = `<div class="two mfirst">
@@ -2443,7 +2492,7 @@ async function renderMarketToken(chKey, addrIn) {
   /// The pay option and amount (in its coin) for a buy of `usd`: the wallet's best chain, or this chain's coin to
   /// show a price before a wallet is connected.
   const buySource = (usd) => {
-    if (!account || !CASH) return { o: { id: "", ch, sym: NAT, addr: ZERO_ADDR, dec: 18 } };
+    if (direct || !account || !CASH) return { o: { id: "", ch, sym: NAT, addr: ZERO_ADDR, dec: 18 } };
     return pickSource(ch, usd);
   };
   const coinFor = (o, usd) => { const px = nativeUsd(o.ch); if (!px) throw new Error(`No ${o.sym} price right now`); return ethers.parseEther((usd / px).toFixed(12)); };
@@ -2465,7 +2514,7 @@ async function renderMarketToken(chKey, addrIn) {
       if (!usd) return (btn.textContent = `Buy $${t.symbol}`);
       const coin = o && amt ? `${compact(Number(ethers.formatUnits(amt, o.dec || 18)))} ${o.sym}` : "";
       btn.innerHTML = `Buy <span class="sep"></span> ${fmtUsd(usd)}${coin ? ` <span class="usd">(${esc(coin)})</span>` : ""}`;
-      if (account && CASH && pickSource(ch, usd).error) { warn.hidden = false; warn.textContent = "Exceeds wallet balance"; }
+      if (account && CASH && !direct && pickSource(ch, usd).error) { warn.hidden = false; warn.textContent = "Exceeds wallet balance"; }
     } else {
       let n = 0n; try { n = raw ? ethers.parseUnits(raw, dec) : 0n; } catch {}
       if (!n) return (btn.textContent = `Sell $${t.symbol}`);
@@ -2484,7 +2533,8 @@ async function renderMarketToken(chKey, addrIn) {
       const src = buySource(usd);
       if (src.error) return ($("#mpv").textContent = src.error);
       o = src.o;
-      if (src.gather) $("#msrc").textContent = `Paying from your cash on several chains: it's brought together on ${ch.short} first (a few seconds)`;
+      if (direct) $("#msrc").textContent = `Paying with ${NAT} on ${ch.short}, straight in its Uniswap v4 pool`;
+      else if (src.gather) $("#msrc").textContent = `Paying from your cash on several chains: it's brought together on ${ch.short} first (a few seconds)`;
       else if (src.x) $("#msrc").textContent = `Paying with ${o.sym} on ${o.ch.short}${o.ch === ch ? "" : " (no bridging needed: one confirmation)"}`;
       try { amt = coinFor(o, usd); } catch (e) { return ($("#mpv").textContent = errMsg(e)); }
       mLabel(null, o, amt);
@@ -2497,6 +2547,15 @@ async function renderMarketToken(chKey, addrIn) {
     timer = setTimeout(async () => {
       const my = ++seq;
       try {
+        if (direct) {
+          const out = await directQuote(ch, direct, side === "buy", amt);
+          if (my !== seq || stale()) return;
+          const usdOut = side === "sell" ? Number(ethers.formatEther(out)) * nativeUsd(ch) : 0;
+          $("#mpv").textContent = side === "buy" ? `You get ≈ ${compact(Number(ethers.formatUnits(out, dec)))} $${t.symbol} · pool fees included`
+            : `You get ≈ ${Number(ethers.formatEther(out)).toPrecision(4)} ${NAT} (${fmtUsd(usdOut)}) · pool fees included`;
+          if (side === "sell") mLabel({ details: { currencyOut: { amountUsd: usdOut } } });
+          return;
+        }
         const q = side === "buy" ? await swapQuote(o.ch, o.addr, ch, addr, amt) : await sellQuote(ch, addr, amt);
         if (my === seq && !stale()) { $("#mpv").innerHTML = swapSummary(q); if (side === "sell") mLabel(q); lastQ = { key: qKey(o || { ch, addr }, amt), who: account, at: Date.now(), q }; }
       } catch (e) { if (my === seq && !stale()) $("#mpv").textContent = "No route for this trade right now: " + errMsg(e); }
@@ -2533,7 +2592,7 @@ async function renderMarketToken(chKey, addrIn) {
       if (side === "buy") {
         const usd = usdIn();
         if (!usd) throw new Error("Enter an amount in dollars");
-        const src = pickSource(ch, usd);
+        const src = direct ? buySource(usd) : pickSource(ch, usd);
         if (src.error) throw new Error(src.error);
         if (src.gather) { await gatherCash(ch, usd, (m2) => toast(m2, 30000)); lastQ = null; }
         o = src.o; amt = coinFor(o, usd);
@@ -2543,6 +2602,31 @@ async function renderMarketToken(chKey, addrIn) {
         o = { ch, sym: t.symbol, addr, dec, verb: "Selling…" };
       }
       if (side === "sell" && amt > (tokBal = await tokR.balanceOf(account))) throw new Error(`You hold less $${t.symbol} than that`);
+      if (direct) {
+        // straight in the pool: HYPE in and out on this chain, 3% price tolerance, one confirmation (plus a one-time
+        // approval to sell)
+        if (!direct.live) throw new Error(`Trading tokens from other launchpads on ${ch.short} opens soon`);
+        await requireWallet(ch);
+        if (side === "buy" && (await ch.reader.getBalance(account)) < amt) throw new Error(`Not enough ${NAT} on ${ch.short}: bring some over on the Bridge page`);
+        const out = await directQuote(ch, direct, side === "buy", amt);
+        const minOut = (out * 97n) / 100n, dl = Math.floor(Date.now() / 1000) + 600;
+        const r = new ethers.Contract(ch.swapRouter, SWAP_ROUTER_ABI, signer);
+        if (side === "sell") {
+          const tok = new ethers.Contract(addr, ["function allowance(address,address) view returns (uint256)", "function approve(address,uint256) returns (bool)"], signer);
+          if ((await tok.allowance(account, ch.swapRouter)) < amt) { toast("Confirm the approval in your wallet…", 10000); await waitReceipt(ch, (await tok.approve(ch.swapRouter, amt)).hash); }
+        }
+        toast("Confirm in your wallet…", 10000);
+        const t0 = Date.now();
+        const tx = side === "buy" ? await r.buy(direct.key, minOut, dl, { value: amt }) : await r.sell(direct.key, amt, minOut, dl);
+        await waitReceipt(ch, tx.hash);
+        if (side === "buy") rememberHeld(ch, addr, dec, t.symbol);
+        toast(`${side === "buy" ? "Bought" : "Sold"} $${t.symbol} in ${((Date.now() - t0) / 1000).toFixed(1)} s`, 8000);
+        $("#mamt").value = ""; $("#mpv").innerHTML = "&nbsp;";
+        loadCash(true).then(() => window.refreshPositions?.()).catch(() => {});
+        refreshBal();
+        btn.disabled = false;
+        return;
+      }
       if (side === "sell") await ensureGas(ch, (m2) => toast(m2, 30000));
       await requireWallet(o.ch); // the paying chain
       const fresh = lastQ && lastQ.key === qKey(o, amt) && lastQ.who === account && Date.now() - lastQ.at < 25_000;

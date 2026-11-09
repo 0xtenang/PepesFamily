@@ -8,6 +8,8 @@
 //              (only where the explorer answers a server: Robinhood's and Base's Blockscout refuse servers, and free
 //              RPCs serve no 24 h of logs, so the page reads those launchpads' history itself, in the background)
 //     prices   the same USD prices the page computes (ETH, IMD/ETH, PEPE/ETH, CASHCAT/ETH, HYPE, BNB)
+//     ext      tokens launched elsewhere that trade in Elysium's Uniswap v4 pools against HYPE (GeckoTerminal's busiest),
+//              each with its pool key, so the page lists them and trades them through PepesFamilySwapRouter
 // Big numbers travel as {"$n": "<decimal>"}. The launchpad list is the page's own CONFIG.pads, read from the deployed
 // index.html, so it never needs a second copy here. Cached 30 s at the edge, served stale while it refreshes.
 
@@ -38,6 +40,12 @@ const POOLS = {
   pepeEth: ["ethereum", "0xe42df52d7938631f6c6cb56aac2fafc1e00ea77b7517a02ee244bd7d86c061cd"],
   cashcatEth: ["robinhood", "0xf7dc0af99fce7169eb76854c0b39beb9915526894d42229946e5cb469cab50b1"],
 };
+
+// Elysium's Uniswap v4 PoolManager, its WHYPE, and the event that records each pool's key.
+const ELYSIUM_PM = "0xE2e105d3F7209A9DA11f83cCf3E7398a753823F1";
+const ELYSIUM_WHYPE = "0xbA876237B0F021A6c6D852d6c26E107997cC5E81".toLowerCase();
+const PM = new ethers.Interface(["event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)"]);
+const POOL_KEYS = new Map(); // pool id -> key (a pool's key never changes: kept while the function stays warm)
 
 const timeout = (ms) => AbortSignal.timeout(ms);
 /// One JSON-RPC call on `chain`, falling back to its second endpoint.
@@ -121,6 +129,52 @@ async function prices() {
   return { ethUsd, imdEth, pepeEth, cashcatEth, hypeUsd, bnbUsd };
 }
 
+/// A pool's key, from the PoolManager's Initialize event for its id.
+async function poolKey(id) {
+  if (POOL_KEYS.has(id)) return POOL_KEYS.get(id);
+  const topic = PM.getEvent("Initialize").topicHash;
+  const logs = await rpc("elysium", "eth_getLogs", [{ address: ELYSIUM_PM, topics: [topic, id], fromBlock: "0x0", toBlock: "latest" }]);
+  if (!logs.length) return null;
+  const a = PM.parseLog(logs[0]).args;
+  const key = [a.currency0, a.currency1, Number(a.fee), Number(a.tickSpacing), a.hooks];
+  POOL_KEYS.set(id, key);
+  return key;
+}
+
+/// GeckoTerminal's busiest Elysium Uniswap v4 pools against HYPE or WHYPE (two pages), one per token, minus the pools
+/// of our own launchpads (`ours`: hook addresses, lower case).
+async function elysiumTokens(ours) {
+  const pages = await Promise.all([1, 2].map((page) =>
+    fetch(`https://api.geckoterminal.com/api/v2/networks/elysium/pools?page=${page}&sort=h24_volume_usd_desc&include=base_token,quote_token`, { headers: { accept: "application/json" }, signal: timeout(8000) })
+      .then((r) => (r.ok ? r.json() : { data: [], included: [] })).catch(() => ({ data: [], included: [] }))));
+  const toks = new Map(pages.flatMap((j) => (j.included || []).filter((x) => x.type === "token").map((x) => [x.id, x.attributes])));
+  const seen = new Set(), out = [];
+  const pools = pages.flatMap((j) => j.data || []).filter((p) => p.relationships?.dex?.data?.id === "uniswap-v4-elysium");
+  await Promise.all(pools.map((p) => poolKey(p.attributes.address).catch(() => null))); // all keys at once (cached after)
+  for (const p of pools) {
+    const base = toks.get(p.relationships.base_token.data.id), quote = toks.get(p.relationships.quote_token.data.id);
+    if (!base || !quote) continue;
+    const coin = (t) => t.address === "0x0000000000000000000000000000000000000000" || t.address.toLowerCase() === ELYSIUM_WHYPE;
+    const tok = coin(quote) && !coin(base) ? base : coin(base) && !coin(quote) ? quote : null;
+    if (!tok || seen.has(tok.address.toLowerCase())) continue;
+    const a = p.attributes, onBase = tok === base;
+    let key;
+    try { key = await poolKey(a.address); } catch { continue; }
+    if (!key || ours.has(String(key[4]).toLowerCase())) continue;
+    seen.add(tok.address.toLowerCase());
+    out.push({
+      address: tok.address, name: tok.name, symbol: tok.symbol, image: tok.image_url && tok.image_url !== "missing.png" ? tok.image_url : "",
+      price: Number(onBase ? a.base_token_price_usd : a.quote_token_price_usd) || 0,
+      // GeckoTerminal's change and price follow the pool's base token: only kept when that is this token; a market cap
+      // past $10B is a fully diluted value of an unpriced supply, so unknown
+      mc: ((m) => (m < 1e10 ? m : 0))(Number(a.market_cap_usd || a.fdv_usd) || 0), liq: Number(a.reserve_in_usd) || 0, vol: Number(a.volume_usd?.h24) || 0,
+      chg: onBase && a.price_change_percentage?.h24 != null ? Number(a.price_change_percentage.h24) / 100 : null,
+      created: Date.parse(a.pool_created_at) / 1000 || 0, pool: a.address, key,
+    });
+  }
+  return out;
+}
+
 async function build(origin) {
   const pads = await padList(origin);
   const key = (p) => `${p.chain}:${p.pad.toLowerCase()}`;
@@ -139,7 +193,9 @@ async function build(origin) {
     }),
     ...Object.entries(CHAINS).filter(([, c]) => c.remote).map(([k, c]) => hasCode(k, c.remote).then((y) => y && remotes.push(k)).catch(() => {})),
   ]);
-  return { at: Date.now(), live, remotes, tokens, market, prices: await prices() };
+  const ours = new Set(pads.map((p) => p.pad.toLowerCase()));
+  const [px, ext] = await Promise.all([prices(), elysiumTokens(ours).catch(() => [])]);
+  return { at: Date.now(), live, remotes, tokens, market, prices: px, ext };
 }
 
 const ORIGINS = ["https://pepesdotfamily.fun", "https://www.pepesdotfamily.fun", "https://pepesfamily.vercel.app"];
