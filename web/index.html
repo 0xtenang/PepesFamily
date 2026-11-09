@@ -570,6 +570,7 @@ const CHAINS = {
     key: "elysium", gt: "elysium", name: "Elysium", short: "Elysium", chainId: 99901, rpc: "https://rpc-live.boxa.club",
     walletRpc: "https://rpc-live.boxa.club", explorer: "", blockscoutApi: "",
     quoter: "0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793", gmgn: "", dex: "elysium", native: { name: "HYPE", symbol: "HYPE" },
+    keepSells: true, // sells pay out in HYPE here: not moved on to Robinhood
     blurb: "Elysium: Kinetiq's fast chain on Hyperliquid, paired with HYPE.",
   },
 };
@@ -2200,12 +2201,14 @@ async function swapQuote(fromCh, from, toCh, to, amount) {
     ...(topup ? { topupGas: true, topupGasAmount: String(Math.round((GAS_TOPUP_USD[toCh.key] || 0.3) * 1e6)) } : {}),
   });
 }
-/// Where sells pay out: ETH on Robinhood Chain, whichever chain the token is on (like FOMO's one dollar balance).
+/// Where sells pay out: ETH on Robinhood Chain, whichever chain the token is on (like FOMO's one dollar balance),
+/// except on chains flagged keepSells (Elysium), where they stay in the chain's own coin.
 const HOME = () => CHAINS.robinhood;
+const sellsGoHome = (ch) => ch !== HOME() && !ch.keepSells;
 /// A sell of `amount` of `token` on `ch` into ETH on Robinhood (one Relay order, sold and moved in one go); the
 /// chain's own coin there when Relay has no such route.
 async function sellQuote(ch, token, amount) {
-  if (ch !== HOME()) {
+  if (sellsGoHome(ch)) {
     try { return await swapQuote(ch, token, HOME(), ZERO_ADDR, amount); } catch (e) { console.warn("sell to Robinhood", e); }
   }
   return swapQuote(ch, token, ch, ZERO_ADDR, amount);
@@ -2213,7 +2216,7 @@ async function sellQuote(ch, token, amount) {
 /// After a sell on one of our launchpads off Robinhood: moves what it paid (`wei` of `ch`'s coin) to ETH on
 /// Robinhood through Relay, keeping enough there for network fees. Small amounts stay where they are.
 async function sweepHome(ch, wei, onStatus) {
-  if (ch === HOME() || wei <= 0n) return;
+  if (!sellsGoHome(ch) || wei <= 0n) return;
   const px = nativeUsd(ch);
   if (!px || Number(ethers.formatEther(wei)) * px < 0.5) return;
   onStatus?.(`Moving it to ETH on ${HOME().short}…`);
@@ -2476,7 +2479,7 @@ async function renderMarketToken(chKey, addrIn) {
     side = s2; $("#mamt").value = "";
     app.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.s === side));
     $("#mamt").placeholder = side === "buy" ? "$0" : "0.0";
-    $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ETH on ${HOME().short})`;
+    $("#mamtl").textContent = side === "buy" ? "Amount (USD)" : `Amount of $${t.symbol} to sell (you receive ${sellsGoHome(ch) ? `ETH on ${HOME().short}` : `${ch.native?.symbol || "ETH"} on ${ch.short}`})`;
     $("#mgo").classList.toggle("buy", side === "buy"); $("#mgo").classList.toggle("sell", side === "sell");
     mLabel(null);
     const q = side === "buy" ? ["$5", "$20", "$50", "$100"] : ["25%", "50%", "100%"];
@@ -4328,7 +4331,7 @@ async function renderToken(addr) {
       if (tradeSide === "sell") await ensureGas(P.ch, (m2) => toast(m2, 30000));
       if (tradeSide === "buy" && gatherUsd) await gatherCash(P.ch, gatherUsd, (m2) => toast(m2, 30000));
       await requireWallet(P.ch);
-      const nat0 = tradeSide === "sell" && P.ch !== HOME() ? await P.ch.reader.getBalance(account).catch(() => null) : null;
+      const nat0 = tradeSide === "sell" && sellsGoHome(P.ch) ? await P.ch.reader.getBalance(account).catch(() => null) : null;
       const amt = amtIn();
       if (!amt) throw new Error("Enter an amount");
       const slipBps = Math.round(Math.min(50, Math.max(0, parseFloat($("#slip").value) || 0)) * 100);
@@ -4382,8 +4385,9 @@ async function renderToken(addr) {
       }
       const t0 = Date.now();
       if (!receipts) { toast(WALLET_KIND === "privy" ? (tradeSide === "buy" ? "Buying…" : "Selling…") : "Transaction sent…", 15000); await waitReceipt(P.ch, tx.hash); }
-      // sold for the chain's coin off Robinhood: what it paid goes on to ETH on Robinhood (sells all pay out there)
-      if (tradeSide === "sell" && payNative() && P.ch !== HOME() && nat0 != null) {
+      // sold for the chain's coin off Robinhood: what it paid goes on to ETH on Robinhood (sells pay out there, except
+      // on keepSells chains)
+      if (tradeSide === "sell" && payNative() && sellsGoHome(P.ch) && nat0 != null) {
         const got = (await P.ch.reader.getBalance(account)) - nat0;
         await sweepHome(P.ch, got, (m2) => toast(m2, 30000)).catch((e) => toast(`Sold. Moving it to ${HOME().short} didn't work (${errMsg(e)}): it's in ${NAT} on ${P.ch.short}.`, 9000));
       }
