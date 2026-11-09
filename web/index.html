@@ -1786,19 +1786,6 @@ function renderSetup() {
 }
 
 // ---------------------------------------------------------------- Token list
-// One frog seen from behind (original drawing): big lumpy green head with two eye bumps, blue shirt, tan shorts.
-const FROG_SVG = `<svg viewBox="0 0 100 122" aria-hidden="true">
-  <path d="M34 106 L34 116 M45 106 L45 116 M55 106 L55 116 M66 106 L66 116" stroke="#3b2a14" stroke-width="2"/>
-  <ellipse cx="39" cy="117" rx="9" ry="4" fill="#4c8f3a" stroke="#1f3d16" stroke-width="2"/>
-  <ellipse cx="61" cy="117" rx="9" ry="4" fill="#4c8f3a" stroke="#1f3d16" stroke-width="2"/>
-  <path d="M27 88 L73 88 L75 107 L52 108 L50 101 L48 108 L25 107 Z" fill="#b08d5c" stroke="#4d3a1c" stroke-width="2.4" stroke-linejoin="round"/>
-  <path d="M24 50 Q15 57 16 76 Q17 88 26 90 Q50 96 74 90 Q83 88 84 76 Q85 57 76 50 Z" fill="#2c60cc" stroke="#11296a" stroke-width="2.6" stroke-linejoin="round"/>
-  <path d="M30 56 Q27 70 29 87 M70 56 Q73 70 71 87" stroke="#1f4aa6" stroke-width="2" fill="none"/>
-  <path d="M8 44 Q4 28 14 16 Q22 6 34 9 Q42 11 46 17 Q50 15 54 17 Q58 11 66 9 Q78 6 86 16 Q96 28 92 44 Q88 58 50 60 Q12 58 8 44 Z"
-        fill="#64a84d" stroke="#21451a" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M16 22 Q24 14 34 15 M66 15 Q76 14 84 22" stroke="#86c56c" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>
-  <path d="M30 50 Q50 56 70 50" stroke="#4a8a37" stroke-width="2" fill="none" stroke-linecap="round"/>
-</svg>`;
 
 /// A 24 h change as text: sign, one decimal (none from ±1000%), the good direction in the data hue, a fall in red,
 /// no change or no trades in grey.
@@ -3221,7 +3208,7 @@ async function cardLogo(info) {
   return null;
 }
 
-/// Black grid, floor and the frog crowd: the background every share card shares. Returns the drawing helpers.
+/// Black grid, floor and the PEPES FAMILY Pepes: the background every share card shares. Returns the drawing helpers.
 async function cardBase() {
   const W = 1200, H = 675, c = document.createElement("canvas");
   c.width = W; c.height = H;
@@ -3236,15 +3223,16 @@ async function cardBase() {
   const floor = H - 70;
   g.fillStyle = "#0b0f0b"; g.fillRect(0, floor, W, H - floor);
   g.fillStyle = "#3ddc84"; g.fillRect(0, floor, W, 2);
-  const frog = await new Promise((res) => {
+  // the PEPES FAMILY Pepes in their chain hats, standing on the floor (web/nft/card-pepes.webp, made from the NFT's
+  // own art layers)
+  const pepes = await new Promise((res) => {
     const im = new Image();
     im.onload = () => res(im); im.onerror = () => res(null);
-    im.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(FROG_SVG.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="122" '));
+    im.src = "/nft/card-pepes.webp";
   });
-  if (frog) {
-    for (const [x, w, lift] of [[800, 92, 34], [905, 98, 38], [1012, 90, 32], [1100, 84, 36], [745, 118, 0], [858, 128, 4], [985, 122, 0], [1095, 112, 2]]) {
-      g.drawImage(frog, x, floor + 22 - lift - w * 1.22, w, w * 1.22);
-    }
+  if (pepes) {
+    const ph = 210, pw = (pepes.naturalWidth / pepes.naturalHeight) * ph;
+    g.drawImage(pepes, W - pw - 30, floor + 16 - ph, pw, ph);
   }
   g.textBaseline = "middle";
   g.strokeStyle = "#fff"; g.lineWidth = 2; g.strokeRect(60, 56, 44, 44);
@@ -3295,7 +3283,7 @@ async function tokenShareCard(r, amt, holderPct) {
   return c.toDataURL("image/png");
 }
 
-/// 1200×675 PNG (X's large-image size) as a data: URL: big total, top tokens, and the frog crowd from behind.
+/// 1200×675 PNG (X's large-image size) as a data: URL: big total, top tokens, and the PEPES FAMILY Pepes.
 async function shareCard(total, sub, top) {
   const { c, g, F, fit, W, floor } = await cardBase();
   g.fillStyle = "#8c8c8c"; g.font = F(500, 22); g.fillText("HOLDER REWARDS EARNED", 60, 172);
