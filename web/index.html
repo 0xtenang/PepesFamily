@@ -257,6 +257,7 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .lrow:hover .act { background: #fff; color: #000; border-color: #fff; }
 .more { display: flex; justify-content: center; padding: 10px; }
 /* Holder rewards page */
+.kpis.hrk { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .hrk .v.big { font-size: 34px; line-height: 42px; font-weight: 700; color: var(--positive); }
 .hrtop { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--gap); }
 .hrtop .tc { position: relative; }
@@ -1191,7 +1192,7 @@ async function renderHolderRewards() {
     <div class="hero"><div><h1>Holder rewards</h1>
       <p>Every PepesFamily token pays its holders a share of every trade, in its pair asset, automatically. These are the rewards generated for holders since day one.</p></div>
       <span class="spacer"></span><a class="btn primary" href="#/create">Launch a token</a></div>
-    <div class="kpis hrk" id="hrk">${`<div>${bar("50%", 13)}<div style="height:10px"></div>${bar("70%", 34)}</div>`.repeat(4)}</div>
+    <div class="kpis hrk" id="hrk">${`<div>${bar("50%", 13)}<div style="height:10px"></div>${bar("70%", 34)}</div>`.repeat(2)}</div>
     <div class="hsec"><h2>Top paying tokens</h2><span class="stat">the tokens that have paid their holders the most</span></div>
     <div class="hrtop" id="hrtop">${`<div class="tc">${bar("60%", 16)}${bar("80%", 28)}</div>`.repeat(5)}</div>
     <div class="hsec"><h2>All tokens</h2><span class="stat" id="hrcount"></span></div>
@@ -1230,8 +1231,6 @@ async function renderHolderRewards() {
   });
   const paying = rows.filter((r) => r.earned > 0n);
   const total = rows.reduce((s, r) => s + r.usd, 0), totalPeak = rows.reduce((s, r) => s + r.peakUsd, 0);
-  const known = rows.every((r) => r.waitUsd != null);
-  const waitTotal = known ? rows.reduce((s, r) => s + r.waitUsd, 0) : null;
   // per pair asset, largest first: "1.24 ETH · 38.6 HYPE · …"
   const bySym = {};
   for (const r of paying) (bySym[r.sym] ||= { w: 0n, usd: 0 }), (bySym[r.sym].w += r.earned), (bySym[r.sym].usd += r.usd);
@@ -1241,9 +1240,7 @@ async function renderHolderRewards() {
     <div><div class="k">Holder rewards since day one</div><div class="v big">${fmtUsd(peak ? totalPeak : total)}</div>
       <div class="s">${peak ? `IMD at its peak, ${tinyUsd(peak.usd)} (${day(peak.day)})` : "at today's prices"}</div></div>
     <div><div class="k">At today's prices</div><div class="v big" style="color:var(--text)">${fmtUsd(total)}</div><div class="s" title="${esc(assets)}">${esc(assets)}</div></div>
-    <div><div class="k">Waiting to be claimed</div><div class="v">${waitTotal == null ? "—" : fmtUsd(waitTotal)}</div>
-      <div class="s">${waitTotal == null ? "" : `${fmtUsd(Math.max(0, total - waitTotal))} already claimed · `}<a href="#/rewards" style="text-decoration:underline">claim yours</a></div></div>
-    <div><div class="k">Tokens paying holders</div><div class="v">${paying.length}</div><div class="s">on ${new Set(paying.map((r) => r.ch.key)).size} chains</div></div>`;
+`;
   const top = [...paying].sort((a, b) => b.peakUsd - a.peakUsd).slice(0, 5);
   $("#hrtop").innerHTML = top.map((r, i) => `<a class="tc${i === 0 ? " first" : ""}" href="${r.href}"><span class="rank">${i === 0 ? "👑 " : ""}${i + 1}</span>
       <div class="head">${avatar(r.t)}<div style="min-width:0"><div class="nm">${esc(r.t.name)}</div><div class="meta">$${esc(r.t.symbol)} · ${chainAv(r.ch)}${esc(r.ch.short)}${r.created ? " · " + ago(r.created) : ""}</div></div></div>
