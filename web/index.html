@@ -587,14 +587,14 @@ const CHAINS = {
     remote: "0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B", remotePads: ["0x84E2b2e0dBB0709f865ccB5050A98179a79568Cc", "0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), mainnet: Uniswap v4's PoolManager
-  // 0xE2e1…23F1 and our own quoter (no Uniswap V4Quoter there). Kinetiq's public RPC; no explorer published yet, so
-  // DexScreener for token links. Relay doesn't serve it: no cross-chain buys or gas top-ups.
+  // 0xE2e1…23F1 and our own quoter (no Uniswap V4Quoter there). Kinetiq's public RPC and its explorer (its own API,
+  // not Blockscout: no holder counts or trade history from it). Relay doesn't serve it: no cross-chain buys or gas top-ups.
   elysium: {
     key: "elysium", gt: "elysium", name: "Elysium", short: "Elysium", chainId: 99901, rpc: "https://rpc.elysium.kinetiq.xyz",
-    walletRpc: "https://rpc.elysium.kinetiq.xyz", explorer: "", blockscoutApi: "",
+    walletRpc: "https://rpc.elysium.kinetiq.xyz", explorer: "https://elysium.kinetiq.xyz", blockscoutApi: "",
     quoter: "0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793", gmgn: "", dex: "elysium", native: { name: "HYPE", symbol: "HYPE" },
     keepSells: true, // sells pay out in HYPE here: not moved on to Robinhood
-    logChunk: 1_000_000, // Kinetiq's RPC serves a million blocks of logs a request: trade history from launch (no explorer)
+    logChunk: 1_000_000, // Kinetiq's RPC serves a million blocks of logs a request: trade history from launch (no Blockscout)
     blurb: "Elysium: Kinetiq's fast chain on Hyperliquid, paired with HYPE.",
   },
 };
@@ -1256,7 +1256,7 @@ async function renderWithdraw(el, gen) {
   el.innerHTML = `
     <div class="card" style="max-width:520px;margin-top:16px">
       <h2 style="margin:0 0 4px">Withdraw from Elysium</h2>
-      <p class="stat" style="margin:0 0 12px">Elysium is a rollup on HyperEVM: a withdrawal is ready to claim on HyperEVM about 6 to 7 days after you start it (the rollup's challenge period). Claiming takes one transaction there, paid in a little HYPE on HyperEVM.</p>
+      <p class="stat" style="margin:0 0 12px">Elysium is a rollup on HyperEVM: a withdrawal is ready to claim on HyperEVM about 6 to 7 days after you start it (the rollup's challenge period). Claiming takes one transaction there, paid in a little HYPE on HyperEVM. Kinetiq's <a href="https://elysium.kinetiq.xyz/bridge" target="_blank" rel="noopener" style="text-decoration:underline">official bridge</a> works the same way.</p>
       <label for="wto" style="margin-top:0">Receive as</label>
       <select id="wto"><option value="hyperevm">HYPE on HyperEVM</option><option value="robinhood">ETH on Robinhood (via HyperEVM)</option></select>
       <label for="wamt">HYPE to withdraw</label>
@@ -1286,7 +1286,7 @@ async function renderWithdraw(el, gen) {
         const state = done ? (toRh === "robinhood" ? `<button type="button" data-rh="${k}">Send to Robinhood as ETH</button>` : "Claimed ✓")
           : ready ? `<button type="button" class="primary" data-claim="${k}">Claim on HyperEVM</button>` : `Waiting · ready around ${eta(w)}`;
         return `<div class="row" style="justify-content:space-between;padding:8px 0;border-top:1px solid var(--rule)"><div><b style="color:var(--text)">${fmt(w.callvalue, 6)} HYPE</b>
-          <div>${new Date(Number(w.timestamp) * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}${toRh === "robinhood" || toRh === "sent" ? " · to Robinhood" : ""}</div></div><div>${state}</div></div>`;
+          <div>${xlink(ely, `tx/${w.hash}`, new Date(Number(w.timestamp) * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + " ↗")}${toRh === "robinhood" || toRh === "sent" ? " · to Robinhood" : ""}</div></div><div>${state}</div></div>`;
       }).join("") : "No withdrawals yet.";
       $("#wlist").querySelectorAll("[data-claim]").forEach((b) => (b.onclick = () => claim(ws[Number(b.dataset.claim)], conf, b)));
       $("#wlist").querySelectorAll("[data-rh]").forEach((b) => (b.onclick = () => toRobinhood(ws[Number(b.dataset.rh)], b)));
@@ -1515,7 +1515,7 @@ const str = (s) => { try { return typeof s === "string" ? s : String(s ?? ""); }
 const esc = (s) => str(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
 /// A link to `path` ("address/0x…", "token/0x…", "tx/0x…") on `ch`'s block explorer, or plain text on a chain that has
-/// none yet (Elysium mainnet): tokens there link to DexScreener instead.
+/// none (tokens there link to DexScreener instead).
 function xlink(ch, path, text, attrs = "") {
   const url = ch.explorer ? `${ch.explorer}/${path}` : path.startsWith("token/") && ch.dex ? `https://dexscreener.com/${ch.dex}/${path.slice(6)}` : "";
   return url ? `<a ${attrs} href="${url}" target="_blank" rel="noopener">${text}</a>` : `<span ${attrs}>${text}</span>`;
