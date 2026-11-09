@@ -4294,7 +4294,7 @@ async function renderToken(addr, chainKey) {
           <label for="slip">Max slippage (%)</label><input id="slip" value="5" inputmode="decimal" />
           <button class="primary full tradebtn" id="trade" style="margin-top:14px"></button>
           <div class="tradewarn" id="tradewarn" hidden></div>
-          <div class="fees">4% fee: ${sp ? esc(feeText(sp)) : `1% protocol, 3% to holders of $${esc(info.symbol)}`}.${P.expiry && (!sp || sp.h) ? " Claim at least weekly: rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}${sp?.b ? " Buyers receive, and sellers pay, the burn share in tokens." : ""}</div>
+          <div class="fees">${P.fixed ? "Traders, holders, creators and PEPES FAMILY NFT holders earn from every trade." : `4% fee: ${sp ? esc(feeText(sp)) : `1% protocol, 3% to holders of $${esc(info.symbol)}`}.${P.expiry && (!sp || sp.h) ? " Claim at least weekly: rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}${sp?.b ? " Buyers receive, and sellers pay, the burn share in tokens." : ""}`}</div>
         </div>
         <div class="card" style="margin-top:14px">
           <h2 style="margin-bottom:4px">Your holder rewards</h2>
