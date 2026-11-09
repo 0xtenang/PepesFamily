@@ -1121,7 +1121,7 @@ async function renderBridge() {
   const app = $("#app"), gen = routeGen, hyper = CHAINS.hyperevm, ely = CHAINS.elysium;
   const opts = payOptions(hyper); // other chains' coins: Relay delivers them as HYPE on HyperEVM, into the inbox
   app.innerHTML = `
-    <div class="hero"><div><h1>Bridge to Elysium</h1>
+    <div class="hero"><div><h1>Bridge</h1>
       <p>Bring HYPE to Elysium, where its tokens launch and trade: from HyperEVM through Elysium's own rollup inbox, or from another chain's coin through Relay. It arrives at your own address in about a minute.</p>
       <div style="margin-top:12px">${addNetBtn(ely)}</div></div></div>
     <div class="card" style="max-width:520px">
@@ -1133,8 +1133,9 @@ async function renderBridge() {
       <div class="stat" id="bbal" style="margin-top:8px"></div>
       <div class="preview" id="bpv">&nbsp;</div>
       <button class="primary full" id="bgo" style="margin-top:6px">${account ? "Bridge to Elysium" : "Connect wallet"}</button>
-      <p class="stat" style="margin:12px 0 0">From HyperEVM you pay only Elysium's own fee (about 0.0001 HYPE, the unused part refunded on Elysium). From another chain Relay converts your coin to HYPE first, for its fee plus 0.5%. Going back to HyperEVM isn't on this page: Elysium withdrawals take 6 to 7 days.</p>
-    </div>`;
+      <p class="stat" style="margin:12px 0 0">From HyperEVM you pay only Elysium's own fee (about 0.0001 HYPE, the unused part refunded on Elysium). From another chain Relay converts your coin to HYPE first, for its fee plus 0.5%. Going back: withdraw below (about 6 to 7 days).</p>
+    </div>
+    <div id="wd"></div>`;
   const amount = () => { try { const v = ethers.parseEther(($("#bamt").value || "").trim() || "0"); return v > 0n ? v : 0n; } catch { return 0n; } };
   const balances = async () => {
     if (!account) return;
@@ -1195,6 +1196,153 @@ async function renderBridge() {
     } catch (e) { toast(errMsg(e), 8000); }
     b.disabled = false; status("Bridge to Elysium");
   };
+  renderWithdraw($("#wd"), gen);
+}
+
+// ---------------------------------------------------------------- Withdraw from Elysium
+// Elysium is an Arbitrum Orbit rollup settling on HyperEVM: a withdrawal starts on Elysium (ArbSys.withdrawEth),
+// becomes claimable on HyperEVM once the rollup confirms the Elysium state holding it (a challenge period of about
+// 6 days, 483,840 HyperEVM blocks, plus the time for that state to be posted), and is then claimed on HyperEVM's
+// Outbox with a proof built by Elysium's NodeInterface. Robinhood has no direct route: the HYPE claimed on HyperEVM
+// goes on through Relay, arriving as ETH.
+const ELY_ROLLUP = "0x508C173dFe5F737B3493195Bf785d71fA76fD217", ELY_OUTBOX = "0xeC6B106DfA14428FE5Eec2a4065a7be599f02728";
+const ARBSYS = "0x0000000000000000000000000000000000000064", NODE_INTERFACE = "0x00000000000000000000000000000000000000C8";
+const ARBSYS_IFACE = new ethers.Interface([
+  "function withdrawEth(address destination) payable returns (uint256)",
+  "event L2ToL1Tx(address caller, address indexed destination, uint256 indexed hash, uint256 indexed position, uint256 arbBlockNum, uint256 ethBlockNum, uint256 timestamp, uint256 callvalue, bytes data)",
+]);
+const ASSERTION_STATE = "tuple(tuple(bytes32[2] bytes32Vals, uint64[2] u64Vals) globalState, uint8 machineStatus, bytes32 endHistoryRoot)";
+const ROLLUP_IFACE = new ethers.Interface([
+  "function latestConfirmed() view returns (bytes32)",
+  "function getAssertion(bytes32) view returns (tuple(uint64 firstChildBlock, uint64 secondChildBlock, uint64 createdAtBlock, bool isFirstChild, uint8 status, bytes32 configHash))",
+  `event AssertionCreated(bytes32 indexed assertionHash, bytes32 indexed parentAssertionHash, tuple(tuple(bytes32 prevPrevAssertionHash, bytes32 sequencerBatchAcc, tuple(bytes32 wasmModuleRoot, uint256 requiredStake, address challengeManager, uint64 confirmPeriodBlocks, uint64 nextInboxPosition) configData) beforeStateData, ${ASSERTION_STATE} beforeState, ${ASSERTION_STATE} afterState) assertion, bytes32 afterInboxBatchAcc, uint256 inboxMaxCount, bytes32 wasmModuleRoot, uint256 requiredStake, address challengeManager, uint64 confirmPeriodBlocks)`,
+]);
+const OUTBOX_IFACE = new ethers.Interface([
+  "function isSpent(uint256 index) view returns (bool)",
+  "function executeTransaction(bytes32[] proof, uint256 index, address l2Sender, address to, uint256 l2Block, uint256 l1Block, uint256 l2Timestamp, uint256 value, bytes data)",
+]);
+const NI_IFACE = new ethers.Interface(["function constructOutboxProof(uint64 size, uint64 leaf) view returns (bytes32 send, bytes32 root, bytes32[] proof)"]);
+const WD_TO_KEY = "pf-wd-to"; // withdrawal tx hash -> "robinhood" when it should go on to Robinhood ("sent" once it has)
+
+/// How many Elysium withdrawals HyperEVM can pay out now: the send count of the latest confirmed Elysium state, and
+/// that state's time.
+let ELY_CONFIRMED = null;
+async function elysiumConfirmed() {
+  if (ELY_CONFIRMED && Date.now() - ELY_CONFIRMED.at < 300_000) return ELY_CONFIRMED;
+  const h = CHAINS.hyperevm.reader, r = new ethers.Contract(ELY_ROLLUP, ROLLUP_IFACE, h);
+  const id = await r.latestConfirmed(), a = await r.getAssertion(id);
+  const [log] = await h.getLogs({ address: ELY_ROLLUP, topics: [ROLLUP_IFACE.getEvent("AssertionCreated").topicHash, id], fromBlock: Number(a.createdAtBlock), toBlock: Number(a.createdAtBlock) });
+  const [blockHash] = ROLLUP_IFACE.parseLog(log).args.assertion.afterState.globalState.bytes32Vals;
+  const b = await CHAINS.elysium.reader.send("eth_getBlockByHash", [blockHash, false]);
+  ELY_CONFIRMED = { sendCount: BigInt(b.sendCount), time: parseInt(b.timestamp, 16), at: Date.now() };
+  return ELY_CONFIRMED;
+}
+/// The withdrawals `who` started on Elysium (every L2ToL1Tx to that address), oldest first.
+async function elysiumWithdrawals(who) {
+  const ch = CHAINS.elysium, latest = await ch.reader.getBlockNumber(), step = ch.logChunk || 1_000_000, out = [];
+  const topics = [ARBSYS_IFACE.getEvent("L2ToL1Tx").topicHash, ethers.zeroPadValue(who, 32)];
+  for (let from = 0; from <= latest; from += step) {
+    for (const l of await ch.reader.getLogs({ address: ARBSYS, topics, fromBlock: from, toBlock: Math.min(from + step - 1, latest) })) {
+      out.push({ ...ARBSYS_IFACE.parseLog(l).args.toObject(), hash: l.transactionHash });
+    }
+  }
+  return out.filter((w) => w.callvalue > 0n);
+}
+
+async function renderWithdraw(el, gen) {
+  const ely = CHAINS.elysium, hyper = CHAINS.hyperevm, rh = CHAINS.robinhood;
+  const prefs = () => { try { return JSON.parse(localStorage.getItem(WD_TO_KEY) || "{}"); } catch { return {}; } };
+  const setPref = (h, v) => { try { const p = prefs(); p[h.toLowerCase()] = v; localStorage.setItem(WD_TO_KEY, JSON.stringify(p)); } catch {} };
+  el.innerHTML = `
+    <div class="card" style="max-width:520px;margin-top:16px">
+      <h2 style="margin:0 0 4px">Withdraw from Elysium</h2>
+      <p class="stat" style="margin:0 0 12px">Elysium is a rollup on HyperEVM: a withdrawal is ready to claim on HyperEVM about 6 to 7 days after you start it (the rollup's challenge period). Claiming takes one transaction there, paid in a little HYPE on HyperEVM.</p>
+      <label for="wto" style="margin-top:0">Receive as</label>
+      <select id="wto"><option value="hyperevm">HYPE on HyperEVM</option><option value="robinhood">ETH on Robinhood (via HyperEVM)</option></select>
+      <label for="wamt">HYPE to withdraw</label>
+      <input id="wamt" inputmode="decimal" placeholder="0.0" autocomplete="off" />
+      <div class="stat" id="wbal" style="margin-top:8px"></div>
+      <button class="primary full" id="wgo" style="margin-top:10px">${account ? "Start withdrawal" : "Connect wallet"}</button>
+      <h3 style="margin:20px 0 8px;font-size:16px">Your withdrawals</h3>
+      <div id="wlist" class="stat">${account ? "Loading…" : "Connect a wallet to see them."}</div>
+    </div>`;
+  const balance = async () => {
+    if (!account) return;
+    const b = await ely.reader.getBalance(account).catch(() => null);
+    if (b !== null && gen === routeGen) $("#wbal").textContent = `On Elysium: ${fmt(b, 4)} HYPE`;
+  };
+  const list = async () => {
+    if (!account || gen !== routeGen) return;
+    try {
+      const [ws, conf] = await Promise.all([elysiumWithdrawals(account), elysiumConfirmed()]);
+      const outbox = new ethers.Contract(ELY_OUTBOX, OUTBOX_IFACE, hyper.reader);
+      const spent = await Promise.all(ws.map((w) => (w.position < conf.sendCount ? outbox.isSpent(w.position) : false)));
+      if (gen !== routeGen) return;
+      const p = prefs();
+      // a withdrawal is ready once a confirmed state covers it; that state lags about 6.5 days behind, so estimate
+      const eta = (w) => new Date((Number(w.timestamp) + 7 * 86400) * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      $("#wlist").innerHTML = ws.length ? [...ws].reverse().map((w, i) => {
+        const k = ws.length - 1 - i, ready = w.position < conf.sendCount, done = spent[k], toRh = p[w.hash.toLowerCase()];
+        const state = done ? (toRh === "robinhood" ? `<button type="button" data-rh="${k}">Send to Robinhood as ETH</button>` : "Claimed ✓")
+          : ready ? `<button type="button" class="primary" data-claim="${k}">Claim on HyperEVM</button>` : `Waiting · ready around ${eta(w)}`;
+        return `<div class="row" style="justify-content:space-between;padding:8px 0;border-top:1px solid var(--rule)"><div><b style="color:var(--text)">${fmt(w.callvalue, 6)} HYPE</b>
+          <div>${new Date(Number(w.timestamp) * 1000).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}${toRh === "robinhood" || toRh === "sent" ? " · to Robinhood" : ""}</div></div><div>${state}</div></div>`;
+      }).join("") : "No withdrawals yet.";
+      $("#wlist").querySelectorAll("[data-claim]").forEach((b) => (b.onclick = () => claim(ws[Number(b.dataset.claim)], conf, b)));
+      $("#wlist").querySelectorAll("[data-rh]").forEach((b) => (b.onclick = () => toRobinhood(ws[Number(b.dataset.rh)], b)));
+    } catch (e) { if (gen === routeGen) $("#wlist").textContent = "Couldn't read your withdrawals: " + errMsg(e); }
+  };
+  const claim = async (w, conf, b) => {
+    b.disabled = true;
+    try {
+      const raw = await ely.reader.call({ to: NODE_INTERFACE, data: NI_IFACE.encodeFunctionData("constructOutboxProof", [conf.sendCount, w.position]) });
+      const { proof } = NI_IFACE.decodeFunctionResult("constructOutboxProof", raw);
+      await requireWallet(hyper);
+      if ((await hyper.reader.getBalance(account)) === 0n) throw new Error("Claiming needs a little HYPE on HyperEVM for gas");
+      toast("Confirm the claim in your wallet…", 10000);
+      const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: ELY_OUTBOX,
+        data: OUTBOX_IFACE.encodeFunctionData("executeTransaction", [proof, w.position, w.caller, w.destination, w.arbBlockNum, w.ethBlockNum, w.timestamp, w.callvalue, w.data]) }] });
+      await waitReceipt(hyper, hash);
+      toast(`${fmt(w.callvalue, 4)} HYPE claimed on HyperEVM`, 7000);
+      if (prefs()[w.hash.toLowerCase()] === "robinhood") await toRobinhood(w, b);
+      list();
+    } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
+  };
+  const toRobinhood = async (w, b) => {
+    b.disabled = true;
+    try {
+      // the claimed HYPE, less a little left on HyperEVM for gas, on to ETH on Robinhood through Relay
+      const amt = w.callvalue - ethers.parseEther("0.002");
+      if (amt <= 0n) throw new Error("Too small to move to Robinhood");
+      await requireWallet(hyper);
+      const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: hyper.chainId, destinationChainId: rh.chainId,
+        originCurrency: ZERO_ADDR, destinationCurrency: ZERO_ADDR, amount: amt.toString(), tradeType: "EXACT_INPUT" });
+      await xcExecute(q, { ch: hyper, sym: "HYPE", addr: ZERO_ADDR, dec: 18, verb: "Moving…" }, (m) => toast(m, 20000));
+      setPref(w.hash, "sent");
+      toast("Arrived as ETH on Robinhood", 7000);
+      list();
+    } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
+  };
+  $("#wgo").onclick = async () => {
+    const b = $("#wgo");
+    if (!account) { await connect(ely).catch((e) => toast(errMsg(e), 6000)); if (account && gen === routeGen) renderBridge(); return; }
+    let amt = 0n; try { amt = ethers.parseEther(($("#wamt").value || "").trim() || "0"); } catch {}
+    if (amt <= 0n) return toast("Enter how much HYPE to withdraw");
+    b.disabled = true;
+    try {
+      await requireWallet(ely);
+      if ((await ely.reader.getBalance(account)) <= amt) throw new Error("Not enough HYPE on Elysium for this and its gas");
+      toast("Confirm the withdrawal in your wallet…", 10000);
+      const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: ARBSYS, value: ethers.toQuantity(amt),
+        data: ARBSYS_IFACE.encodeFunctionData("withdrawEth", [account]) }] });
+      if ($("#wto").value === "robinhood") setPref(hash, "robinhood");
+      await waitReceipt(ely, hash);
+      toast(`Withdrawal started: ${fmt(amt, 4)} HYPE, ready to claim on HyperEVM in about 6 to 7 days`, 9000);
+      $("#wamt").value = ""; balance(); list();
+    } catch (e) { toast(errMsg(e), 8000); }
+    b.disabled = false;
+  };
+  balance(); list();
 }
 
 // ---------------------------------------------------------------- Holder rewards
@@ -1860,7 +2008,7 @@ window.addEventListener("hashchange", route);
 const sec = (n, title, extra = "") => `<div class="hsec"><h2>${esc(title)}</h2>${extra}</div>`;
 
 let routeGen = 0; // bumped on every navigation, so slow loads can tell they are stale
-const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/bridge": "Bridge to Elysium", "/holder-rewards": "Holder rewards", "/admin": "Admin" };
+const TITLES = { "/": "Discover", "/tokens": "Discover", "/create": "Launch a token", "/rewards": "Rewards", "/mint": "Mint PEPES FAMILY", "/bridge": "Bridge", "/holder-rewards": "Holder rewards", "/admin": "Admin" };
 function route() {
   routeGen++;
   const h = location.hash.slice(1) || "/";
