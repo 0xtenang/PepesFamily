@@ -652,7 +652,8 @@ const dur = (s) => {
 const SPLITS = new Map();
 async function splitOf(P, token) {
   if (!P?.split) return null;
-  const k = token.toLowerCase();
+  if (P.fixed) return { c: 100, h: 100, b: 0, nft: true }; // v6: the same split for every token
+  const k = tokKey(P.ch, token);
   if (!SPLITS.has(k)) {
     const [c, h, b] = await P.c.feeSplit(token);
     SPLITS.set(k, { c: Number(c), h: Number(h), b: Number(b), nft: !!P.fixed });
@@ -1843,7 +1844,6 @@ async function renderHome() {
   const chains = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
   $("#app").innerHTML = discoverFrame(chains); // the same frame the first paint showed, now with the live chains
   const THEAD = DISCOVER_THEAD;
-  loadTotals().catch((e) => console.warn("totals", e));
 
   let sortMode = "hot";
   try { const v = localStorage.getItem("tokenSort"); if (["hot", "new", "mc", "gain"].includes(v)) sortMode = v; } catch {}
@@ -1977,7 +1977,7 @@ async function renderHome() {
     showList(); showTrend(); saveCache();
   };
   await refresh();
-  const timer = setInterval(() => (gen !== routeGen ? clearInterval(timer) : !document.hidden && refresh()), 20_000);
+  const timer = setInterval(() => (gen !== routeGen ? clearInterval(timer) : !document.hidden && refresh()), 60_000);
 }
 
 // ---------------------------------------------------------------- Wallet: cash and positions
@@ -2602,72 +2602,6 @@ function market24h() {
   return p;
 }
 
-// ---------------------------------------------------------------- Platform totals
-/// All-time totals across every launchpad version, summed per quote asset (ETH / IMD) and shown in USD.
-///   Holders:  for each token, dividends already distributed + holder fees still waiting to be flushed.
-///   Protocol: fees already collected (ProtocolFeesCollected events) + fees pending in each launchpad.
-async function loadTotals() {
-  const holders = {};
-  const proto = {};
-  const add = (m, q, w) => { m[q] = (m[q] ?? 0n) + w; };
-  let protocolExact = true;
-
-  await Promise.all(livePads().map(async (P) => {
-    const n = Number(await P.c.tokenCount());
-    // Per quote asset, for this launchpad: holder earnings, and the protocol fees they imply (an estimate used only
-    // if the collection history can't be read). The protocol fee is 1% of each trade; holders get h% of it per the
-    // token's split (3% before v5), so protocol = holder earnings x 1 / h. Tokens paying holders nothing can't be
-    // estimated this way and count as zero there.
-    const estimate = {};
-    for (let off = 0; off < n; off += 100) {
-      const list = await P.v.getTokens(off, 100);
-      const splits = await Promise.all(list.map((t) => splitOf(P, t.token).catch(() => null)));
-      list.forEach((t, i) => {
-        const earned = t.totalDividendsDistributed + t.pendingHolderFees;
-        add(holders, t.quote, earned);
-        const hBps = BigInt(splits[i] ? splits[i].h : 300);
-        if (hBps > 0n) add(estimate, t.quote, (earned * 100n) / hBps);
-      });
-    }
-    const pending = {};
-    const assets = padAssets(P);
-    (await Promise.all(assets.map((q) => P.c.pendingProtocolFees(q)))).forEach((w, i) => add(pending, assets[i], w));
-    try {
-      const collected = {};
-      for (const ev of await fetchPadLogs(P, P.c.interface.getEvent("ProtocolFeesCollected").topicHash)) {
-        const { quote, amount } = P.c.interface.parseLog(ev).args;
-        add(collected, quote, amount);
-      }
-      for (const [q, w] of Object.entries(pending)) add(proto, q, w);
-      for (const [q, w] of Object.entries(collected)) add(proto, q, w);
-    } catch {
-      // History unavailable: use the estimate, but never less than the pending fees already read.
-      protocolExact = false;
-      for (const q of new Set([...Object.keys(pending), ...Object.keys(estimate)])) {
-        const e = estimate[q] ?? 0n, p = pending[q] ?? 0n;
-        add(proto, q, e > p ? e : p);
-      }
-    }
-  }));
-
-  const toUsd = (m) => Object.entries(m).reduce((s, [q, wei]) => s + Number(ethers.formatUnits(wei, 18)) * quoteUsd(q), 0);
-  // per asset symbol (IMD on Robinhood and IMD on Ethereum are one line)
-  const parts = (m) => {
-    const bySym = {};
-    for (const [q, w] of Object.entries(m)) if (w > 0n) bySym[qsym(q)] = (bySym[qsym(q)] ?? 0n) + w;
-    return Object.entries(bySym).map(([sym, w]) => `${fmt(w)} ${sym}`).join(" + ") || "nothing yet";
-  };
-  // The protocol fee is exactly 1% of each trade's quote amount, so volume = protocol fees × 100.
-  const volume = Object.fromEntries(Object.entries(proto).map(([q, w]) => [q, w * 100n]));
-  const approx = protocolExact ? "" : "≈ ";
-
-  if (!$("#tot-holders")) return; // not on the home page
-  $("#tot-holders").textContent = fmtUsd(toUsd(holders));
-  $("#tot-holders-sub").textContent = parts(holders);
-  $("#tot-volume").textContent = approx + fmtUsd(toUsd(volume));
-  $("#tot-volume-sub").textContent = parts(volume);
-}
-
 /// All logs a launchpad emitted with `topic0`, via Blockscout's API (paginated).
 async function fetchPadLogs(P, topic0) {
   if (!P.ch.blockscoutApi) throw new Error("no event history on " + P.ch.name); // callers fall back
@@ -2942,8 +2876,16 @@ async function tokenParticipants(token, ch = CHAINS.robinhood) {
 }
 
 // ---------------------------------------------------------------- My rewards
-/// Every token from every live launchpad version, with the launchpad that created it.
-async function allTokenInfos() {
+/// Every token from every live launchpad version, with the launchpad that created it. One read is shared for 15 s by
+/// everything that asks at once (Discover's list, positions, search, rewards).
+let ALL_OWN_P = null, ALL_OWN_AT = 0;
+function allTokenInfos() {
+  if (ALL_OWN_P && Date.now() - ALL_OWN_AT < 15_000) return ALL_OWN_P;
+  ALL_OWN_AT = Date.now();
+  ALL_OWN_P = readTokenInfos().catch((e) => { ALL_OWN_P = null; throw e; });
+  return ALL_OWN_P;
+}
+async function readTokenInfos() {
   const lists = await Promise.all(livePads().map(async (P) => {
     const n = Number(await P.c.tokenCount()), out = [];
     for (let off = 0; off < n; off += 100) out.push(...(await P.v.getTokens(off, 100)));
