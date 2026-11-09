@@ -2738,7 +2738,9 @@ async function renderAdmin() {
   } catch (e) { return (app.innerHTML = `<div class="card empty">Couldn't load: ${esc(errMsg(e))}</div>`); }
   const toUsd = (wei, q) => Number(ethers.formatUnits(wei, 18)) * quoteUsd(q);
   const worthPaying = (x) => x.waiting > 0n && toUsd(x.waiting, x.t.quote) >= 0.01; // under a cent isn't worth the gas
-  const totalUsd = rows.reduce((s, r) => s + r.assets.reduce((t, q, i) => t + toUsd(r.pending[i], q), 0), 0);
+  // Elysium's fees have their own card (claimed and kept in HYPE there), so Claim all leaves them out
+  const ownCard = (P) => P.ch.key === "elysium";
+  const totalUsd = rows.filter((r) => !ownCard(r.P)).reduce((s, r) => s + r.assets.reduce((t, q, i) => t + toUsd(r.pending[i], q), 0), 0);
   const unclaimedUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.unclaimed, x.t.quote), 0), 0);
   const waitingUsd = rows.reduce((s, r) => s + r.tokens.reduce((t, x) => t + toUsd(x.waiting, x.t.quote), 0), 0);
   app.innerHTML = `
@@ -2761,11 +2763,12 @@ async function renderAdmin() {
         <div id="rcy" class="stat">Not checked yet.</div>
         <div class="row" style="margin-top:10px"><button id="rcyscan">Find expired rewards</button><button class="primary" id="rcysend" hidden></button></div>
       </div>` : ""}
+    <div id="elyadmin"></div>
     <div id="earnadmin"></div>
     `;
   // One button for every claim: each launchpad's protocol fees (chain by chain, worth more than 5 cents), then
   // Relay's swap fees when the fee address itself is connected.
-  const claims = rows.flatMap((r) => r.assets.map((q, i) => ({ r, q, amt: r.pending[i], usd: toUsd(r.pending[i], q) })))
+  const claims = rows.filter((r) => !ownCard(r.P)).flatMap((r) => r.assets.map((q, i) => ({ r, q, amt: r.pending[i], usd: toUsd(r.pending[i], q) })))
     .filter((c) => c.amt > 0n && c.usd >= 0.05).sort((a, b) => a.r.P.ch.chainId - b.r.P.ch.chainId);
   let relayFees = [];
   relayFeeBalances().then((list) => {
@@ -2788,6 +2791,7 @@ async function renderAdmin() {
     } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
   };
   nftAdmin($("#nftadmin"));
+  elysiumAdmin($("#elyadmin"));
   earnAdmin($("#earnadmin"));
   // v4: find wallets with expired rewards (every address that ever sent or received the token, from Blockscout)
   // and send them to the fee address with recycleMany, in batches.
@@ -3405,6 +3409,54 @@ async function nftAdmin(el) {
     act("#nftopen", () => w().setMintConfig(price, !open, perTx), open ? "Mint closed" : "Mint open");
     act("#nftwd", () => w().withdrawProceeds(FEES.recipient), "Proceeds sent to the fee address");
   } catch (e) { el.innerHTML = `<div class="card" style="margin-bottom:14px"><span class="h">PEPES FAMILY NFT</span><div class="stat">Couldn't read it: ${esc(errMsg(e))}</div></div>`; }
+}
+
+/// Elysium's fees, claimed on their own and kept in HYPE there: the protocol 1% and the NFT 1% (both reach the fee
+/// address as WHYPE), and the creator 1% of tokens the fee address launched (paid as HYPE). Anyone may claim, the
+/// funds only ever go to the fee address; unwrapping its WHYPE needs the fee address itself.
+const WHYPE_ABI = ["function balanceOf(address) view returns (uint256)", "function withdraw(uint256)"];
+async function elysiumAdmin(el) {
+  if (!el) return;
+  const ch = CHAINS.elysium, P = livePads().find((x) => x.ch === ch && x.fixed);
+  const card = (body) => `<div class="card" style="margin-top:14px"><span class="h">Elysium · HYPE</span>${body}</div>`;
+  if (!P) { el.innerHTML = card(`<div class="stat">The Elysium launchpad isn't live.</div>`); return; }
+  const fee = FEES.recipient, whype = new ethers.Contract(P.quote, WHYPE_ABI, ch.reader);
+  let proto, nft, mine, wBal, hBal;
+  try {
+    const n = Number(await P.c.tokenCount()), toks = [];
+    for (let off = 0; off < n; off += 100) toks.push(...(await P.v.getTokens(off, 100)));
+    [proto, nft, wBal, hBal, mine] = await Promise.all([P.c.pendingProtocolFees(P.quote), P.c.pendingNftFees(P.quote), whype.balanceOf(fee), ch.reader.getBalance(fee),
+      Promise.all(toks.map(async (t) => ((await P.c.creatorPayout(t.token)).toLowerCase() === fee.toLowerCase() ? { t, amt: await P.c.pendingCreatorFees(t.token) } : null)))]);
+    mine = mine.filter((x) => x && x.amt > 0n);
+  } catch (e) { el.innerHTML = card(`<div class="stat">Couldn't read it: ${esc(errMsg(e))}</div>`); return; }
+  const creator = mine.reduce((s, x) => s + x.amt, 0n), total = proto + nft + creator;
+  const isFee = account?.toLowerCase() === fee.toLowerCase();
+  el.innerHTML = card(`
+    <div class="stat" style="margin:4px 0 10px">Waiting to claim: ${fmt(total, 6)} HYPE (${usd(total, P.quote)}): protocol 1% ${fmt(proto, 6)}, NFT 1% ${fmt(nft, 6)}, your tokens' creator 1% ${fmt(creator, 6)}${mine.length ? ` (${mine.map((x) => "$" + esc(x.t.symbol)).join(", ")})` : ""}.</div>
+    <div class="stat" style="margin-bottom:10px">The fee address ${short(fee)} on Elysium holds ${fmt(hBal, 6)} HYPE and ${fmt(wBal, 6)} WHYPE. Claims stay on Elysium: nothing is moved to another chain.</div>
+    <div class="row" style="flex-wrap:wrap;gap:8px"><button class="primary" id="elyclaim" ${total > 0n ? "" : "disabled"}>Claim on Elysium</button>
+      <button id="elyunwrap" ${isFee && wBal > 0n ? "" : "disabled"} title="${isFee ? "" : "Connect the fee address to unwrap"}">Unwrap ${fmt(wBal, 4)} WHYPE to HYPE</button></div>
+    <div class="stat" style="margin-top:8px">Any wallet can press Claim (it only pays gas); the protocol and NFT shares arrive as WHYPE, creator earnings as HYPE. Unwrapping needs the fee address connected.</div>`);
+  $("#elyclaim").onclick = async () => {
+    $("#elyclaim").disabled = true;
+    const calls = [...(proto + nft > 0n ? [{ ch, label: "protocol and NFT fees", to: P.pad, data: P.c.interface.encodeFunctionData("collectProtocolFees", [P.quote]) }] : []),
+      ...mine.map((x) => ({ ch, label: `$${x.t.symbol} creator earnings`, to: P.pad, data: P.c.interface.encodeFunctionData("collectCreatorFees", [x.t.token]) }))];
+    try {
+      const r = await sendAll(calls, (m2) => toast(m2, 30000), { anyone: true });
+      toast(r.failed.length ? `Claimed ${r.done}. Not claimed: ${r.failed.join("; ")}` : "Claimed on Elysium", r.failed.length ? 12000 : 6000);
+      elysiumAdmin(el);
+    } catch (e) { toast(errMsg(e), 8000); $("#elyclaim").disabled = false; }
+  };
+  $("#elyunwrap").onclick = async () => {
+    $("#elyunwrap").disabled = true;
+    try {
+      await requireWallet(ch);
+      toast("Confirm unwrapping in your wallet…", 10000);
+      await (await new ethers.Contract(P.quote, WHYPE_ABI, signer).withdraw(wBal)).wait();
+      toast("Unwrapped to HYPE on Elysium", 6000);
+      elysiumAdmin(el);
+    } catch (e) { toast(errMsg(e), 8000); $("#elyunwrap").disabled = false; }
+  };
 }
 
 const EARN_ABI = [
