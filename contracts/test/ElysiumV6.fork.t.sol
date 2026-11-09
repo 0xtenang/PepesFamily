@@ -17,7 +17,7 @@ import {IV4Quoter, IERC20} from "./Fork.t.sol";
 /// @notice Launchpad v6 on Elysium mainnet, deployed on a fork exactly as the deploy page sends it (the CREATE2 factory,
 ///         the init code and salt of script/V6DeployData.s.sol): the real PoolManager and WHYPE, our quoter. Launch,
 ///         buy and sell with HYPE, the quoter, the four fee shares. Skipped without FORK_RPC_ELYSIUM.
-///   FORK_RPC_ELYSIUM=https://rpc-live.boxa.club forge test --mc ElysiumV6ForkTest -vv
+///   FORK_RPC_ELYSIUM=https://rpc.elysium.kinetiq.xyz forge test --mc ElysiumV6ForkTest -vv
 contract ElysiumV6ForkTest is Test {
     address constant CREATE2 = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
     address bob = makeAddr("bob");

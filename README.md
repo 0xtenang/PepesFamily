@@ -165,10 +165,10 @@ the chain itself (`Chains.pad("elysium-whype")`):
   CREATE2 salt 0, MIT; `V6DeployData` `PART=quoter`), deployed before the token factory.
 - **Launchpad v6** `0x2382474CFE9939573Ef16FfACb5B4F0fC98fe8cc` (token factory `0xDa713cAa4f2E14966AE0fCA724d2Ae80C40Cc2Fd`),
   paired with HYPE, starting at 47 HYPE; the NFT 1% goes to the team address, as on every chain but Robinhood.
-- **RPC and explorer:** Kinetiq hasn't published a public RPC or explorer yet. The site and deploy page use the community
-  RPC `https://rpc-live.boxa.club`, and token links go to DexScreener. Relay doesn't serve Elysium, so there are no
+- **RPC and explorer:** the site and deploy page use Kinetiq's public RPC `https://rpc.elysium.kinetiq.xyz` (backup
+  `https://rpc.volta.family`). No explorer is published yet, so token links go to DexScreener. Relay doesn't serve Elysium, so there are no
   cross-chain buys or gas top-ups: buyers bridge HYPE themselves.
-- **Test:** `FORK_RPC_ELYSIUM=https://rpc-live.boxa.club forge test --mc ElysiumV6ForkTest -vv` deploys all three through
+- **Test:** `FORK_RPC_ELYSIUM=https://rpc.elysium.kinetiq.xyz forge test --mc ElysiumV6ForkTest -vv` deploys all three through
   the CREATE2 factory exactly as the deploy page does, then launches, quotes, buys and sells with HYPE and collects fees.
 
 **PepesFamilySwapRouter (deployed, not used by the site).** `src/PepesFamilySwapRouter.sol`, CREATE2
