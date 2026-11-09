@@ -7,6 +7,8 @@ import {PepesFamily} from "../src/PepesFamily.sol";
 /// @notice Per-chain settings for deploying PepesFamily (the contracts are the same on every chain).
 library Chains {
     address internal constant OWNER = 0x3c8A4d94B3219F6633F2cC94094f4765b30c691C;
+    /// @dev PepesFamilyQuoter for Elysium mainnet's PoolManager (CREATE2, salt 0): V6DeployData PAD=elysium-whype PART=quoter
+    address internal constant QUOTER_ELYSIUM = 0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793;
 
     struct Config {
         string name;
@@ -93,6 +95,14 @@ library Chains {
             // license allows). Mainnet waits for Uniswap's own deployment.
             return Pad(key, 99801, IPoolManager(0x13DA18e28F1928F85465EaFe49CB6BBac1d52203), 0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234,
                 0x365EfD5fFb4e42657CFB36fE61255082E5327dEd, wrappedNative, 47e18);
+        }
+        if (k == keccak256("elysium-whype")) {
+            // Elysium mainnet (Kinetiq's Arbitrum Orbit chain on Hyperliquid, gas in HYPE), WHYPE (the same contract as
+            // Kinetiq's canonical testnet WHYPE). Uniswap v4 PoolManager 0xE2e1…23F1: Uniswap's PoolManager bytecode
+            // (checked against Robinhood's, self-address aside), listed by 0x Settler. No V4Quoter there: our
+            // PepesFamilyQuoter (V6DeployData PART=quoter).
+            return Pad(key, 99901, IPoolManager(0xE2e105d3F7209A9DA11f83cCf3E7398a753823F1), 0xbA876237B0F021A6c6D852d6c26E107997cC5E81,
+                QUOTER_ELYSIUM, wrappedNative, 47e18);
         }
         if (k == keccak256("base-weth")) {
             // Base, WETH (the OP Stack predeploy): launches pair with ETH itself

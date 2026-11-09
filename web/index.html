@@ -450,12 +450,12 @@ const CONFIG = {
     { version: 6, chain: "base", quote: "0x4200000000000000000000000000000000000006", pad: "0x3f9E6FAa22543eeF353C6be25B570aEA8C2CE8cc", router: "0x100431c230313fE9AfA0CEC513F9907580a8Ef41", ethRouter: "0xb292506Bea4fF9A1a99E4EdA7a6E7805EfEb3A51", lens: "0x746530eCc277d15FC8a8256850551AFA7dC5A857", permit: true, expiry: true, split: true, fixed: true },
     { version: 6, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0B28bCC6380fFbf5CC76038f3629eBe7e6bc68cC", router: "0x6d90F18386a5eBaB94A8d9b945BFCf85E13D1758", ethRouter: "0xDC50c7b188A4D57bcAAF8928B54B2Ab07058e60d", lens: "0x269A97a3b324AD8FC50ceA561CF809d4F26e439b", permit: true, expiry: true, split: true, fixed: true },
     { version: 6, chain: "bsc", quote: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", pad: "0x84E2b2e0dBB0709f865ccB5050A98179a79568Cc", router: "0x9281A650984dA16a42545C900A08263461980902", ethRouter: "0xa4009350Bc855E082284D8b87c2F625638233dbf", lens: "0x7AC273c23D8C2f455A2381Fc7F77Ef76Cb7825F9", permit: true, expiry: true, split: true, fixed: true },
+    { version: 6, chain: "elysium", quote: "0xbA876237B0F021A6c6D852d6c26E107997cC5E81", pad: "0x2382474CFE9939573Ef16FfACb5B4F0fC98fe8cc", router: "0x07CD8bDf2a14302caD62aeA9B9DAC06B384012a2", ethRouter: "0xCf9cD692306814D0791315DC5C0B118c6D710fE0", lens: "0xB8F7fF15687FE807D09619192cb00601E407723d", permit: true, expiry: true, split: true, fixed: true },
     // 2026-10-18: one launchpad per pair asset (contracts/script/Chains.sol `pad`). Addresses are fixed in advance
     // (CREATE2); each lights up here once its contract exists on its chain.
     { version: 5, chain: "base", quote: "0x4200000000000000000000000000000000000006", pad: "0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc", router: "0xB34C8016EA506E257b47640e52fC9329daF9C847", ethRouter: "0x5d3105EcE7b5459cf6313f5925F78325a0C4A1aE", lens: "0x1b44F02c09eaef9Eed8289e7a218f5402a966d77", permit: true, expiry: true, split: true },
     { version: 5, chain: "hyperevm", quote: "0x5555555555555555555555555555555555555555", pad: "0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC", router: "0x5df991A1c82fBd56eA0b8Cdc3b9749f2286615D4", ethRouter: "0x4927CfFA45cf2Aaa568f73aE9c8d988acaECF7Bb", lens: "0x9F2333517B84e83e59d9a0166752978AF2b7a694", permit: true, expiry: true, split: true },
     { version: 5, chain: "bsc", quote: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", pad: "0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC", router: "0xFa7F2A09945D17aEb7769525579FaDA7b6a52986", ethRouter: "0x598FDF1C87eeF410b7783E0F5201A79975eBc333", lens: "0x1c98857099219087f5DD7e55691eD37E1E749Cec", permit: true, expiry: true, split: true },
-    { version: 5, chain: "elysium", quote: "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", pad: "0x417fbe5588666647dCB8575c583dAd0CA11B68cc", router: "0xfE2D51a10eA1E3Cf739e19A54b99946913feA4CA", ethRouter: "0x7F702bB6CFe8A4394071BD8a832Dc73A80ED1043", lens: "0xB43a190ae80781FBBC7A40aAE1c25557D6AE8c11", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", pad: "0xf41b697c584F0dD38b9E65D72D49F768388d28CC", router: "0x8d617D6c1776cA90e99c5FAb7c632D3c3159E6c1", ethRouter: "0x7399E141677519f0d4eB493b4546e87bd5B5e67c", lens: "0xd458bCa018677D3869eB23f02433b9DFFE1f9615", permit: true, expiry: true, split: true },
     { version: 5, quote: "0x020bfC650A365f8BB26819deAAbF3E21291018b4", pad: "0x5FF9d052F63dC989a5a8b8e1DE84F63748e6A8cC", router: "0x7C0e35703aC820A613A8b820B08B5F5C3f52B0e6", ethRouter: "0x3f08F91457Be1bcA3f24147D694964f5dEdb98f2", lens: "0xD858C0aE063A8A4e9C3ddcb02dEC6d96B2586873", permit: true, expiry: true, split: true },
     { version: 5, chain: "ethereum", quote: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", pad: "0x4130878d0f1efEfB84e424829bd35Aa83201A8cC", router: "0x00CcF434A70C7F11b4260E9a4b37673393290f08", ethRouter: "0xC4bb2402268608EdC4A89d7d03F273A76a5C412B", lens: "0x3c5A9D455836F812bAcf22E9CA252C75c09CAfcb", permit: true, expiry: true, split: true },
@@ -563,13 +563,14 @@ const CHAINS = {
     gmgn: "bsc", dex: "bsc", native: { name: "BNB", symbol: "BNB" }, blurb: "BSC: low gas, paired with BNB.",
     remote: "0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B", remotePads: ["0x84E2b2e0dBB0709f865ccB5050A98179a79568Cc", "0xa6Dd1ab31C9F67b80ae5DA81DA1ADB998a5Aa8cC"], pay: [["BNB", ZERO_ADDR, 18], ["USDC", "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", 18]],
   },
-  // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), testnet: no Uniswap v4 there yet, so our
-  // own PoolManager and quoter (contracts/script/ElysiumAddrs.s.sol). Test tokens: no USD values shown.
+  // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), mainnet: Uniswap v4's PoolManager
+  // 0xE2e1…23F1 and our own quoter (no Uniswap V4Quoter there). Kinetiq hasn't published a public RPC or explorer yet:
+  // a community RPC, and DexScreener for token links. Relay doesn't serve it: no cross-chain buys or gas top-ups.
   elysium: {
-    key: "elysium", name: "Elysium testnet", short: "Elysium testnet", chainId: 99801, rpc: "https://testnet-rpc.elysium.kinetiq.xyz",
-    walletRpc: "https://testnet-rpc.elysium.kinetiq.xyz", explorer: "https://testnet.elysium.kinetiq.xyz", blockscoutApi: "",
-    quoter: "0x365EfD5fFb4e42657CFB36fE61255082E5327dEd", gmgn: "", dex: "", native: { name: "HYPE", symbol: "HYPE" }, testnet: true,
-    blurb: "Elysium testnet (Kinetiq, on Hyperliquid): free test HYPE from the Elysium faucet, tokens with no real value. Mainnet once Uniswap v4 is there.",
+    key: "elysium", gt: "elysium", name: "Elysium", short: "Elysium", chainId: 99901, rpc: "https://rpc-live.boxa.club",
+    walletRpc: "https://rpc-live.boxa.club", explorer: "", blockscoutApi: "",
+    quoter: "0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793", gmgn: "", dex: "elysium", native: { name: "HYPE", symbol: "HYPE" },
+    blurb: "Elysium: Kinetiq's fast chain on Hyperliquid, paired with HYPE.",
   },
 };
 
@@ -736,7 +737,7 @@ addQuote("robinhood", "0x020bfC650A365f8BB26819deAAbF3E21291018b4", "CASHCAT", {
 addQuote("base", "0x4200000000000000000000000000000000000006", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 addQuote("hyperevm", "0x5555555555555555555555555555555555555555", "WHYPE", { wrapped: true, usd: () => prices.hypeUsd, quick: ["0.5", "1", "5", "10"] });
 addQuote("bsc", "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", { wrapped: true, usd: () => prices.bnbUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
-addQuote("elysium", "0xCD57F65c2B0e5881CFC2E609F7CD53b746E1F234", "WHYPE", { wrapped: true, usd: () => 0, quick: ["0.5", "1", "5", "10"] }); // testnet: no value
+addQuote("elysium", "0xbA876237B0F021A6c6D852d6c26E107997cC5E81", "WHYPE", { wrapped: true, usd: () => prices.hypeUsd, quick: ["0.5", "1", "5", "10"] });
 addQuote("ethereum", "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", { wrapped: true, usd: () => prices.ethUsd, quick: ["0.01", "0.05", "0.1", "0.5"] });
 const NATIVE_QUICK = { ETH: ["0.01", "0.05", "0.1", "0.5"], HYPE: ["0.5", "1", "5", "10"] };
 const SUPPLY = 10n ** 27n;
@@ -917,7 +918,7 @@ const appFees = (bps) => (bps > 0 ? [{ recipient: FEES.recipient, fee: String(bp
 const nativeUsd = (ch) => (ch.testnet ? 0 : { ETH: prices.ethUsd, BNB: prices.bnbUsd, HYPE: prices.hypeUsd }[ch.native?.symbol || "ETH"] || 0);
 /// The launch fee on `ch`, in its coin: FEES.launchUsd at today's price (0 while the price is unknown).
 const launchFeeWei = (ch) => { const u = nativeUsd(ch); return u > 0 && FEES.launchUsd > 0 ? ethers.parseEther((FEES.launchUsd / u).toFixed(9)) : 0n; };
-const GAS_DROP = { ethereum: "0.0004", robinhood: "0.00005", base: "0.00005", hyperevm: "0.02", bsc: "0.0003" };
+const GAS_DROP = { ethereum: "0.0004", robinhood: "0.00005", base: "0.00005", hyperevm: "0.02", bsc: "0.0003", elysium: "0.001" };
 /// Can launchpad P be used from another chain? (Its chain's PepesFamilyRemote exists and works with it.)
 const xcReady = (P) => !!(P?.ch.remoteLive && P.ch.remotePads?.some((a) => a.toLowerCase() === P.pad.toLowerCase()));
 /// Where a user can pay from for chain `dest`: every currency on every chain Relay serves for us, except paying
@@ -1097,6 +1098,12 @@ const $ = (s, el = document) => el.querySelector(s);
 const str = (s) => { try { return typeof s === "string" ? s : String(s ?? ""); } catch { return ""; } };
 const esc = (s) => str(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+/// A link to `path` ("address/0x…", "token/0x…", "tx/0x…") on `ch`'s block explorer, or plain text on a chain that has
+/// none yet (Elysium mainnet): tokens there link to DexScreener instead.
+function xlink(ch, path, text, attrs = "") {
+  const url = ch.explorer ? `${ch.explorer}/${path}` : path.startsWith("token/") && ch.dex ? `https://dexscreener.com/${ch.dex}/${path.slice(6)}` : "";
+  return url ? `<a ${attrs} href="${url}" target="_blank" rel="noopener">${text}</a>` : `<span ${attrs}>${text}</span>`;
+}
 const qsym = (q) => QUOTES[String(q).toLowerCase()]?.sym || (q === ZERO ? "ETH" : "IMD");
 const pill = (q) => `<span class="pill ${q === ZERO ? "eth" : "imd"}">${qsym(q)}</span>`;
 
@@ -1294,7 +1301,7 @@ async function connect(ch = CHAINS.robinhood, quiet = false) {
       try {
         await eth.request({ method: "wallet_addEthereumChain", params: [{
           chainId: hex, chainName: ch.name, rpcUrls: [ch.walletRpc],
-          nativeCurrency: { ...(ch.native || { name: "Ether", symbol: "ETH" }), decimals: 18 }, blockExplorerUrls: [ch.explorer],
+          nativeCurrency: { ...(ch.native || { name: "Ether", symbol: "ETH" }), decimals: 18 }, ...(ch.explorer ? { blockExplorerUrls: [ch.explorer] } : {}),
         }] });
         // Adding a network doesn't always select it (EIP-3085): ask to switch again.
         if ((await eth.request({ method: "eth_chainId" })) !== hex) {
@@ -1356,7 +1363,7 @@ function loadPrivy() {
     sc.type = "module"; sc.src = CONFIG.privyScript;
     sc.onload = () => {
       const chains = Object.values(CHAINS).filter((c) => !c.testnet).map((c) => ({ id: c.chainId, name: c.name,
-        native: c.native || { name: "Ether", symbol: "ETH" }, rpc: c.walletRpc || c.rpc, explorer: c.explorer }));
+        native: c.native || { name: "Ether", symbol: "ETH" }, rpc: c.walletRpc || c.rpc, explorer: c.explorer || `https://dexscreener.com/${c.dex}` }));
       window.PFPrivy.init({ appId: CONFIG.privyAppId, chains, defaultChainId: CHAINS.robinhood.chainId });
       ok(window.PFPrivy);
     };
@@ -2256,7 +2263,7 @@ async function renderMarketToken(chKey, addrIn) {
       <div class="card mlead">
         <div class="thead-token">${mAvatar(x, "lg")}
           <div style="min-width:0"><div class="row"><h1>${esc(t.name)}</h1><span class="pill">$${esc(t.symbol)}</span><span class="pill">${chainAv(ch)}${esc(ch.short)}</span><span class="pill warn">Not launched on PepesFamily</span></div>
-            <div class="stat" style="margin-top:4px"><a class="lnk" href="${ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)}</a> · <button type="button" class="sharebtn" id="mcopy">Copy address</button></div></div>
+            <div class="stat" style="margin-top:4px">${xlink(ch, `token/${addr}`, short(addr), 'class="lnk"')} · <button type="button" class="sharebtn" id="mcopy">Copy address</button></div></div>
         </div>
         <div class="tstrip">
           <div class="tprice"><div class="price-big">${price ? tinyUsd(price) : "—"}</div>${chgText(chg)}</div>
@@ -3958,7 +3965,7 @@ async function renderToken(addr) {
             ${avatar(info, "lg")}
             <div style="min-width:0">
               <div class="row"><h1>${esc(info.name)}</h1><span class="pill">$${esc(info.symbol)}</span><span class="pill">${esc(P.ch.short)}</span><span class="pill">${esc(Q)} pair</span></div>
-              <div class="stat" style="margin-top:4px"><a class="lnk" href="${P.ch.explorer}/token/${addr}" target="_blank" rel="noopener">${short(addr)}</a> · created by <a class="lnk" href="${P.ch.explorer}/address/${p.creator}" target="_blank" rel="noopener">${short(p.creator)}</a> ${ago(p.createdAt)}${P.nft ? "" : ` · launchpad v${P.version}`}</div>
+              <div class="stat" style="margin-top:4px">${xlink(P.ch, `token/${addr}`, short(addr), 'class="lnk"')} · created by ${xlink(P.ch, `address/${p.creator}`, short(p.creator), 'class="lnk"')} ${ago(p.createdAt)}${P.nft ? "" : ` · launchpad v${P.version}`}</div>
             </div>
           </div>
           <div class="row" style="margin-top:20px;align-items:flex-end;gap:16px">
@@ -4027,7 +4034,7 @@ async function renderToken(addr) {
     const isPayout = me && payout.toLowerCase() === me, isProposed = me && proposed.toLowerCase() === me;
     $("#v5detail").innerHTML = `
       ${sp.b ? `Burned: <b>${fmt(burned + pendBurn)}</b> $${esc(info.symbol)} (${(Number(((burned + pendBurn) * 100000n) / SUPPLY) / 1000).toLocaleString("en-US")}% of supply)${pendBurn > 0n ? ` · ${fmt(pendBurn)} waiting to be burned <button type="button" id="v5burn">Burn now</button>` : ""}<br/>` : ""}
-      ${sp.c ? `Creator earnings waiting: <b>${fmt(pend, 6)} ${Q}</b> (${usd(pend, q)}) · paid to <a class="mono" href="${P.ch.explorer}/address/${payout}" target="_blank" rel="noopener">${short(payout)}</a>
+      ${sp.c ? `Creator earnings waiting: <b>${fmt(pend, 6)} ${Q}</b> (${usd(pend, q)}) · paid to ${xlink(P.ch, `address/${payout}`, short(payout), 'class="mono"')}
         ${pend > 0n ? `<button type="button" id="v5collect">Send to creator</button>` : ""}
         ${isPayout ? `<div class="row" style="margin-top:8px"><input id="v5to" placeholder="New payout address 0x…" spellcheck="false" style="flex:1;min-width:180px" /><button type="button" id="v5set">Propose</button></div>
           <div class="stat">Two steps: the new address must then accept here. Proposing 0x0000000000000000000000000000000000000000 cancels.</div>` : ""}
@@ -4348,9 +4355,9 @@ async function loadTrades(P, addr, info, stale = () => false, pages = 6) {
   if (stale()) return;
   $("#trades").innerHTML = trades.length ? trades.slice(-50).reverse().map((t) => `
     <tr><td class="${t.isBuy ? "b" : ""}">${t.isBuy ? "Buy" : "Sell"}</td>
-    <td class="mono"><a href="${P.ch.explorer}/address/${t.trader}" target="_blank" rel="noopener">${short(t.trader)}</a></td>
+    <td class="mono">${xlink(P.ch, `address/${t.trader}`, short(t.trader))}</td>
     <td class="n" title="${fmt(t.quoteAmount, 6)} ${qsym(info.quote)}">${usd(t.quoteAmount, info.quote)}</td><td class="n">${fmt(t.tokenAmount)}</td>
-    <td class="n"><a href="${P.ch.explorer}/tx/${t.hash}" target="_blank" rel="noopener">↗</a></td></tr>`).join("")
+    <td class="n">${P.ch.explorer ? xlink(P.ch, `tx/${t.hash}`, "↗") : ""}</td></tr>`).join("")
     : `<tr><td colspan="5" class="muted">No trades yet</td></tr>`;
 
   // candles from the trades: each trade's price (USD) and size; a token with no trades yet shows its launch price

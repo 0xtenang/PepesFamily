@@ -151,21 +151,28 @@ Deployment data: `PADS=… forge script script/RemoteDeployData.s.sol`. The webs
 New launchpads for it: Base, paired with ETH (WETH, `0x19b21B2D834DfD77e0BDf048FE6Eb70EF7E768Cc`), and HyperEVM, paired with HYPE (WHYPE,
 `0x0b9fd2D4A37B75409b2E0CcA78543aED348b28cC`; deploying it needs the deploying address on HyperEVM big blocks).
 
-### Elysium testnet (2026-10-27)
+### Elysium mainnet: launchpad v6 (2026-11-09, ready to deploy)
 
-[Elysium](https://elysium.kinetiq.xyz) is Kinetiq's Arbitrum Orbit chain for the Hyperliquid ecosystem (100 ms blocks,
-gas in HYPE; builders keep 25% of the sequencer fees their users pay). Its testnet (chain 99801) has no Uniswap v4
-yet, so it runs on our own PoolManager (owned by `0x3c8A…691C`) and `PepesFamilyQuoter` (the V4Quoter interface,
-for the website), both at fixed CREATE2 addresses (`script/ElysiumAddrs.s.sol`): v4-core's Business Source License
-allows this non-production use. Launches pair with HYPE (WHYPE `0xCD57…F234`, the native router), starting at about
-47 HYPE. Settings: `Chains.pad("elysium-testnet-whype")`. Mainnet waits for Uniswap's own v4 deployment there
-(announced), then deploys like the others.
+[Elysium](https://elysium.kinetiq.xyz) is Kinetiq's Arbitrum Orbit chain for the Hyperliquid ecosystem (chain 99901,
+100 ms blocks, gas in HYPE). Its mainnet is trading before Kinetiq's docs list it, so the settings below were checked on
+the chain itself (`Chains.pad("elysium-whype")`):
 
-| Contract | Address |
-| --- | --- |
-| PoolManager (ours, testnet) | `0x13DA18e28F1928F85465EaFe49CB6BBac1d52203` |
-| PepesFamilyQuoter | `0x365EfD5fFb4e42657CFB36fE61255082E5327dEd` |
-| PepesFamily v5 (WHYPE) | `0x417fbe5588666647dCB8575c583dAd0CA11B68cc` |
+- **Uniswap v4 PoolManager** `0xE2e105d3F7209A9DA11f83cCf3E7398a753823F1`: the same runtime bytecode as Uniswap's
+  PoolManager on Robinhood Chain apart from its own address; used by 0x Settler and most Elysium pools on DexScreener.
+- **WHYPE** `0xbA876237B0F021A6c6D852d6c26E107997cC5E81`: the same contract as Kinetiq's canonical testnet WHYPE, fully
+  backed by HYPE. Look-alike "WHYPE" tokens exist there.
+- **Quoter:** no Uniswap V4Quoter on Elysium, so our `PepesFamilyQuoter` (`0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793`,
+  CREATE2 salt 0, MIT; `V6DeployData` `PART=quoter`), deployed before the token factory.
+- **Launchpad v6** `0x2382474CFE9939573Ef16FfACb5B4F0fC98fe8cc` (token factory `0xDa713cAa4f2E14966AE0fCA724d2Ae80C40Cc2Fd`),
+  paired with HYPE, starting at 47 HYPE; the NFT 1% goes to the team address, as on every chain but Robinhood.
+- **RPC and explorer:** Kinetiq hasn't published a public RPC or explorer yet. The site and deploy page use the community
+  RPC `https://rpc-live.boxa.club`, and token links go to DexScreener. Relay doesn't serve Elysium, so there are no
+  cross-chain buys or gas top-ups: buyers bridge HYPE themselves.
+- **Test:** `FORK_RPC_ELYSIUM=https://rpc-live.boxa.club forge test --mc ElysiumV6ForkTest -vv` deploys all three through
+  the CREATE2 factory exactly as the deploy page does, then launches, quotes, buys and sells with HYPE and collects fees.
+
+The Elysium testnet launchpad (v5, chain 99801, on our own PoolManager `0x13DA…2203` under v4-core's non-production
+license) is no longer on the site.
 
 ### More pairs: $PEPE and ETH on Ethereum, ETH and $CASHCAT on Robinhood Chain (2026-10-18)
 
