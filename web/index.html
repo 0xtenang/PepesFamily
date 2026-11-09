@@ -691,6 +691,21 @@ function splitLabel(sp) {
 }
 const splitBadge = (sp) => (sp ? `<span class="pill" title="${esc(splitLabel(sp))}">${esc(splitLabel(sp).split(" ")[0])}</span>` : "");
 /// "1% protocol · 2% creator · 1% holders" for a split (v1-v4 tokens: 3% holders).
+/// What every trade of a token has earned, by group, worked out from its holder rewards (exact on chain) and its split:
+/// v6 pays 1% each to holders, the creator, PEPES FAMILY NFT holders and the protocol; v5 the creator and holder
+/// shares it chose plus 1% protocol (a burn share is tokens, not earnings); v1-v4 3% holders and 1% protocol.
+/// { total, parts: [[label, wei]] } in the pair asset, or null when the holders' share is zero (nothing to work from).
+function earnedSplit(info, sp) {
+  const H = info.totalDividendsDistributed + info.pendingHolderFees;
+  if (sp?.nft) return { total: H * 4n, parts: [["Holders", H], ["Creator", H], ["PEPES FAMILY NFT holders", H], ["Protocol", H]] };
+  if (sp) {
+    if (!sp.h) return null;
+    const c = (H * BigInt(sp.c)) / BigInt(sp.h), p = (H * 100n) / BigInt(sp.h);
+    return { total: H + c + p, parts: [["Holders", H], ...(sp.c ? [["Creator", c]] : []), ["Protocol", p]] };
+  }
+  const p = H / 3n;
+  return { total: H + p, parts: [["Holders", H], ["Protocol", p]] };
+}
 function feeText(sp) {
   const parts = ["1% protocol"];
   if (!sp) return "1% protocol, 3% to holders";
@@ -4266,12 +4281,13 @@ async function renderToken(addr, chainKey) {
         </div>
         <div class="stats q">
           <div class="card"><div class="k">Market cap</div><div class="v">${usd(info.marketCap, q)}</div>${quoteUsd(q) ? `<div class="stat">${fmt(info.marketCap)} ${Q}</div>` : ""}</div>
-          <div class="card"><div class="k">Earned by holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">paid in ${Q}</div></div>
+          ${((e) => e ? `<div class="card"><div class="k">Earned from trades</div><div class="v">${usd(e.total, q)}</div><div class="stat">${e.parts.length === 4 ? "holders, creator, NFT holders, protocol" : e.parts.map((x) => x[0].toLowerCase()).join(", ")}</div></div>`
+            : `<div class="card"><div class="k">Earned by holders</div><div class="v">${usd(info.totalDividendsDistributed + info.pendingHolderFees, q)}</div><div class="stat">paid in ${Q}</div></div>`)(earnedSplit(info, sp))}
           <div class="card"><div class="k">Supply</div><div class="v">1B</div><div class="stat">fixed, no mint</div></div>
           <div class="card"><div class="k">Liquidity</div><div class="v">Locked</div><div class="stat">forever, in the pool</div></div>
         </div>
         ${sp ? `<div class="card" style="margin-top:14px" id="v5box"><span class="h">Fee split · ${esc(splitLabel(sp))}</span>
-          <div class="stat">Every trade pays 4%: ${esc(feeText(sp))}. ${sp.nft ? "The same for every token of launchpad v6, paid in " + esc(Q) + "." : "Chosen at launch, fixed forever."}</div><div id="v5detail" class="stat" style="margin-top:8px">Loading…</div></div>` : ""}
+          <div class="stat">Every trade pays 4%: ${esc(feeText(sp))}. ${sp.nft ? "The same for every token of launchpad v6, paid in " + esc(Q) + "." : "Chosen at launch, fixed forever."}</div>${((e) => e ? `<div class="stat" style="margin-top:8px">Earned so far: <b style="color:var(--text)">${usd(e.total, q)}</b> · ${e.parts.map(([l, w]) => `${esc(l)} ${usd(w, q)}`).join(" · ")}</div>` : "")(earnedSplit(info, sp))}<div id="v5detail" class="stat" style="margin-top:8px">Loading…</div></div>` : ""}
         <div class="card" style="margin-top:14px">
           <h2 style="margin-bottom:6px">Trades</h2>
           <div class="scroll-x"><table><thead><tr><th>Type</th><th>Trader</th><th class="n">Value</th><th class="n">Tokens</th><th class="n">Tx</th></tr></thead>
