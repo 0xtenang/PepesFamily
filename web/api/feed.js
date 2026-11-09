@@ -10,8 +10,6 @@
 //     prices   the same USD prices the page computes (ETH, IMD/ETH, PEPE/ETH, CASHCAT/ETH, HYPE, BNB)
 //     imdPeak  { usd, day }: IMD's highest daily close (GeckoTerminal) across its main pools on Robinhood and
 //              Ethereum, for the Holder rewards page; a daily close, so a one-trade wick doesn't count
-//     unclaimed "<chain>:<token>" -> holder rewards paid out but not claimed yet (the token's accountedBalance), for
-//              the Holder rewards page (earned since launch = claimed + this + still pending)
 // Big numbers travel as {"$n": "<decimal>"}. The launchpad list is the page's own CONFIG.pads, read from the deployed
 // index.html, so it never needs a second copy here. Cached 30 s at the edge, served stale while it refreshes.
 
@@ -52,7 +50,6 @@ async function imdPeak() {
   if (best) IMD_PEAK = { ...best, at: Date.now() };
   return IMD_PEAK;
 }
-const TOKEN = new ethers.Interface(["function accountedBalance() view returns (uint256)"]);
 const SV = new ethers.Interface(["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"]);
 const STATE_VIEW = { robinhood: "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b", ethereum: "0x7ffe42c4a5deea5b0fec41c94c136cf115597227" };
 const POOLS = {
@@ -147,7 +144,7 @@ async function prices() {
 async function build(origin) {
   const pads = await padList(origin);
   const key = (p) => `${p.chain}:${p.pad.toLowerCase()}`;
-  const live = {}, tokens = {}, market = {}, remotes = [], unclaimed = {};
+  const live = {}, tokens = {}, market = {}, remotes = [];
   await Promise.all([
     ...pads.map(async (p) => {
       try {
@@ -155,11 +152,7 @@ async function build(origin) {
         live[key(p)] = [a, b];
         if (!a) return;
         await Promise.all([
-          tokensOf(p).then(async (t) => {
-            tokens[key(p)] = t;
-            await Promise.all(t.map((x) => call(p.chain, x.token, TOKEN, "accountedBalance")
-              .then((v) => (unclaimed[`${p.chain}:${x.token.toLowerCase()}`] = v)).catch(() => {})));
-          }).catch(() => {}),
+          tokensOf(p).then((t) => (tokens[key(p)] = t)).catch(() => {}),
           CHAINS[p.chain].blockscout ? marketOf(p).then((m) => (market[key(p)] = m)).catch(() => {}) : null,
         ]);
       } catch {} // unknown: the page checks this launchpad itself
@@ -167,7 +160,7 @@ async function build(origin) {
     ...Object.entries(CHAINS).filter(([, c]) => c.remote).map(([k, c]) => hasCode(k, c.remote).then((y) => y && remotes.push(k)).catch(() => {})),
   ]);
   const [px, peak] = await Promise.all([prices(), imdPeak().catch(() => null)]);
-  return { at: Date.now(), live, remotes, tokens, market, unclaimed, prices: px, imdPeak: peak && { usd: peak.usd, day: peak.day } };
+  return { at: Date.now(), live, remotes, tokens, market, prices: px, imdPeak: peak && { usd: peak.usd, day: peak.day } };
 }
 
 const ORIGINS = ["https://pepesdotfamily.fun", "https://www.pepesdotfamily.fun", "https://pepesfamily.vercel.app"];

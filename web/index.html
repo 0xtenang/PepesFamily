@@ -266,11 +266,11 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 .hrtop .tc.first .rank { color: #e0b83a; }
 .hrtop .earn { font-size: 26px; line-height: 32px; font-weight: 700; color: var(--positive); }
 .hrtop .lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-.hrrow, .hrhead { grid-template-columns: 26px 48px minmax(0, 1fr) 150px 120px 104px 80px; }
+.hrrow, .hrhead { grid-template-columns: 26px 48px minmax(0, 1fr) 160px 110px 80px; }
 @media (max-width: 1300px) { .hrtop { grid-template-columns: repeat(3, minmax(0, 1fr)); } .hrtop > :nth-child(n+4) { display: none; } }
 @media (max-width: 700px) {
   .hrtop { grid-template-columns: 1fr 1fr; } .hrtop > :nth-child(n+3) { display: none; }
-  .hrrow .wait, .hrrow .hold { display: none; }
+  .hrrow .hold { display: none; }
 }
 @media (max-width: 700px) {
   .thead { display: none; }
@@ -1184,7 +1184,7 @@ async function renderBridge() {
 // ---------------------------------------------------------------- Holder rewards
 /// Every PepesFamily token's holder rewards since its launch: paid out to holders (totalDividendsDistributed: claimed,
 /// waiting to be claimed, or expired and recycled) plus fees on their way (pendingHolderFees), in its pair asset,
-/// valued at today's prices. Waiting to be claimed = the token's accountedBalance (from the feed) + pending.
+/// valued with IMD at its peak price and at today's prices.
 async function renderHolderRewards() {
   const app = $("#app"), gen = routeGen;
   const bar = (w, h) => `<div class="skel" style="height:${h}px;width:${w}"></div>`;
@@ -1204,12 +1204,7 @@ async function renderHolderRewards() {
   try { [list, f] = await Promise.all([allTokenInfos(), feed()]); }
   catch (e) { if (gen === routeGen) $("#hrlist").innerHTML = `<div class="empty">Couldn't read the launchpads: ${esc(errMsg(e))}</div>`; return; }
   if (gen !== routeGen) return;
-  // unclaimed per token: the feed's, else read from the chain (an older cached feed may not carry them)
-  const unc = { ...(f && feedFresh(f, 600_000) ? f.unclaimed || {} : {}) };
   const listed = list.filter(({ t }) => isListed(t));
-  await Promise.all(listed.filter(({ t, P }) => unc[tokKey(P.ch, t.token)] == null).map(({ t, P }) =>
-    new ethers.Contract(t.token, TOKEN_ABI, P.ch.reader).accountedBalance().then((v) => (unc[tokKey(P.ch, t.token)] = v)).catch(() => {})));
-  if (gen !== routeGen) return;
   // IMD at its peak (the feed's highest daily close); other pair assets at today's price
   let peak = f?.imdPeak?.usd > 0 ? f.imdPeak : null;
   if (!peak) { // no feed: IMD's highest daily close on its main pools, from GeckoTerminal
@@ -1224,9 +1219,8 @@ async function renderHolderRewards() {
   }
   const atPeak = (w, q) => (peak && qsym(q) === "IMD" ? Number(ethers.formatUnits(w, 18)) * peak.usd : toUsdNum(w, q));
   const rows = listed.map(({ t, P }) => {
-    const earned = t.totalDividendsDistributed + t.pendingHolderFees, k = tokKey(P.ch, t.token);
-    const waiting = unc[k] != null ? unc[k] + t.pendingHolderFees : null;
-    return { t, P, ch: P.ch, earned, waiting, usd: toUsdNum(earned, t.quote), peakUsd: atPeak(earned, t.quote), waitUsd: waiting == null ? null : toUsdNum(waiting, t.quote),
+    const earned = t.totalDividendsDistributed + t.pendingHolderFees;
+    return { t, P, ch: P.ch, earned, usd: toUsdNum(earned, t.quote), peakUsd: atPeak(earned, t.quote),
       mc: toUsdNum(t.marketCap, t.quote), created: Number(t.createdAt), sym: qsym(t.quote), href: tokHref(t.token, P.ch) };
   });
   const paying = rows.filter((r) => r.earned > 0n);
@@ -1262,11 +1256,10 @@ async function renderHolderRewards() {
     const shown = rows.filter((r) => (q === "all" || r.sym === q) && (chk === "all" || r.ch.key === chk))
       .sort((a, b) => (sort === "mc" ? b.mc - a.mc : sort === "new" ? b.created - a.created : b.peakUsd - a.peakUsd || b.mc - a.mc));
     $("#hrcount").textContent = `${shown.length} token${shown.length === 1 ? "" : "s"}`;
-    $("#hrlist").innerHTML = `<div class="thead hrhead"><span class="n">#</span><span></span><span>Token</span><span>Holder rewards</span><span>Waiting to claim</span><span>Market cap</span><span>Holders</span></div>`
+    $("#hrlist").innerHTML = `<div class="thead hrhead"><span class="n">#</span><span></span><span>Token</span><span>Holder rewards</span><span>Market cap</span><span>Holders</span></div>`
       + (shown.map((r, i) => `<a class="lrow hrrow" href="${r.href}"><span class="rk">${i + 1}</span>${avatar(r.t)}
           <div class="tn" style="min-width:0"><div class="nm"><b>${esc(r.t.name)}</b></div><div class="sub">$${esc(r.t.symbol)} · ${chainAv(r.ch)}${esc(r.ch.short)}${r.created ? " · " + ago(r.created) : ""}</div></div>
           <span class="r"><b style="color:var(--positive)">${fmtUsd(r.peakUsd)}</b><div class="sub">${r.peakUsd !== r.usd ? fmtUsd(r.usd) + " today · " : ""}${fmt(r.earned, 4)} ${esc(r.sym)}</div></span>
-          <span class="r wait dim">${r.waitUsd == null ? "—" : fmtUsd(r.waitUsd)}</span>
           <span class="r">${r.mc ? fmtUsd(r.mc) : "—"}</span>
           <span class="r hold dim" data-h="${tokKey(r.ch, r.t.token)}">${holders.get(tokKey(r.ch, r.t.token)) ?? "—"}</span></a>`).join("")
         || `<div class="empty">No token matches.</div>`);
