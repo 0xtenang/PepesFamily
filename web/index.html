@@ -588,11 +588,13 @@ const CHAINS = {
   },
   // Kinetiq's Elysium (an Arbitrum Orbit chain on Hyperliquid, gas in HYPE), mainnet: Uniswap v4's PoolManager
   // 0xE2e1…23F1 and our own quoter (no Uniswap V4Quoter there). Kinetiq's public RPC and its explorer (its own API,
-  // not Blockscout: no holder counts or trade history from it). Relay doesn't serve it: no cross-chain buys or gas top-ups.
+  // not Blockscout: no holder counts or trade history from it). Relay serves it: buys and launches here can be paid
+  // with ETH on Robinhood (or any coin Relay takes) through its PepesFamilyRemote, like the other chains.
   elysium: {
     key: "elysium", gt: "elysium", name: "Elysium", short: "Elysium", chainId: 99901, rpc: "https://rpc.elysium.kinetiq.xyz",
     walletRpc: "https://rpc.elysium.kinetiq.xyz", explorer: "https://elysium.kinetiq.xyz", blockscoutApi: "",
     quoter: "0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793", gmgn: "", dex: "elysium", native: { name: "HYPE", symbol: "HYPE" },
+    remote: "0x6519BF0258B2EB7B9e24A05dcd322Ff36A297409", remotePads: ["0x2382474CFE9939573Ef16FfACb5B4F0fC98fe8cc"], pay: [["HYPE", ZERO_ADDR, 18]],
     keepSells: true, // sells pay out in HYPE here: not moved on to Robinhood
     logChunk: 1_000_000, // Kinetiq's RPC serves a million blocks of logs a request: trade history from launch (no Blockscout)
     blurb: "Elysium: Kinetiq's fast chain on Hyperliquid, paired with HYPE.",
@@ -1119,10 +1121,11 @@ async function elysiumTicket(to, amount) {
 
 async function renderBridge() {
   const app = $("#app"), gen = routeGen, hyper = CHAINS.hyperevm, ely = CHAINS.elysium;
-  const opts = payOptions(hyper); // other chains' coins: Relay delivers them as HYPE on HyperEVM, into the inbox
+  // other chains' coins: Relay delivers them as HYPE straight to Elysium (HYPE on HyperEVM goes through the inbox)
+  const opts = payOptions(ely).filter((o) => !(o.ch === hyper && o.addr === ZERO_ADDR));
   app.innerHTML = `
     <div class="hero"><div><h1>Bridge</h1>
-      <p>Bring HYPE to Elysium, where its tokens launch and trade: from HyperEVM through Elysium's own rollup inbox, or from another chain's coin through Relay. It arrives at your own address in about a minute.</p>
+      <p>Bring HYPE to Elysium, where its tokens launch and trade: from HyperEVM through Elysium's own rollup inbox (about a minute), or from another chain's coin through Relay (a few seconds). You can also just buy: a token page on Elysium takes ETH on Robinhood directly.</p>
       <div style="margin-top:12px">${addNetBtn(ely)}</div></div></div>
     <div class="card" style="max-width:520px">
       <label for="bfrom" style="margin-top:0">Pay with</label>
@@ -1133,7 +1136,7 @@ async function renderBridge() {
       <div class="stat" id="bbal" style="margin-top:8px"></div>
       <div class="preview" id="bpv">&nbsp;</div>
       <button class="primary full" id="bgo" style="margin-top:6px">${account ? "Bridge to Elysium" : "Connect wallet"}</button>
-      <p class="stat" style="margin:12px 0 0">From HyperEVM you pay only Elysium's own fee (about 0.0001 HYPE, the unused part refunded on Elysium). From another chain Relay converts your coin to HYPE first, for its fee plus 0.5%. Going back: withdraw below (about 6 to 7 days).</p>
+      <p class="stat" style="margin:12px 0 0">From HyperEVM you pay only Elysium's own fee (about 0.0001 HYPE, the unused part refunded on Elysium). From another chain Relay converts your coin to HYPE first, for its fee plus 0.5%. Going back: withdraw below, in seconds through Relay or free in 6 to 7 days.</p>
     </div>
     <div id="wd"></div>`;
   const amount = () => { try { const v = ethers.parseEther(($("#bamt").value || "").trim() || "0"); return v > 0n ? v : 0n; } catch { return 0n; } };
@@ -1146,15 +1149,14 @@ async function renderBridge() {
   balances();
   let seq = 0;
   const preview = async () => {
-    const my = ++seq, amt = amount(), o = payOptionById(hyper, $("#bfrom").value);
+    const my = ++seq, amt = amount(), o = payOptionById(ely, $("#bfrom").value);
     if (!amt) return ($("#bpv").innerHTML = "&nbsp;");
     try {
-      const t = await elysiumTicket(account || ZERO_ADDR, amt);
-      if (!o) { if (my === seq) $("#bpv").textContent = `You send ${fmt(t.value, 6)} HYPE on HyperEVM · ~1 min`; return; }
+      if (!o) { const t = await elysiumTicket(account || ZERO_ADDR, amt); if (my === seq) $("#bpv").textContent = `You send ${fmt(t.value, 6)} HYPE on HyperEVM · ~1 min`; return; }
       $("#bpv").textContent = "Getting a price…";
       const q = await relayApi("quote/v2", { user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
-        originChainId: o.ch.chainId, destinationChainId: hyper.chainId, originCurrency: o.addr, destinationCurrency: ZERO_ADDR,
-        amount: t.value.toString(), tradeType: "EXACT_OUTPUT", appFees: appFees(FEES.xcBps), txs: [{ to: t.to, value: t.value.toString(), data: t.data }] });
+        originChainId: o.ch.chainId, destinationChainId: ely.chainId, originCurrency: o.addr, destinationCurrency: ZERO_ADDR,
+        amount: amt.toString(), tradeType: "EXACT_OUTPUT", appFees: appFees(FEES.xcBps) });
       if (my === seq) $("#bpv").innerHTML = xcSummary(q);
     } catch (e) { if (my === seq) $("#bpv").textContent = errMsg(e); }
   };
@@ -1165,14 +1167,14 @@ async function renderBridge() {
   $("#bgo").onclick = async () => {
     const b = $("#bgo");
     if (!account) { await connect(hyper).catch((e) => toast(errMsg(e), 6000)); if (account && gen === routeGen) renderBridge(); return; }
-    const amt = amount(), o = payOptionById(hyper, $("#bfrom").value);
+    const amt = amount(), o = payOptionById(ely, $("#bfrom").value);
     if (!amt) return toast("Enter how much HYPE to bring to Elysium");
     b.disabled = true;
     const status = (m) => (b.textContent = m);
     try {
       const before = await ely.reader.getBalance(account).catch(() => null);
-      const t = await elysiumTicket(account, amt);
       if (!o) {
+        const t = await elysiumTicket(account, amt);
         await requireWallet(hyper);
         status("Confirm in your wallet…");
         const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: t.to, data: t.data, value: ethers.toQuantity(t.value) }] });
@@ -1180,9 +1182,8 @@ async function renderBridge() {
         await waitReceipt(hyper, hash);
       } else {
         status("Getting a price…");
-        const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: o.ch.chainId, destinationChainId: hyper.chainId,
-          originCurrency: o.addr, destinationCurrency: ZERO_ADDR, amount: t.value.toString(), tradeType: "EXACT_OUTPUT",
-          appFees: appFees(FEES.xcBps), txs: [{ to: t.to, value: t.value.toString(), data: t.data }] });
+        const q = await relayApi("quote/v2", { user: account, recipient: account, originChainId: o.ch.chainId, destinationChainId: ely.chainId,
+          originCurrency: o.addr, destinationCurrency: ZERO_ADDR, amount: amt.toString(), tradeType: "EXACT_OUTPUT", appFees: appFees(FEES.xcBps) });
         await xcExecute(q, { ...o, verb: "Bridging…" }, status);
       }
       status("On its way to Elysium…");
@@ -1256,13 +1257,16 @@ async function renderWithdraw(el, gen) {
   el.innerHTML = `
     <div class="card" style="max-width:520px;margin-top:16px">
       <h2 style="margin:0 0 4px">Withdraw from Elysium</h2>
-      <p class="stat" style="margin:0 0 12px">Elysium is a rollup on HyperEVM: a withdrawal is ready to claim on HyperEVM about 6 to 7 days after you start it (the rollup's challenge period). Claiming takes one transaction there, paid in a little HYPE on HyperEVM. Kinetiq's <a href="https://elysium.kinetiq.xyz/bridge" target="_blank" rel="noopener" style="text-decoration:underline">official bridge</a> works the same way.</p>
+      <p class="stat" style="margin:0 0 12px">Fast: Relay pays you out in seconds, for its fee plus 0.5%. Standard: Elysium's own rollup bridge, no fee, ready to claim on HyperEVM about 6 to 7 days after you start it (the rollup's challenge period); claiming takes one transaction there, paid in a little HYPE on HyperEVM. Kinetiq's <a href="https://elysium.kinetiq.xyz/bridge" target="_blank" rel="noopener" style="text-decoration:underline">official bridge</a> works the same way.</p>
       <label for="wto" style="margin-top:0">Receive as</label>
       <select id="wto"><option value="hyperevm">HYPE on HyperEVM</option><option value="robinhood">ETH on Robinhood (via HyperEVM)</option></select>
+      <label for="wspeed">Speed</label>
+      <select id="wspeed"><option value="fast">Fast · seconds, through Relay</option><option value="std">Standard · 6 to 7 days, no fee</option></select>
       <label for="wamt">HYPE to withdraw</label>
       <input id="wamt" inputmode="decimal" placeholder="0.0" autocomplete="off" />
       <div class="stat" id="wbal" style="margin-top:8px"></div>
-      <button class="primary full" id="wgo" style="margin-top:10px">${account ? "Start withdrawal" : "Connect wallet"}</button>
+      <div class="preview" id="wpv">&nbsp;</div>
+      <button class="primary full" id="wgo" style="margin-top:10px">${account ? "Withdraw" : "Connect wallet"}</button>
       <h3 style="margin:20px 0 8px;font-size:16px">Your withdrawals</h3>
       <div id="wlist" class="stat">${account ? "Loading…" : "Connect a wallet to see them."}</div>
     </div>`;
@@ -1323,6 +1327,23 @@ async function renderWithdraw(el, gen) {
       list();
     } catch (e) { toast(errMsg(e), 8000); b.disabled = false; }
   };
+  // Fast: one Relay order from Elysium, HYPE in and HYPE on HyperEVM or ETH on Robinhood out
+  const fastQuote = (amt) => relayApi("quote/v2", { user: account || "0x000000000000000000000000000000000000dEaD", recipient: account || undefined,
+    originChainId: ely.chainId, destinationChainId: ($("#wto").value === "robinhood" ? rh : hyper).chainId, originCurrency: ZERO_ADDR,
+    destinationCurrency: ZERO_ADDR, amount: amt.toString(), tradeType: "EXACT_INPUT", appFees: appFees(FEES.xcBps) });
+  const wamt = () => { try { const v = ethers.parseEther(($("#wamt").value || "").trim() || "0"); return v > 0n ? v : 0n; } catch { return 0n; } };
+  let wseq = 0, wtimer = null;
+  const wpreview = async () => {
+    const my = ++wseq, amt = wamt();
+    if (!amt || $("#wspeed").value !== "fast") return ($("#wpv").innerHTML = amt ? `Ready to claim on HyperEVM around ${new Date(Date.now() + 7 * 86400e3).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "&nbsp;");
+    $("#wpv").textContent = "Getting a price…";
+    try {
+      const q = await fastQuote(amt), out = q.details?.currencyOut;
+      if (my === wseq) $("#wpv").innerHTML = `You get ≈ ${Number(out?.amountFormatted || 0).toPrecision(4)} ${esc(out?.currency?.symbol || "")} on ${$("#wto").value === "robinhood" ? "Robinhood" : "HyperEVM"}` + xcSummary(q).replace(/^You pay[^·]*/, " ");
+    } catch (e) { if (my === wseq) $("#wpv").textContent = errMsg(e); }
+  };
+  $("#wamt").oninput = () => { clearTimeout(wtimer); wtimer = setTimeout(wpreview, 400); };
+  $("#wspeed").onchange = $("#wto").onchange = wpreview;
   $("#wgo").onclick = async () => {
     const b = $("#wgo");
     if (!account) { await connect(ely).catch((e) => toast(errMsg(e), 6000)); if (account && gen === routeGen) renderBridge(); return; }
@@ -1332,6 +1353,15 @@ async function renderWithdraw(el, gen) {
     try {
       await requireWallet(ely);
       if ((await ely.reader.getBalance(account)) <= amt) throw new Error("Not enough HYPE on Elysium for this and its gas");
+      if ($("#wspeed").value === "fast") {
+        const toRh = $("#wto").value === "robinhood";
+        const q = await fastQuote(amt);
+        await xcExecute(q, { ch: ely, sym: "HYPE", addr: ZERO_ADDR, dec: 18, verb: "Withdrawing…" }, (m) => toast(m, 30000));
+        toast(`Withdrawn: ${Number(q.details?.currencyOut?.amountFormatted || 0).toPrecision(4)} ${toRh ? "ETH on Robinhood" : "HYPE on HyperEVM"}`, 9000);
+        $("#wamt").value = ""; $("#wpv").innerHTML = "&nbsp;"; balance();
+        b.disabled = false;
+        return;
+      }
       toast("Confirm the withdrawal in your wallet…", 10000);
       const hash = await WALLET.request({ method: "eth_sendTransaction", params: [{ from: account, to: ARBSYS, value: ethers.toQuantity(amt),
         data: ARBSYS_IFACE.encodeFunctionData("withdrawEth", [account]) }] });

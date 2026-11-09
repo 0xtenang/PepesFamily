@@ -22,7 +22,7 @@ const CHAINS = {
   base: { id: 8453, rpc: ["https://base-rpc.publicnode.com", "https://mainnet.base.org"], blockscout: "https://base.blockscout.com/api/v2", remote: "0xAf760F137D9785A14a2f7b0f0cf4b6fD943589a4" },
   hyperevm: { id: 999, rpc: ["https://rpc.hyperliquid.xyz/evm", "https://hyperliquid.drpc.org"], blockscout: "", remote: "0x3e7dcCdE57953495396A0714b85B419D59F57A29" },
   bsc: { id: 56, rpc: ["https://bsc-rpc.publicnode.com", "https://bsc-dataseed.bnbchain.org"], blockscout: "", remote: "0xB8Cf1810eB5f71AB2A50a1FE3C0DF0559FB7bb2B" },
-  elysium: { id: 99901, rpc: ["https://rpc.elysium.kinetiq.xyz", "https://rpc.volta.family"], blockscout: "" },
+  elysium: { id: 99901, rpc: ["https://rpc.elysium.kinetiq.xyz", "https://rpc.volta.family"], blockscout: "", remote: "0x6519BF0258B2EB7B9e24A05dcd322Ff36A297409" },
 };
 // Pepes Earn IMD's hook joins the launchpads (the page adds it from CONFIG.earn).
 const EARN_HOOK = "0x41Edd4c96a25e9aC6e4CF80C40EB6B85c77aA8CC";
