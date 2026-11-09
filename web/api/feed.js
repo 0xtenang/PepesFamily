@@ -8,6 +8,8 @@
 //              (only where the explorer answers a server: Robinhood's and Base's Blockscout refuse servers, and free
 //              RPCs serve no 24 h of logs, so the page reads those launchpads' history itself, in the background)
 //     prices   the same USD prices the page computes (ETH, IMD/ETH, PEPE/ETH, CASHCAT/ETH, HYPE, BNB)
+//     imdPeak  { usd, day }: IMD's highest daily close (GeckoTerminal) across its main pools on Robinhood and
+//              Ethereum, for the Holder rewards page; a daily close, so a one-trade wick doesn't count
 //     unclaimed "<chain>:<token>" -> holder rewards paid out but not claimed yet (the token's accountedBalance), for
 //              the Holder rewards page (earned since launch = claimed + this + still pending)
 // Big numbers travel as {"$n": "<decimal>"}. The launchpad list is the page's own CONFIG.pads, read from the deployed
@@ -32,6 +34,24 @@ const PAD = new ethers.Interface([
   `function getTokens(uint256 offset, uint256 limit) view returns (${INFO_T}[])`,
   "event Trade(address indexed token, address indexed trader, bool isBuy, uint256 quoteAmount, uint256 tokenAmount, uint256 fee, uint160 sqrtPriceX96)",
 ]);
+// IMD's main pools: [GeckoTerminal network, pool, IMD's address there]
+const IMD_POOLS = [
+  ["robinhood", "0xd2fc01ee6f8400b6b4ea3b341a188568f2bd6c72b07b96741a82396fa6eb8f02", "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127"],
+  ["eth", "0xb07d640fd9e2eb9dc81b953c8e4fd006bdfeaf276010fb5418eb763ca15abfb3", "0xD34a99Bc0f67aE1bbd63C660e6d0b0dd03E263B7"],
+];
+let IMD_PEAK = null; // { usd, day, at }: read again after an hour while the function stays warm
+async function imdPeak() {
+  if (IMD_PEAK && Date.now() - IMD_PEAK.at < 3600_000) return IMD_PEAK;
+  let best = null;
+  for (const [net, pool, tok] of IMD_POOLS) {
+    try {
+      const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${pool}/ohlcv/day?aggregate=1&limit=1000&currency=usd&token=${tok}`, { headers: { accept: "application/json" }, signal: timeout(8000) });
+      for (const [ts, , , , close] of (await r.json()).data.attributes.ohlcv_list) if (!best || close > best.usd) best = { usd: close, day: ts };
+    } catch {}
+  }
+  if (best) IMD_PEAK = { ...best, at: Date.now() };
+  return IMD_PEAK;
+}
 const TOKEN = new ethers.Interface(["function accountedBalance() view returns (uint256)"]);
 const SV = new ethers.Interface(["function getSlot0(bytes32 poolId) view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee)"]);
 const STATE_VIEW = { robinhood: "0xf3334192d15450cdd385c8b70e03f9a6bd9e673b", ethereum: "0x7ffe42c4a5deea5b0fec41c94c136cf115597227" };
@@ -146,7 +166,8 @@ async function build(origin) {
     }),
     ...Object.entries(CHAINS).filter(([, c]) => c.remote).map(([k, c]) => hasCode(k, c.remote).then((y) => y && remotes.push(k)).catch(() => {})),
   ]);
-  return { at: Date.now(), live, remotes, tokens, market, unclaimed, prices: await prices() };
+  const [px, peak] = await Promise.all([prices(), imdPeak().catch(() => null)]);
+  return { at: Date.now(), live, remotes, tokens, market, unclaimed, prices: px, imdPeak: peak && { usd: peak.usd, day: peak.day } };
 }
 
 const ORIGINS = ["https://pepesdotfamily.fun", "https://www.pepesdotfamily.fun", "https://pepesfamily.vercel.app"];

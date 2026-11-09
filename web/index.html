@@ -1203,30 +1203,51 @@ async function renderHolderRewards() {
   try { [list, f] = await Promise.all([allTokenInfos(), feed()]); }
   catch (e) { if (gen === routeGen) $("#hrlist").innerHTML = `<div class="empty">Couldn't read the launchpads: ${esc(errMsg(e))}</div>`; return; }
   if (gen !== routeGen) return;
-  const unc = f && feedFresh(f, 600_000) ? f.unclaimed || {} : null;
-  const rows = list.filter(({ t }) => isListed(t)).map(({ t, P }) => {
+  // unclaimed per token: the feed's, else read from the chain (an older cached feed may not carry them)
+  const unc = { ...(f && feedFresh(f, 600_000) ? f.unclaimed || {} : {}) };
+  const listed = list.filter(({ t }) => isListed(t));
+  await Promise.all(listed.filter(({ t, P }) => unc[tokKey(P.ch, t.token)] == null).map(({ t, P }) =>
+    new ethers.Contract(t.token, TOKEN_ABI, P.ch.reader).accountedBalance().then((v) => (unc[tokKey(P.ch, t.token)] = v)).catch(() => {})));
+  if (gen !== routeGen) return;
+  // IMD at its peak (the feed's highest daily close); other pair assets at today's price
+  let peak = f?.imdPeak?.usd > 0 ? f.imdPeak : null;
+  if (!peak) { // no feed: IMD's highest daily close on its main pools, from GeckoTerminal
+    for (const [net, pool, tok] of [["robinhood", "0xd2fc01ee6f8400b6b4ea3b341a188568f2bd6c72b07b96741a82396fa6eb8f02", CONFIG.imd],
+      ["eth", "0xb07d640fd9e2eb9dc81b953c8e4fd006bdfeaf276010fb5418eb763ca15abfb3", CHAINS.ethereum.imd]]) {
+      try {
+        const j = await gtGet(`/networks/${net}/pools/${pool}/ohlcv/day?aggregate=1&limit=1000&currency=usd&token=${tok}`, 3600_000);
+        for (const [ts, , , , close] of j.data.attributes.ohlcv_list) if (!peak || close > peak.usd) peak = { usd: close, day: ts };
+      } catch {}
+    }
+    if (gen !== routeGen) return;
+  }
+  const atPeak = (w, q) => (peak && qsym(q) === "IMD" ? Number(ethers.formatUnits(w, 18)) * peak.usd : toUsdNum(w, q));
+  const rows = listed.map(({ t, P }) => {
     const earned = t.totalDividendsDistributed + t.pendingHolderFees, k = tokKey(P.ch, t.token);
-    const waiting = unc && unc[k] != null ? unc[k] + t.pendingHolderFees : null;
-    return { t, P, ch: P.ch, earned, waiting, usd: toUsdNum(earned, t.quote), waitUsd: waiting == null ? null : toUsdNum(waiting, t.quote),
+    const waiting = unc[k] != null ? unc[k] + t.pendingHolderFees : null;
+    return { t, P, ch: P.ch, earned, waiting, usd: toUsdNum(earned, t.quote), peakUsd: atPeak(earned, t.quote), waitUsd: waiting == null ? null : toUsdNum(waiting, t.quote),
       mc: toUsdNum(t.marketCap, t.quote), created: Number(t.createdAt), sym: qsym(t.quote), href: tokHref(t.token, P.ch) };
   });
   const paying = rows.filter((r) => r.earned > 0n);
-  const total = rows.reduce((s, r) => s + r.usd, 0);
+  const total = rows.reduce((s, r) => s + r.usd, 0), totalPeak = rows.reduce((s, r) => s + r.peakUsd, 0);
   const known = rows.every((r) => r.waitUsd != null);
   const waitTotal = known ? rows.reduce((s, r) => s + r.waitUsd, 0) : null;
   // per pair asset, largest first: "1.24 ETH · 38.6 HYPE · …"
   const bySym = {};
   for (const r of paying) (bySym[r.sym] ||= { w: 0n, usd: 0 }), (bySym[r.sym].w += r.earned), (bySym[r.sym].usd += r.usd);
-  const assets = Object.entries(bySym).filter(([, v]) => v.usd >= 0.01).sort((a, b) => b[1].usd - a[1].usd).map(([sym, v]) => `${fmt(v.w, 4)} ${sym}`).join(" · ");
+  const assets = Object.entries(bySym).filter(([, v]) => v.usd >= 0.5).sort((a, b) => b[1].usd - a[1].usd).map(([sym, v]) => `${fmt(v.w, 4)} ${sym}`).join(" · ");
+  const day = (ts) => new Date(ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   $("#hrk").innerHTML = `
-    <div><div class="k">Holder rewards since day one</div><div class="v big">${fmtUsd(total)}</div><div class="s" title="${esc(assets)}">${esc(assets) || "at today's prices"}</div></div>
-    <div><div class="k">Claimed by holders</div><div class="v">${waitTotal == null ? "—" : fmtUsd(Math.max(0, total - waitTotal))}</div><div class="s">already in holders' wallets</div></div>
-    <div><div class="k">Waiting to be claimed</div><div class="v">${waitTotal == null ? "—" : fmtUsd(waitTotal)}</div><div class="s"><a href="#/rewards" style="text-decoration:underline">Claim yours on Rewards</a></div></div>
-    <div><div class="k">Tokens paying holders</div><div class="v">${paying.length}</div><div class="s">on ${new Set(paying.map((r) => r.ch.key)).size} chains · at today's prices</div></div>`;
-  const top = [...paying].sort((a, b) => b.usd - a.usd).slice(0, 5);
+    <div><div class="k">Holder rewards since day one</div><div class="v big">${fmtUsd(peak ? totalPeak : total)}</div>
+      <div class="s">${peak ? `IMD at its peak, ${tinyUsd(peak.usd)} (${day(peak.day)})` : "at today's prices"}</div></div>
+    <div><div class="k">At today's prices</div><div class="v big" style="color:var(--text)">${fmtUsd(total)}</div><div class="s" title="${esc(assets)}">${esc(assets)}</div></div>
+    <div><div class="k">Waiting to be claimed</div><div class="v">${waitTotal == null ? "—" : fmtUsd(waitTotal)}</div>
+      <div class="s">${waitTotal == null ? "" : `${fmtUsd(Math.max(0, total - waitTotal))} already claimed · `}<a href="#/rewards" style="text-decoration:underline">claim yours</a></div></div>
+    <div><div class="k">Tokens paying holders</div><div class="v">${paying.length}</div><div class="s">on ${new Set(paying.map((r) => r.ch.key)).size} chains</div></div>`;
+  const top = [...paying].sort((a, b) => b.peakUsd - a.peakUsd).slice(0, 5);
   $("#hrtop").innerHTML = top.map((r, i) => `<a class="tc${i === 0 ? " first" : ""}" href="${r.href}"><span class="rank">${i === 0 ? "👑 " : ""}${i + 1}</span>
       <div class="head">${avatar(r.t)}<div style="min-width:0"><div class="nm">${esc(r.t.name)}</div><div class="meta">$${esc(r.t.symbol)} · ${chainAv(r.ch)}${esc(r.ch.short)}${r.created ? " · " + ago(r.created) : ""}</div></div></div>
-      <div><div class="lbl">Holder rewards</div><div class="earn">${fmtUsd(r.usd)}</div><div class="meta">${fmt(r.earned, 4)} ${esc(r.sym)} · market cap ${r.mc ? fmtUsd(r.mc) : "—"}</div></div></a>`).join("")
+      <div><div class="lbl">Holder rewards</div><div class="earn">${fmtUsd(r.peakUsd)}</div><div class="meta">${fmtUsd(r.usd)} today · ${fmt(r.earned, 4)} ${esc(r.sym)}</div><div class="meta">Market cap ${r.mc ? fmtUsd(r.mc) : "—"}</div></div></a>`).join("")
     || `<div class="card empty" style="grid-column:1/-1">No token has paid its holders yet.</div>`;
   // the table: sort, pair asset, chain
   let sort = "usd", q = "all", chk = "all";
@@ -1242,12 +1263,12 @@ async function renderHolderRewards() {
     seg("#hrq", [["all", "Any pair"], ...syms.map((x) => [x, esc(x)])], q, (v) => (q = v));
     seg("#hrch", [["all", "All chains"], ...chains.map((c) => [c.key, chainAv(c) + esc(c.short)])], chk, (v) => (chk = v));
     const shown = rows.filter((r) => (q === "all" || r.sym === q) && (chk === "all" || r.ch.key === chk))
-      .sort((a, b) => (sort === "mc" ? b.mc - a.mc : sort === "new" ? b.created - a.created : b.usd - a.usd || b.mc - a.mc));
+      .sort((a, b) => (sort === "mc" ? b.mc - a.mc : sort === "new" ? b.created - a.created : b.peakUsd - a.peakUsd || b.mc - a.mc));
     $("#hrcount").textContent = `${shown.length} token${shown.length === 1 ? "" : "s"}`;
     $("#hrlist").innerHTML = `<div class="thead hrhead"><span class="n">#</span><span></span><span>Token</span><span>Holder rewards</span><span>Waiting to claim</span><span>Market cap</span><span>Holders</span></div>`
       + (shown.map((r, i) => `<a class="lrow hrrow" href="${r.href}"><span class="rk">${i + 1}</span>${avatar(r.t)}
           <div class="tn" style="min-width:0"><div class="nm"><b>${esc(r.t.name)}</b></div><div class="sub">$${esc(r.t.symbol)} · ${chainAv(r.ch)}${esc(r.ch.short)}${r.created ? " · " + ago(r.created) : ""}</div></div>
-          <span class="r"><b style="color:var(--positive)">${fmtUsd(r.usd)}</b><div class="sub">${fmt(r.earned, 4)} ${esc(r.sym)}</div></span>
+          <span class="r"><b style="color:var(--positive)">${fmtUsd(r.peakUsd)}</b><div class="sub">${r.peakUsd !== r.usd ? fmtUsd(r.usd) + " today · " : ""}${fmt(r.earned, 4)} ${esc(r.sym)}</div></span>
           <span class="r wait dim">${r.waitUsd == null ? "—" : fmtUsd(r.waitUsd)}</span>
           <span class="r">${r.mc ? fmtUsd(r.mc) : "—"}</span>
           <span class="r hold dim" data-h="${tokKey(r.ch, r.t.token)}">${holders.get(tokKey(r.ch, r.t.token)) ?? "—"}</span></a>`).join("")
