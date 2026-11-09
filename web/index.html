@@ -221,6 +221,8 @@ main#app { margin-left: var(--sidebar); padding: 24px var(--gutter) 64px; max-wi
 @media (max-width: 700px) { .trend { grid-template-columns: 1fr 1fr; gap: 10px; } .trend > :nth-child(n+3) { display: none; } .tc { padding: 14px; gap: 10px; } .tc .avatar { width: 36px; height: 36px; } .tc .mc { font-size: 20px; line-height: 28px; } .tc > .meta, .tc .ch { display: none; } }
 .tc { scroll-snap-align: start; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: var(--radius-card); background: var(--surface); min-width: 0; transition: background .12s; }
 .tc:hover { background: var(--raised); }
+.tc.feat { box-shadow: inset 0 0 0 1px var(--accent); background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface) 60%); }
+.tc.feat .flag { align-self: flex-start; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
 .tc .head { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .tc .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tc .meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -470,6 +472,10 @@ const CONFIG = {
   imd: "0x5F7Bb59365ce557C26dbcAa4EE9d39A4b95B7127",
   // King of the hill spotlights launches, so the house token (Pepes) is left out. Remove an address to include it.
   kingExclude: ["0xe2c46c7068566740a33a4c93f5445b07bcfe5644"],
+  // Pinned as the first, highlighted card of Trending now: Pepes Family ($PEPES) on Elysium.
+  featured: { chain: "elysium", address: "0xf75e350445cB3bf6a4c9F4Fe13B865816D11B3E9" },
+  // Listed first wherever the site lists chains (Discover's filter, the sidebar's networks).
+  firstChain: "elysium",
   // Pepes Earn IMD ($EARN, the NFT collection's token), from contracts/deployments/robinhood-earn.json. The site no
   // longer has an NFT page, but $EARN holders can still trade it on its token page and claim on the Rewards page.
   earn: {
@@ -850,8 +856,15 @@ const padAssets = (P) => (P.version >= 4 || P.nft ? [P.quote] : [ZERO, P.ch.imd]
 /// Robinhood v1-v3 still have their own pages (#/t/<address>) and appear on the Rewards and Admin pages.
 const isListed = (t) =>
   !!QUOTES[t.quote.toLowerCase()] && t.token.toLowerCase() !== CONFIG.earn.token.toLowerCase();
-/// Which launchpad (and so which chain) every listed token belongs to, filled by allTokenInfos.
+/// Which launchpad every listed token belongs to, by "<chain key>:<address>", filled by allTokenInfos. v6 token
+/// addresses repeat across chains (the token factory sits at one address everywhere, so the nth launch on each chain
+/// gets the same address): a token is its chain and its address, never its address alone.
 const TOKEN_PAD = new Map();
+const tokKey = (ch, addr) => `${ch?.key}:${String(addr).toLowerCase()}`;
+/// Each token info (as the lens returned it) -> its launchpad.
+const PAD_OF = new WeakMap();
+/// A token's page: #/t/<address>/<chain key> (#/t/<address> alone still opens, on the first chain that has it).
+const tokHref = (addr, ch) => `#/t/${addr}${ch?.key ? "/" + ch.key : ""}`;
 
 const quoteExact = async (key, zeroForOne, amount, ch = CHAINS.robinhood) =>
   (await ch.quoterR.quoteExactInputSingle.staticCall([key, zeroForOne, amount, "0x"]))[0];
@@ -1686,7 +1699,7 @@ function route() {
   document.title = (TITLES[page] && page !== "/" ? TITLES[page] + " · " : "") + "PepesFamily";
   window.scrollTo(0, 0);
   if (!LAUNCH) return renderSetup();
-  if (h.startsWith("/t/")) return renderToken(h.slice(3));
+  if (h.startsWith("/t/")) { const [a, c] = h.slice(3).split("/"); return renderToken(a, c); }
   // other launchpads' tokens aren't listed any more; this page stays so holders can still sell what they bought here
   if (h.startsWith("/x/")) { const [k, a] = h.slice(3).split("/"); return renderMarketToken(k, a); }
   if (h === "/create") return renderCreate();
@@ -1707,7 +1720,7 @@ async function searchTokens(q) {
   const ql = q.toLowerCase().replace(/^\$/, "");
   if (!ALL_OWN) await allTokenInfos().catch(() => {});
   return (ALL_OWN || []).filter(({ t }) => isListed(t) && (t.name.toLowerCase().includes(ql) || t.symbol.toLowerCase().includes(ql)))
-    .map(({ t, P }) => ({ href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: P.ch, mc: toUsdNum(t.marketCap, t.quote), liq: 0, own: true }))
+    .map(({ t, P }) => ({ href: tokHref(t.token, P.ch), av: avatar(t), name: t.name, symbol: t.symbol, ch: P.ch, mc: toUsdNum(t.marketCap, t.quote), liq: 0, own: true }))
     .sort((a, b) => b.mc - a.mc).slice(0, 10);
 }
 function showResults(list, q) {
@@ -1802,7 +1815,10 @@ const hhmm = (d = new Date()) => d.toTimeString().slice(0, 5);
 
 const DISCOVER_THEAD = `<div class="thead"><span class="n">#</span><span></span><span>Token</span><span>Market cap</span><span>24h volume</span><span>24h</span><span></span></div>`;
 /// Discover's frame: every block in place, with grey bars where the figures go (painted before the chains answer).
+/// `chains` with CONFIG.firstChain at the front, the others in their usual order.
+const chainsFirst = (chains) => [...chains].sort((a, b) => (b.key === CONFIG.firstChain) - (a.key === CONFIG.firstChain));
 function discoverFrame(chains) {
+  chains = chainsFirst(chains);
   const skelRow = `<div class="lrow"><span></span><div class="avatar"></div><div><div class="skel" style="height:14px;width:38%"></div><div class="skel" style="height:12px;width:24%;margin-top:6px"></div></div></div>`;
   const THEAD = DISCOVER_THEAD;
   return `
@@ -1857,8 +1873,8 @@ async function renderHome() {
     if (!listed || !market) return;
     try { localStorage.setItem("pf-discover:v1", JSON.stringify({ at: Date.now(), items: items().map((x) => ({ ...x, ch: x.ch?.key })) })); } catch {}
   };
-  const M = (t) => mk.per.get(t.token.toLowerCase());
-  const chainOf = (t) => TOKEN_PAD.get(t.token.toLowerCase())?.ch;
+  const chainOf = (t) => PAD_OF.get(t)?.ch;
+  const M = (t) => mk.per.get(tokKey(chainOf(t), t.token));
   const ownHot = (list) => [...list].sort((a, b) => (M(b) ? toUsdNum(M(b).vol, b.quote) : 0) - (M(a) ? toUsdNum(M(a).vol, a.quote) : 0)
     || toUsdNum(b.marketCap, b.quote) - toUsdNum(a.marketCap, a.quote));
   // One list of tokens launched here (`market` stays empty: other launchpads' tokens aren't listed).
@@ -1866,8 +1882,8 @@ async function renderHome() {
   const items = () => {
     const own = (listed || []).map((t) => {
       const m = M(t);
-      const was = !m && mk.per.size === 0 && cached?.find((x) => x.own && x.address === t.token); // 24h data not in yet
-      return { href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: chainOf(t), address: t.token, created: Number(t.createdAt),
+      const was = !m && mk.per.size === 0 && cached?.find((x) => x.own && x.address === t.token && x.ch === chainOf(t)); // 24h data not in yet
+      return { href: tokHref(t.token, chainOf(t)), av: avatar(t), name: t.name, symbol: t.symbol, ch: chainOf(t), address: t.token, created: Number(t.createdAt),
         mc: toUsdNum(t.marketCap, t.quote), vol: m ? toUsdNum(m.vol, t.quote) : was ? was.vol : 0, chg: was ? was.chg : pctOf(t, m), own: true };
     });
     const ext = market ? market.map((x) => ({ ...x, href: `#/x/${x.ch.key}/${x.address}`, av: mAvatar(x), own: false }))
@@ -1907,10 +1923,12 @@ async function renderHome() {
   const showTrend = () => {
     if (gen !== routeGen || (!listed && !market && !cached) || !$("#trend")) return;
     const skip = new Set(CONFIG.kingExclude.map((a) => a.toLowerCase()));
-    const pool = ranked("hot", items().filter((x) => !skip.has(x.address.toLowerCase())));
-    const ours = pool.filter((x) => x.own).slice(0, 2);
-    const top = [...pool.filter((x) => !ours.includes(x)).slice(0, 5 - ours.length), ...ours];
-    $("#trend").innerHTML = top.map((x) => `<a class="tc" href="${x.href}">
+    const isFeat = (x) => x.ch?.key === CONFIG.featured.chain && x.address.toLowerCase() === CONFIG.featured.address.toLowerCase();
+    const feat = items().find(isFeat);
+    const pool = ranked("hot", items().filter((x) => !isFeat(x) && !skip.has(x.address.toLowerCase())));
+    const ours = pool.filter((x) => x.own).slice(0, feat ? 1 : 2);
+    const top = [...(feat ? [feat] : []), ...pool.filter((x) => !ours.includes(x)).slice(0, 5 - ours.length - (feat ? 1 : 0)), ...ours];
+    $("#trend").innerHTML = top.map((x) => `<a class="tc${x === feat ? " feat" : ""}" href="${x.href}">${x === feat ? `<span class="flag">Featured</span>` : ""}
         <div class="head">${x.av}<div style="min-width:0"><div class="nm">${esc(x.name)}${x.own ? FROG : ""}</div><div class="meta">$${esc(x.symbol)}<span class="ch"> · ${chainAv(x.ch)}${esc(x.ch?.short || "")}</span></div></div></div>
         <div class="foot"><div><div class="stat">Market cap</div><div class="mc">${x.mc ? fmtUsd(x.mc) : "—"}</div></div>${chgText(x.chg)}</div>
         <div class="meta">${x.vol ? `${fmtUsd(x.vol)} traded in 24h` : "No trades in 24h"}</div></a>`).join("")
@@ -2091,7 +2109,7 @@ async function loadPositions() {
       const e = m.get(a);
       if (e.kind === "own") {
         const amount = Number(ethers.formatUnits(b, 18)), t = e.t;
-        rows.push({ href: "#/t/" + t.token, av: avatar(t), name: t.name, symbol: t.symbol, ch: e.ch, amount, own: true,
+        rows.push({ href: tokHref(t.token, e.ch), av: avatar(t), name: t.name, symbol: t.symbol, ch: e.ch, amount, own: true,
           usd: amount * priceOf(t.sqrtPriceX96, t.quoteIsCurrency0) * quoteUsd(t.quote), chg: null });
       } else if (e.kind === "market") {
         const x = e.x, amount = Number(ethers.formatUnits(b, x.decimals ?? 18));
@@ -2345,7 +2363,7 @@ async function renderMarketToken(chKey, addrIn) {
   const ch = CHAINS[chKey];
   if (!ch?.gt || !ethers.isAddress(addrIn)) return ($("#app").innerHTML = `<div class="card empty">Unknown token or chain.</div>`);
   const addr = ethers.getAddress(addrIn);
-  if (TOKEN_PAD.has(addr.toLowerCase())) return (location.hash = "#/t/" + addr); // one of ours: its own page
+  if (TOKEN_PAD.has(tokKey(ch, addr))) return (location.hash = tokHref(addr, ch)); // one of ours: its own page
   const gen = routeGen, stale = () => gen !== routeGen, app = $("#app");
   prefetchChart(ch, addr); // the chart's library and candles load while the token's details do
   let t, dec;
@@ -2580,7 +2598,7 @@ function market24h() {
           const a = P.c.interface.parseLog({ topics: i.topics.filter(Boolean), data: i.data }).args;
           if (page === 0 || ts >= since) recent.push({ key: i.transaction_hash + ":" + i.index, ts, a });
           if (ts < since) { older = true; continue; }
-          const k = a.token.toLowerCase();
+          const k = tokKey(P.ch, a.token);
           const m = per.get(k) ?? { vol: 0n, n: 0, first: null };
           m.vol += a.quoteAmount; m.n++; m.first = a; // newest first: the last one seen is the earliest
           per.set(k, m);
@@ -2798,7 +2816,7 @@ async function renderAdmin() {
       const skipNote = skipped.length ? `<p class="stat">Not checked: ${esc(skipped.join("; "))}</p>` : "";
       $("#rcy").innerHTML = (found.length
         ? `<div class="scroll-x"><table><thead><tr><th>Token</th><th>Wallets</th><th>Expired</th></tr></thead><tbody>${found.map((f) => `
-            <tr><td><a href="#/t/${f.t.token}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} ${qsym(f.t.quote)}</div></td></tr>`).join("")}</tbody></table></div>`
+            <tr><td><a href="${tokHref(f.t.token, f.P.ch)}">$${esc(f.t.symbol)}</a></td><td>${f.hits.length}</td><td>${usd(f.total, f.t.quote)}<div class="stat">${fmt(f.total, 6)} ${qsym(f.t.quote)}</div></td></tr>`).join("")}</tbody></table></div>`
         : "No expired rewards right now.") + skipNote;
       if (found.length) {
         const chains = new Set(found.map((f) => f.P.ch.key)).size;
@@ -2940,7 +2958,7 @@ async function allTokenInfos() {
     for (let off = 0; off < n; off += 100) out.push(...(await P.v.getTokens(off, 100)));
     return out.map((t) => ({ t, P }));
   }));
-  for (const { t, P } of lists.flat()) TOKEN_PAD.set(t.token.toLowerCase(), P);
+  for (const { t, P } of lists.flat()) { TOKEN_PAD.set(tokKey(P.ch, t.token), P); PAD_OF.set(t, P); }
   ALL_OWN = lists.flat();
   return ALL_OWN;
 }
@@ -2988,7 +3006,7 @@ async function renderRewards(who) {
     const paid = (t) => toUsdNum(t.totalDividendsDistributed + t.pendingHolderFees, t.quote);
     const top = all.sort((a, b) => paid(b) - paid(a)).slice(0, 6);
     $("#toppay").innerHTML = `<div class="thead" style="grid-template-columns:26px 48px minmax(0,1fr) 140px 112px"><span class="n">#</span><span></span><span>Token</span><span>Paid to holders</span><span>Market cap</span></div>`
-      + top.map((t, i) => `<a class="lrow" href="#/t/${t.token}" style="grid-template-columns:26px 48px minmax(0,1fr) 140px 112px"><span class="rk">${i + 1}</span>${avatar(t)}
+      + top.map((t, i) => `<a class="lrow" href="${tokHref(t.token, PAD_OF.get(t)?.ch)}" style="grid-template-columns:26px 48px minmax(0,1fr) 140px 112px"><span class="rk">${i + 1}</span>${avatar(t)}
         <div class="tn" style="min-width:0"><div class="nm"><b>${esc(t.name)}</b></div><div class="sub">$${esc(t.symbol)} · paid in ${qsym(t.quote)}</div></div>
         <span class="r mcc">${usd(t.totalDividendsDistributed + t.pendingHolderFees, t.quote)}</span><span class="r chgc dim">${usd(t.marketCap, t.quote)}</span></a>`).join("");
     return;
@@ -3048,7 +3066,7 @@ async function renderRewards(who) {
       <thead><tr><th>Token</th><th>Holding</th><th>Earned</th><th>Claimed</th><th>Ready</th>${mine ? "<th></th>" : ""}</tr></thead>
       <tbody>${rows.map((r, i) => `
         <tr>
-          <td><a href="#/t/${r.t.token}">$${esc(r.t.symbol)}</a> ${pill(r.t.quote)}${chainBadge(r.P)}${r.earned > 0n ? `<div><button class="sharebtn" data-share="${i}" title="Make a share card for $${esc(r.t.symbol)}">Share card</button></div>` : ""}</td>
+          <td><a href="${tokHref(r.t.token, r.P?.ch)}">$${esc(r.t.symbol)}</a> ${pill(r.t.quote)}${chainBadge(r.P)}${r.earned > 0n ? `<div><button class="sharebtn" data-share="${i}" title="Make a share card for $${esc(r.t.symbol)}">Share card</button></div>` : ""}</td>
           <td>${fmt(r.bal)}<div class="stat">${Number((r.bal * 1000000n) / SUPPLY) / 10000}%</div></td>
           <td>${usd(r.earned, r.t.quote)}<div class="stat">${fmt(r.earned, 6)} ${qsym(r.t.quote)}</div></td>
           <td>${usd(r.claimed, r.t.quote)}${r.lost > 0n ? `<div class="stat">${fmt(r.lost, 4)} ${qsym(r.t.quote)} expired earlier</div>` : ""}${r.lostUnknown ? `<div class="stat">may include expired rewards</div>` : ""}</td>
@@ -3062,7 +3080,7 @@ async function renderRewards(who) {
       <thead><tr><th>Token</th><th>Split</th><th>Waiting</th>${mine ? "<th></th>" : ""}</tr></thead>
       <tbody>${creatorRows.map((c, i) => `
         <tr>
-          <td><a href="#/t/${c.t.token}">$${esc(c.t.symbol)}</a></td>
+          <td><a href="${tokHref(c.t.token, c.P.ch)}">$${esc(c.t.symbol)}</a></td>
           <td>${esc(splitLabel(c.sp))}</td>
           <td>${usd(c.pending, c.t.quote)}<div class="stat">${fmt(c.pending, 6)} ${qsym(c.t.quote)}</div>${c.isProposed && !c.isPayout ? `<div class="stat warn">You're invited to receive these earnings</div>` : ""}</td>
           ${mine ? `<td>${c.isPayout && c.pending > 0n ? `<button data-collect="${i}">Collect</button>` : ""}${c.isProposed ? ` <button class="primary" data-accept="${i}">Accept</button>` : ""}</td>` : ""}
@@ -3141,7 +3159,7 @@ async function renderRewards(who) {
       const holderPct = sp ? sp.h / 100 : 3;
       const amt = priced ? usdLong(toUsdNum(r.earned, r.t.quote)) : `${fmt(r.earned)} ${qsym(r.t.quote)}`;
       url = await tokenShareCard(r, amt, holderPct);
-      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesdotfamily.fun/#/t/${r.t.token}`; // taste-skill-ignore: tweet copy, not UI
+      text = `I've earned ${amt} holding $${r.t.symbol} on PepesFamily 🐸\n\n${holderPct}% of every $${r.t.symbol} trade goes to holders, paid in ${qsym(r.t.quote)}.\n\n$${r.t.symbol}\nhttps://pepesdotfamily.fun/${tokHref(r.t.token, r.P?.ch)}`; // taste-skill-ignore: tweet copy, not UI
       file = `pepesfamily-${r.t.symbol.replace(/[^a-z0-9]/gi, "").toLowerCase() || "token"}.png`;
     }
     if (mySeq !== cardSeq || seq !== rewardsSeq || !$("#card")) return;
@@ -3961,7 +3979,7 @@ async function renderCreate() {
           }
         }
         toast(`Token launched on ${ch.short}`, 8000);
-        location.hash = token ? "#/t/" + token : "#/tokens";
+        location.hash = token ? tokHref(token, ch) : "#/tokens";
         btn.disabled = false;
         return;
       }
@@ -3991,7 +4009,7 @@ async function renderCreate() {
           let token = null;
           for (const r of rcs) for (const l of r.logs || []) { try { const e = padR.interface.parseLog(l); if (e?.name === "TokenLaunched") token = e.args.token; } catch {} }
           toast(buyIn > 0n ? "Token launched and bought" : "Token launched", 8000);
-          location.hash = token ? "#/t/" + token : "#/tokens";
+          location.hash = token ? tokHref(token, ch) : "#/tokens";
           btn.disabled = false;
           return;
         }
@@ -4025,7 +4043,7 @@ async function renderCreate() {
           toast(`Token launched, but the ${NAT} buy didn't go through (${errMsg(e)}). You can buy it on the token page.`, 10000);
         }
       } else toast("Token launched");
-      location.hash = token ? "#/t/" + token : "#/tokens";
+      location.hash = token ? tokHref(token, ch) : "#/tokens";
     } catch (e) { toast(errMsg(e), 7000); }
     btn.disabled = false;
   };
@@ -4033,7 +4051,7 @@ async function renderCreate() {
 
 // ---------------------------------------------------------------- Token page
 let tradeSide = "buy";
-async function renderToken(addr) {
+async function renderToken(addr, chainKey) {
   loadLwc().catch(() => {}); // the chart's library loads while the token's details do
   if (!ethers.isAddress(addr)) return ($("#app").innerHTML = `<div class="card empty">Invalid token address</div>`);
   const app = $("#app");
@@ -4048,9 +4066,24 @@ async function renderToken(addr) {
       <div class="card"><div class="skel" style="height:36px"></div><div class="skel" style="height:40px;margin-top:20px"></div><div class="skel" style="height:36px;margin-top:20px"></div></div></div>`;
   // find which launchpad version created this token (getTokenInfo reverts for tokens it doesn't know)
   let info, P;
-  const known = TOKEN_PAD.get(addr.toLowerCase()); // try the launchpad we already know first
-  for (const cand of known ? [known, ...livePads().filter((x) => x !== known)] : livePads()) {
-    try { info = await cand.v.getTokenInfo(addr); P = cand; break; } catch {}
+  // the launchpads of the chain in the link (the same address can be a different token on another chain), the one
+  // we already know first; without a chain, every launchpad in order
+  const known = chainKey ? TOKEN_PAD.get(tokKey(CHAINS[chainKey], addr)) : null;
+  if (chainKey && CHAINS[chainKey]) {
+    const pads = livePads().filter((x) => x.ch.key === chainKey);
+    for (const cand of known ? [known, ...pads.filter((x) => x !== known)] : pads) {
+      try { info = await cand.v.getTokenInfo(addr); P = cand; break; } catch {}
+    }
+  } else {
+    // no chain in the link (a pasted address): ask every launchpad; on several chains, let the visitor pick
+    const hits = (await Promise.all(livePads().map((cand) => cand.v.getTokenInfo(addr).then((i) => ({ i, cand }), () => null)))).filter(Boolean);
+    if (stale()) return;
+    if (hits.length > 1) {
+      return (app.innerHTML = `<div class="card"><h1>Pick a chain</h1><p class="stat">${esc(short(addr))} is a token on ${hits.length} chains: each one is a different token.</p>
+        <div class="card listcard" style="margin-top:12px">${hits.map(({ i, cand }) => `<a class="fi" href="${tokHref(addr, cand.ch)}">${avatar(i)}
+          <div style="min-width:0"><div class="t"><b>${esc(i.name)}</b></div><div class="w">$${esc(i.symbol)} · ${chainAv(cand.ch)}${esc(cand.ch.name)}</div></div></a>`).join("")}</div></div>`);
+    }
+    if (hits.length) ({ i: info, cand: P } = hits[0]);
   }
   if (stale()) return;
   if (!P) {
@@ -4392,7 +4425,7 @@ async function renderToken(addr) {
         await sweepHome(P.ch, got, (m2) => toast(m2, 30000)).catch((e) => toast(`Sold. Moving it to ${HOME().short} didn't work (${errMsg(e)}): it's in ${NAT} on ${P.ch.short}.`, 9000));
       }
       toast(`${tradeSide === "buy" ? "Bought" : "Sold"}${receipts ? "" : ` in ${((Date.now() - t0) / 1000).toFixed(1)} s`}`);
-      if (!stale()) renderToken(addr);
+      if (!stale()) renderToken(addr, P.ch.key);
     } catch (e) { toast(errMsg(e), 7000); }
     btn.disabled = false;
   };
@@ -4650,7 +4683,7 @@ booted.finally(() => {
   // the sidebar's networks: where tokens launch, and where else people can pay from
   const launchOn = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
   const payFrom = Object.values(CHAINS).filter((c) => !launchOn.includes(c) && !c.testnet && c.remote);
-  $("#netlist").innerHTML = launchOn.map((c) => `<div class="chainrow">${chainAv(c)}${esc(c.name)}</div>`).join("")
+  $("#netlist").innerHTML = chainsFirst(launchOn).map((c) => `<div class="chainrow">${chainAv(c)}${esc(c.name)}</div>`).join("")
     + (payFrom.length ? `<div class="chainrow" style="color:var(--faint);font-size:13px">Pay from ${payFrom.map((c) => esc(c.short)).join(", ")}</div>` : "");
 });
 setInterval(loadPrices, 60_000);
