@@ -3916,7 +3916,7 @@ async function renderCreate() {
         ${sec(1, Object.keys(LAUNCHES).length > 1 ? "Chain and pair" : "Pair")}
         ${chainPicker}
         ${pairPicker}
-        <div class="row"><span class="pill imd">${esc(QS)}</span><span class="stat">Your token is paired with ${esc(QS)}; ${payNote}. ${LAUNCH?.fixed ? `Every trade pays 4%, the same for every token: 1% to you as the creator, 1% to holders, 1% to PEPES FAMILY NFT holders and 1% to the protocol, all paid in ${esc(NAT)}.` : LAUNCH?.split ? `Holder rewards are paid in ${esc(QS)}: you choose below how much of the 3% they get (none, with Deflationary).` : `Holders earn 3% of every trade, in ${esc(QS)}.`}${LAUNCH?.expiry ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
+        <div class="row"><span class="pill imd">${esc(QS)}</span><span class="stat">Your token is paired with ${esc(QS)}; ${payNote}. ${LAUNCH?.fixed ? `Traders, holders, creators and PEPES FAMILY NFT holders earn from every trade, in ${esc(NAT)}.` : LAUNCH?.split ? `Holder rewards are paid in ${esc(QS)}: you choose below how much of the 3% they get (none, with Deflationary).` : `Holders earn 3% of every trade, in ${esc(QS)}.`}${LAUNCH?.expiry && !LAUNCH?.fixed ? " Holder rewards left unclaimed for more than 7 days without activity go to a $PEPES buyback and burn." : ""}</span></div>
         ${sec(2, "Describe")}
         <label for="n" style="margin-top:0">Name</label><input id="n" maxlength="32" required placeholder="Robin Frog" />
         <label for="s">Ticker</label><input id="s" maxlength="12" required placeholder="FROG" />
@@ -3957,7 +3957,7 @@ async function renderCreate() {
       <div class="card" style="margin-top:26px">
         <span class="h">How it works</span>
         <p class="muted">Your token gets a Uniswap v4 pool against ${esc(QS)} holding the entire supply, tradable from the first block here, in the Uniswap app, or through any v4 router. The liquidity is owned by the launchpad contract, which has no way to remove it: it is locked forever.</p>
-        <div class="fees"><b style="color:var(--text)">4% fee on every buy and sell</b><br/>${LAUNCH?.fixed ? `1% protocol · 1% creator earnings (yours: collect them on the token page) · 1% holder rewards (pro rata to balance) · 1% to PEPES FAMILY NFT holders. All paid in ${esc(NAT)}, the same for every token.` : LAUNCH?.split ? `1% protocol · 3% split as you choose: creator earnings (${esc(QS)}, up to 2%), holder rewards (${esc(QS)}, pro rata to balance), and burn (taken in your token on every trade and burned). The split is fixed forever at launch.` : `1% protocol · 3% shared by all holders, pro rata to their balance, paid in ${esc(QS)}. Holders claim anytime.`}</div>
+        <div class="fees">${LAUNCH?.fixed ? `<b style="color:var(--text)">Everyone earns from every trade</b><br/>Traders, holders, creators and PEPES FAMILY NFT holders earn from every trade. Your creator earnings are collected on the token page.` : `<b style="color:var(--text)">4% fee on every buy and sell</b><br/>`}${LAUNCH?.fixed ? "" : LAUNCH?.split ? `1% protocol · 3% split as you choose: creator earnings (${esc(QS)}, up to 2%), holder rewards (${esc(QS)}, pro rata to balance), and burn (taken in your token on every trade and burned). The split is fixed forever at launch.` : `1% protocol · 3% shared by all holders, pro rata to their balance, paid in ${esc(QS)}. Holders claim anytime.`}</div>
         <div class="fees" id="startmc"></div>
       </div>
     </div>`;
