@@ -807,6 +807,28 @@ const chainBadge = (P) => (P && P.ch.key !== "robinhood" ? `<span class="pill ch
 let LAUNCH = null; // newest live launchpad on the chosen chain: where new tokens are created
 let padR = null;   // LAUNCH's contract (launch form + admin owner lookups)
 const LAUNCHES = {}; // chain key -> newest live launchpad there for each pair asset (array, newest first)
+// Discover's data as one request (web/api/feed.js, cached at Vercel's edge for every visitor): which launchpads are
+// deployed, every token they list, prices, and 24 h trades where a server can read them. Started before anything else;
+// null where there is none (a local preview) or it fails, and the page then reads the chains itself as before.
+const reviveBig = (k, v) => (v && typeof v === "object" && typeof v.$n === "string" && Object.keys(v).length === 1 ? BigInt(v.$n) : v);
+const loadFeed = () => fetch("/api/feed", { signal: AbortSignal.timeout(4000) })
+  .then((r) => (r.ok ? r.text() : null)).then((t) => (t ? JSON.parse(t, reviveBig) : null)).catch(() => null);
+let FEED_P = loadFeed(), FEED_AT = Date.now();
+/// The feed, fetched again once it is 30 s old.
+function feed() {
+  if (Date.now() - FEED_AT > 30_000) { FEED_AT = Date.now(); FEED_P = loadFeed(); }
+  return FEED_P;
+}
+const feedFresh = (f, ms = 120_000) => !!f && Date.now() - f.at < ms;
+/// Launchpads deployed, cross-chain entry points and prices, from the feed (what loadPads and loadPrices read).
+function applyFeed(f) {
+  for (const P of PADS) { const l = f.live[tokKey(P.ch, P.pad)]; if (l) { P.live = l[0]; P.ethLive = l[1]; P.readErr = false; } }
+  for (const c of Object.values(CHAINS)) if (c.remote) c.remoteLive = f.remotes.includes(c.key);
+  if (f.prices?.ethUsd > 0) Object.assign(prices, Object.fromEntries(Object.entries(f.prices).filter(([, v]) => v > 0)));
+  sortLaunches();
+  try { localStorage.setItem(LIVE_KEY, JSON.stringify({ ...JSON.parse(liveSig()), at: Date.now() })); } catch {}
+}
+
 // What was deployed at the last visit (contracts never disappear), so a returning visitor's page opens at once and the
 // chains are checked again in the background.
 const LIVE_KEY = "pf-live:v1";
@@ -2569,7 +2591,13 @@ function market24h() {
   const p = (async () => {
     const since = Date.now() / 1000 - 86400;
     const per = new Map(), recent = [];
+    const f = await feed(), fresh = feedFresh(f);
     await Promise.all(livePads().map(async (P) => {
+      const fm = fresh && f.market[tokKey(P.ch, P.pad)]; // the feed read this launchpad's last 24 h
+      if (fm) {
+        for (const [tok, [vol, n, quoteAmount, tokenAmount]] of Object.entries(fm)) per.set(tokKey(P.ch, tok), { vol, n, first: { quoteAmount, tokenAmount } });
+        return;
+      }
       if (!P.ch.blockscoutApi) return; // no trade history on this chain's explorer
       const topic = P.c.interface.getEvent("Trade").topicHash;
       let next = null;
@@ -2886,7 +2914,10 @@ function allTokenInfos() {
   return ALL_OWN_P;
 }
 async function readTokenInfos() {
+  const f = await feed(), fresh = feedFresh(f);
   const lists = await Promise.all(livePads().map(async (P) => {
+    const listed = fresh && f.tokens[tokKey(P.ch, P.pad)];
+    if (listed) return listed.map((t) => ({ t, P }));
     const n = Number(await P.c.tokenCount()), out = [];
     for (let off = 0; off < n; off += 100) out.push(...(await P.v.getTokens(off, 100)));
     return out.map((t) => ({ t, P }));
@@ -4652,10 +4683,17 @@ async function candleChart(box, src) {
   for (const a of document.querySelectorAll("#nav a, #tabbar a")) a.classList.toggle("on", a.dataset.r === (page === "/tokens" ? "/" : page));
 })();
 const fromCache = loadPadsCached() && loadPricesCached();
+// After the page is up: the feed (recent enough) or the chains themselves, redrawing only if what's deployed changed.
+const recheck = (f) => {
+  const before = liveSig();
+  if (feedFresh(f, 600_000)) { applyFeed(f); if (liveSig() !== before) route(); return; }
+  Promise.all([loadPads(), loadPrices()]).then(() => { if (liveSig() !== before) route(); });
+};
 const booted = fromCache
-  // returning visitor: open now from what the last visit saw, check the chains behind it and redraw only if they changed
-  ? (() => { const before = liveSig(); Promise.all([loadPads(), loadPrices()]).then(() => { if (liveSig() !== before) route(); }); return Promise.resolve(); })()
-  : Promise.all([loadPads(), loadPrices()]);
+  // returning visitor: open now from what the last visit saw, check behind it
+  ? (FEED_P.then(recheck), Promise.resolve())
+  // first visit: the feed is one cached request; the chains only when it isn't there
+  : FEED_P.then((f) => (feedFresh(f, 600_000) ? applyFeed(f) : Promise.all([loadPads(), loadPrices()])));
 booted.finally(() => {
   route();
   restorePrivy();
