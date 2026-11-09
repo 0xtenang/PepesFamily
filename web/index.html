@@ -594,6 +594,7 @@ const CHAINS = {
     walletRpc: "https://rpc.elysium.kinetiq.xyz", explorer: "", blockscoutApi: "",
     quoter: "0xfF5Bafce80e990C664C771A5A335Bc6D1E51a793", gmgn: "", dex: "elysium", native: { name: "HYPE", symbol: "HYPE" },
     keepSells: true, // sells pay out in HYPE here: not moved on to Robinhood
+    logChunk: 1_000_000, // Kinetiq's RPC serves a million blocks of logs a request: trade history from launch (no explorer)
     blurb: "Elysium: Kinetiq's fast chain on Hyperliquid, paired with HYPE.",
   },
 };
@@ -4634,7 +4635,8 @@ async function fetchTradeLogs(P, addr, createdBlock, pages = 6) {
   } catch (e) {
     console.warn("Blockscout unavailable, using RPC for recent trades", e);
     const latest = await P.ch.reader.getBlockNumber();
-    const CHUNK = 900, MAX_CHUNKS = 8;
+    // chains whose RPC serves long log ranges (logChunk) read the whole history from the launch block
+    const CHUNK = P.ch.logChunk || 900, MAX_CHUNKS = P.ch.logChunk ? Infinity : 8;
     const from = Math.max(Number(createdBlock), latest - CHUNK * MAX_CHUNKS);
     const starts = [];
     for (let start = from; start <= latest; start += CHUNK) starts.push(start);
