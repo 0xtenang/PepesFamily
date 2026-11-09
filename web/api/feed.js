@@ -46,6 +46,9 @@ const ELYSIUM_PM = "0xE2e105d3F7209A9DA11f83cCf3E7398a753823F1";
 const ELYSIUM_WHYPE = "0xbA876237B0F021A6c6D852d6c26E107997cC5E81".toLowerCase();
 const PM = new ethers.Interface(["event Initialize(bytes32 indexed id, address indexed currency0, address indexed currency1, uint24 fee, int24 tickSpacing, address hooks, uint160 sqrtPriceX96, int24 tick)"]);
 const POOL_KEYS = new Map(); // pool id -> key (a pool's key never changes: kept while the function stays warm)
+const IMAGES = new Map(); // token -> image URL ("" when none was found), kept while warm
+const META = new ethers.Interface(["function logo() view returns (string)", "function tokenURI() view returns (string)"]);
+const gateway = (u) => (u.startsWith("ipfs://") ? "https://ipfs.filebase.io/ipfs/" + u.slice(7).replace(/^ipfs\//, "") : u);
 
 const timeout = (ms) => AbortSignal.timeout(ms);
 /// One JSON-RPC call on `chain`, falling back to its second endpoint.
@@ -141,6 +144,38 @@ async function poolKey(id) {
   return key;
 }
 
+/// Token images GeckoTerminal lacks: DexScreener's (30 tokens a request), else the token's own `logo()` or
+/// `tokenURI()` (an image, or JSON with an "image"), as some Elysium launchpads store them on chain.
+async function addImages(list) {
+  const need = list.filter((x) => !x.image && !IMAGES.has(x.address.toLowerCase()));
+  for (let i = 0; i < need.length; i += 30) {
+    const part = need.slice(i, i + 30).map((x) => x.address);
+    try {
+      const pairs = await (await fetch(`https://api.dexscreener.com/tokens/v1/elysium/${part.join(",")}`, { signal: timeout(8000) })).json();
+      // DexScreener's CDN resizes: avatars need 128 px, not its 800
+      for (const p of pairs || []) if (p.info?.imageUrl) IMAGES.set(p.baseToken.address.toLowerCase(), p.info.imageUrl.replace(/width=\d+&height=\d+/, "width=128&height=128"));
+    } catch {}
+  }
+  await Promise.all(need.filter((x) => !IMAGES.has(x.address.toLowerCase())).map(async (x) => {
+    let url = "";
+    for (const fn of ["logo", "tokenURI"]) {
+      try {
+        const v = String(await call("elysium", x.address, META, fn));
+        if (!v) continue;
+        const u = gateway(v.trim());
+        if (fn === "logo") { url = u; break; }
+        const r = await fetch(u, { signal: timeout(5000) });
+        if (/^image\//.test(r.headers.get("content-type") || "")) { url = u; break; }
+        const img = (await r.json()).image;
+        if (img) { url = gateway(String(img)); break; }
+      } catch {}
+    }
+    IMAGES.set(x.address.toLowerCase(), url);
+  }));
+  for (const x of list) if (!x.image) x.image = IMAGES.get(x.address.toLowerCase()) || "";
+  return list;
+}
+
 /// GeckoTerminal's busiest Elysium Uniswap v4 pools against HYPE or WHYPE (two pages), one per token, minus the pools
 /// of our own launchpads (`ours`: hook addresses, lower case).
 async function elysiumTokens(ours) {
@@ -172,7 +207,7 @@ async function elysiumTokens(ours) {
       created: Date.parse(a.pool_created_at) / 1000 || 0, pool: a.address, key,
     });
   }
-  return out;
+  return addImages(out);
 }
 
 async function build(origin) {

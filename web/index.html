@@ -91,6 +91,7 @@ label { display: block; font-size: 14px; font-weight: 500; color: var(--text); m
 .side .glabel { font-size: 12px; color: var(--faint); padding: 0 10px; margin: 28px 0 6px; }
 .side .chainrow .cav { width: 20px; height: 20px; }
 .side .chainrow { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; color: var(--nav); }
+.side .addnet { margin: 0 10px 6px 40px; padding: 4px 10px; font-size: 12px; min-height: 0; height: auto; }
 .side .foot { margin-top: auto; display: flex; flex-direction: column; }
 .side .foot a { height: 30px; display: flex; align-items: center; padding: 0 10px; color: var(--faint); font-size: 13px; }
 .side .foot a:hover { color: #fff; }
@@ -1093,7 +1094,8 @@ async function renderBridge() {
   const opts = payOptions(hyper); // other chains' coins: Relay delivers them as HYPE on HyperEVM, into the inbox
   app.innerHTML = `
     <div class="hero"><div><h1>Bridge to Elysium</h1>
-      <p>Bring HYPE to Elysium, where its tokens launch and trade: from HyperEVM through Elysium's own rollup inbox, or from another chain's coin through Relay. It arrives at your own address in about a minute.</p></div></div>
+      <p>Bring HYPE to Elysium, where its tokens launch and trade: from HyperEVM through Elysium's own rollup inbox, or from another chain's coin through Relay. It arrives at your own address in about a minute.</p>
+      <div style="margin-top:12px">${addNetBtn(ely)}</div></div></div>
     <div class="card" style="max-width:520px">
       <label for="bfrom" style="margin-top:0">Pay with</label>
       <select id="bfrom"><option value="">HYPE on HyperEVM (no bridge fee)</option>${opts.map((o) => `<option value="${esc(o.id)}">${esc(o.sym)} on ${esc(o.ch.short)}</option>`).join("")}</select>
@@ -1367,6 +1369,23 @@ function legacyName(p) {
 }
 /// Every wallet we can offer: EIP-6963 announcements first, then injected providers that didn't announce themselves
 /// (window.ethereum and the `providers` list some extensions add), so older or late-loading wallets still show up.
+/// Adds `ch` to the visitor's browser wallet (MetaMask first, else the first wallet found), so they can switch to it
+/// in one tap. The wallet asks for confirmation itself; nothing is sent.
+async function addToWallet(ch) {
+  const ws = await walletOptions();
+  const w = ws.find((x) => /metamask/i.test(x.info.name)) || ws[0];
+  if (!w) return toast("No browser wallet found: install MetaMask (or another wallet extension) first", 7000);
+  try {
+    await w.provider.request({ method: "wallet_addEthereumChain", params: [{
+      chainId: "0x" + ch.chainId.toString(16), chainName: ch.name, rpcUrls: [ch.walletRpc],
+      nativeCurrency: { ...(ch.native || { name: "Ether", symbol: "ETH" }), decimals: 18 }, ...(ch.explorer ? { blockExplorerUrls: [ch.explorer] } : {}),
+    }] });
+    toast(`${ch.name} is in ${w.info.name}`, 5000);
+  } catch (e) { if (e?.code !== 4001) toast(errMsg(e), 7000); }
+}
+const addNetBtn = (ch, cls = "") => `<button type="button" class="${cls}" data-addnet="${ch.key}">Add ${esc(ch.name)} to MetaMask</button>`;
+document.addEventListener("click", (e) => { const b = e.target.closest?.("[data-addnet]"); if (b && CHAINS[b.dataset.addnet]) addToWallet(CHAINS[b.dataset.addnet]); });
+
 async function walletOptions() {
   window.dispatchEvent(new Event("eip6963:requestProvider")); // wallets that loaded after the page
   await new Promise((ok) => setTimeout(ok, 250));
@@ -2439,7 +2458,7 @@ async function renderMarketToken(chKey, addrIn) {
   if (stale()) return;
   const x = { symbol: t.symbol, image: t.image }, price = t.price, mc = t.mc, chg = t.chg;
   document.title = `$${t.symbol} · PepesFamily`;
-  app.innerHTML = `<div class="two mfirst">
+  app.innerHTML = `${ch.key === "elysium" ? `<div class="card" style="margin-bottom:12px">Trading on Elysium needs HYPE there. <a href="#/bridge" style="color:var(--accent)">Bridge HYPE to Elysium →</a> · ${addNetBtn(ch, "sharebtn")}</div>` : ""}<div class="two mfirst">
     <div class="mflat">
       <div class="card mlead">
         <div class="thead-token">${mAvatar(x, "lg")}
@@ -4192,7 +4211,7 @@ async function renderToken(addr, chainKey) {
   const links = [["website", "Website"], ["x", "X"], ["telegram", "Telegram"]]
     .map(([k, l]) => safeUrl(m[k]) ? `<a href="${esc(safeUrl(m[k]))}" target="_blank" rel="noopener noreferrer">${l} ↗</a>` : "").filter(Boolean).join(" · ");
 
-  app.innerHTML = `${P.ch.key === "elysium" ? `<div class="card" style="margin-bottom:12px">Trading on Elysium needs HYPE there. <a href="#/bridge" style="color:var(--accent)">Bridge HYPE to Elysium →</a></div>` : ""}${P.ch.testnet ? `<div class="card" style="margin-bottom:12px;border-color:var(--accent)"><b>${esc(P.ch.name)}</b>: a test network. This token and the HYPE you trade it with have no real value. <a href="https://testnet.elysium.kinetiq.xyz/faucet" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Free test HYPE ↗</a></div>` : ""}
+  app.innerHTML = `${P.ch.key === "elysium" ? `<div class="card" style="margin-bottom:12px">Trading on Elysium needs HYPE there. <a href="#/bridge" style="color:var(--accent)">Bridge HYPE to Elysium →</a> · ${addNetBtn(P.ch, "sharebtn")}</div>` : ""}${P.ch.testnet ? `<div class="card" style="margin-bottom:12px;border-color:var(--accent)"><b>${esc(P.ch.name)}</b>: a test network. This token and the HYPE you trade it with have no real value. <a href="https://testnet.elysium.kinetiq.xyz/faucet" target="_blank" rel="noopener noreferrer" style="color:var(--accent)">Free test HYPE ↗</a></div>` : ""}
     <div class="two mfirst">
       <div class="mflat">
         <div class="card mlead">
@@ -4787,7 +4806,7 @@ booted.finally(() => {
   // the sidebar's networks: where tokens launch, and where else people can pay from
   const launchOn = Object.values(CHAINS).filter((c) => livePads().some((P) => P.ch === c));
   const payFrom = Object.values(CHAINS).filter((c) => !launchOn.includes(c) && !c.testnet && c.remote);
-  $("#netlist").innerHTML = chainsFirst(launchOn).map((c) => `<div class="chainrow">${chainAv(c)}${esc(c.name)}</div>`).join("")
+  $("#netlist").innerHTML = chainsFirst(launchOn).map((c) => `<div class="chainrow">${chainAv(c)}${esc(c.name)}</div>${c.key === "elysium" ? addNetBtn(c, "addnet") : ""}`).join("")
     + (payFrom.length ? `<div class="chainrow" style="color:var(--faint);font-size:13px">Pay from ${payFrom.map((c) => esc(c.short)).join(", ")}</div>` : "");
 });
 setInterval(loadPrices, 60_000);
